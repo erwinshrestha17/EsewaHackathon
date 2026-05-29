@@ -24,7 +24,6 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     required this.store,
     required this.onNavigate,
-    required this.onOpenSettings,
     required this.onOpenNotifications,
     required this.onCreateGroup,
     required this.onSettle,
@@ -39,7 +38,6 @@ class HomeScreen extends StatefulWidget {
 
   final AppStore store;
   final ValueChanged<int> onNavigate;
-  final VoidCallback onOpenSettings;
   final VoidCallback onOpenNotifications;
   final VoidCallback onCreateGroup;
   final VoidCallback onSettle;
@@ -86,7 +84,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       displayName: data.userProfile.displayName,
                       hasUnreadNotifications: unread,
                       onNotifications: widget.onOpenNotifications,
-                      onSettings: widget.onOpenSettings,
                     ),
                     const SizedBox(height: 14),
                     const PrototypeModeBanner(),

@@ -215,15 +215,11 @@ void main() {
 
     expect(find.text('Mobile Contacts'), findsOneWidget);
 
-    await tester.tap(find.text('Profile'));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Settings'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text(
-        'Manage your profile, social finance, payments, and Sajha Kharcha preferences.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Account'), findsOneWidget);
+    expect(find.text('Edit Profile'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -679,13 +675,12 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, '+ Add item'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField && widget.decoration?.labelText == 'Item name',
-      ),
-      findsWidgets,
+    final itemName = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == 'Item name',
     );
+    expect(itemName, findsWidgets);
+    expect(tester.widget<TextField>(itemName.first).controller?.text, isEmpty);
     expect(
       find.byWidgetPredicate(
         (widget) =>
@@ -716,9 +711,10 @@ void main() {
       ),
       findsNothing,
     );
-    expect(find.text('Service charge and VAT'), findsOneWidget);
+    expect(find.text('Service charge, VAT, and discount'), findsOneWidget);
     expect(find.text('Service charge'), findsWidgets);
     expect(find.text('VAT'), findsOneWidget);
+    expect(find.text('Discount'), findsOneWidget);
     expect(find.text('Line type'), findsNothing);
     expect(
       find.widgetWithText(OutlinedButton, 'Add VAT/adjustment'),

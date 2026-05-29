@@ -193,36 +193,131 @@ List<TransactionParticipant> _transactionParticipantsFromShares(
   ];
 }
 
-void _openFirstSettlementConfirmation(
+class _PayableSettlementOption {
+  const _PayableSettlementOption({
+    required this.group,
+    required this.suggestion,
+  });
+
+  final Group group;
+  final SettlementSuggestion suggestion;
+}
+
+void _openSettlementConfirmation(
+  BuildContext context,
+  AppStore store,
+  SettlementSuggestion suggestion,
+) {
+  unawaited(
+    openTransactionConfirmation(
+      context,
+      _settlementConfirmationData(store, suggestion),
+      () async {
+        final settlement = store.createOrReuseSettlement(suggestion);
+        store.confirmSettlement(settlement.id);
+        return _successResult(
+          title: 'Payment Successful',
+          message: 'Your settlement has been marked as paid.',
+          amount: suggestion.amountMinor,
+          reference: settlement.id,
+        );
+      },
+    ),
+  );
+}
+
+Future<void> _openRemainingSettlementPicker(
   BuildContext context,
   AppStore store,
   ValueChanged<int> onNavigate,
-) {
-  for (final group in store.visibleExpenseGroups) {
-    for (final suggestion in store.suggestionsForGroup(group.id)) {
-      if (suggestion.payerId == store.currentUserId && !suggestion.hasPending) {
-        unawaited(
-          openTransactionConfirmation(
-            context,
-            _settlementConfirmationData(store, suggestion),
-            () async {
-              final settlement = store.createOrReuseSettlement(suggestion);
-              store.confirmSettlement(settlement.id);
-              return _successResult(
-                title: 'Payment Successful',
-                message: 'Your settlement has been marked as paid.',
-                amount: suggestion.amountMinor,
-                reference: settlement.id,
-              );
-            },
-          ),
-        );
-        return;
-      }
-    }
+) async {
+  final options = <_PayableSettlementOption>[
+    for (final group in store.visibleExpenseGroups)
+      for (final suggestion in store.suggestionsForGroup(group.id))
+        if (suggestion.payerId == store.currentUserId)
+          _PayableSettlementOption(group: group, suggestion: suggestion),
+  ];
+
+  if (options.isEmpty) {
+    onNavigate(1);
+    showSnack(context, 'No payable settlement is open for this user.');
+    return;
   }
-  onNavigate(1);
-  showSnack(context, 'No payable settlement is open for this user.');
+
+  final selected = await showModalBottomSheet<_PayableSettlementOption>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) {
+      final scheme = Theme.of(context).colorScheme;
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Remaining settlements',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Choose a settlement to pay.',
+                style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: options.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final option = options[index];
+                    final suggestion = option.suggestion;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        child: Text(store.userById(suggestion.payeeId).avatar),
+                      ),
+                      title: Text(
+                        'Pay ${store.nameOf(suggestion.payeeId)}',
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      subtitle: Text(
+                        '${option.group.name} • ${suggestion.hasPending ? 'Pending settlement' : 'Ready to settle'}',
+                      ),
+                      trailing: Wrap(
+                        spacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            money(suggestion.amountMinor),
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
+                      onTap: () => Navigator.pop(context, option),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+
+  if (selected == null || !context.mounted) {
+    return;
+  }
+  _openSettlementConfirmation(context, store, selected.suggestion);
 }
 
 class SangaiShell extends StatefulWidget {
@@ -234,6 +329,7 @@ class SangaiShell extends StatefulWidget {
 
 class _SangaiShellState extends State<SangaiShell> {
   var _index = 0;
+  var _visitSerial = 0;
   var _groupsInitialTab = GroupKind.expense;
   final _settingsController = SettingsController();
   AuthController? _authController;
@@ -248,7 +344,7 @@ class _SangaiShellState extends State<SangaiShell> {
       Icons.card_giftcard_outlined,
       Icons.card_giftcard,
     ),
-    _Destination('Profile', Icons.person_outline, Icons.person),
+    _Destination('Settings', Icons.settings_outlined, Icons.settings),
   ];
 
   @override
@@ -286,11 +382,11 @@ class _SangaiShellState extends State<SangaiShell> {
       0 => HomeScreen(
         store: store,
         onNavigate: _navigateFromHome,
-        onOpenSettings: _openSettings,
         onOpenNotifications: _openNotifications,
         onCreateGroup: () => showCreateGroupDialog(context),
-        onSettle: () =>
-            _openFirstSettlementConfirmation(context, store, _navigateFromHome),
+        onSettle: () => unawaited(
+          _openRemainingSettlementPicker(context, store, _navigateFromHome),
+        ),
         onScanBill: _openScanBillFromHome,
         onSendGift: () => _go(3),
         onOpenDhukuti: _openDhukutiGroups,
@@ -312,11 +408,11 @@ class _SangaiShellState extends State<SangaiShell> {
       _ => HomeScreen(
         store: store,
         onNavigate: _navigateFromHome,
-        onOpenSettings: _openSettings,
         onOpenNotifications: _openNotifications,
         onCreateGroup: () => showCreateGroupDialog(context),
-        onSettle: () =>
-            _openFirstSettlementConfirmation(context, store, _navigateFromHome),
+        onSettle: () => unawaited(
+          _openRemainingSettlementPicker(context, store, _navigateFromHome),
+        ),
         onScanBill: _openScanBillFromHome,
         onSendGift: () => _go(3),
         onOpenDhukuti: _openDhukutiGroups,
@@ -368,12 +464,6 @@ class _SangaiShellState extends State<SangaiShell> {
                   ),
                   actions: [
                     IconButton(
-                      tooltip: 'Settings',
-                      onPressed: _openSettings,
-                      icon: const Icon(Icons.settings_outlined),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
                       tooltip: 'Notifications',
                       onPressed: _openNotifications,
                       icon: Badge(
@@ -404,7 +494,12 @@ class _SangaiShellState extends State<SangaiShell> {
                       ),
                   ],
                 ),
-              Expanded(child: body),
+              Expanded(
+                child: KeyedSubtree(
+                  key: ValueKey('shell-screen-$_index-$_visitSerial'),
+                  child: body,
+                ),
+              ),
             ],
           ),
           bottomNavigationBar: wide
@@ -427,7 +522,10 @@ class _SangaiShellState extends State<SangaiShell> {
   }
 
   void _go(int index) {
-    setState(() => _index = index);
+    setState(() {
+      _index = index;
+      _visitSerial += 1;
+    });
   }
 
   void _handleDestinationSelected(int index) {
@@ -450,6 +548,7 @@ class _SangaiShellState extends State<SangaiShell> {
     setState(() {
       _groupsInitialTab = tab;
       _index = 1;
+      _visitSerial += 1;
     });
   }
 
@@ -480,17 +579,6 @@ class _SangaiShellState extends State<SangaiShell> {
         }
       });
     }
-  }
-
-  void _openSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => SettingsScreen(
-          controller: _settingsController,
-          authController: AuthScope.of(context),
-        ),
-      ),
-    );
   }
 
   void _openNotifications() {
@@ -955,6 +1043,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
         final twoPane = constraints.maxWidth >= 1000;
         final list = AppScrollView(
+          key: const ValueKey('expense-groups-list'),
           children: [
             ScreenHeader(
               title: 'Groups overview',
@@ -1020,6 +1109,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     setState(() => store.selectedGroupId = groupId),
               )
             : GroupDetail(
+                key: ValueKey('expense-group-detail-${selected.id}'),
                 group: selected,
                 scrollable: twoPane,
                 activityTimelineLimit: widget.activityTimelineLimit,
@@ -1048,12 +1138,16 @@ class _GroupsScreenState extends State<GroupsScreen> {
               child: selected == null
                   ? list
                   : AppScrollView(
+                      key: ValueKey('expense-group-mobile-${selected.id}'),
                       children: [
-                        TextButton.icon(
-                          onPressed: () =>
-                              setState(() => store.selectedGroupId = null),
-                          icon: const Icon(Icons.arrow_back),
-                          label: const Text('Expense Groups'),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: () =>
+                                setState(() => store.selectedGroupId = null),
+                            icon: const Icon(Icons.arrow_back),
+                            label: const Text('Expense Groups'),
+                          ),
                         ),
                         detail,
                       ],
@@ -1640,7 +1734,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
     return AppScrollView(
       children: [
         ScreenHeader(
-          title: 'Sajha Kharcha Gifts',
+          title: 'Gifts',
           subtitle:
               'Send a themed money envelope to a connection, or run a group gift pool.',
           icon: Icons.card_giftcard,
@@ -4788,22 +4882,28 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
       (item) => item.kind == _BillLineKind.serviceCharge,
     );
     final tax = _items.where((item) => item.kind == _BillLineKind.tax);
+    final discount = _items.where(
+      (item) => item.kind == _BillLineKind.discount,
+    );
     return <_ExpenseItemDraft>[
       if (serviceCharge.isNotEmpty) serviceCharge.first,
       if (tax.isNotEmpty) tax.first,
+      if (discount.isNotEmpty) discount.first,
     ];
   }
 
   void _ensureFixedBillAdjustments() {
     _ensureSingleBillAdjustment(_BillLineKind.serviceCharge, 'Service charge');
     _ensureSingleBillAdjustment(_BillLineKind.tax, 'VAT');
+    _ensureSingleBillAdjustment(_BillLineKind.discount, 'Discount');
 
     final unsupportedAdjustments = _items
         .where(
           (item) =>
               item.kind != _BillLineKind.item &&
               item.kind != _BillLineKind.serviceCharge &&
-              item.kind != _BillLineKind.tax,
+              item.kind != _BillLineKind.tax &&
+              item.kind != _BillLineKind.discount,
         )
         .toList();
     for (final item in unsupportedAdjustments) {
@@ -4914,7 +5014,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
 
   void _addItem() {
     setState(() {
-      _items.add(_ExpenseItemDraft(name: 'New item', amountMinor: 0));
+      _items.add(_ExpenseItemDraft(name: '', amountMinor: 0));
       _skipItemSplit = false;
       _splitMode = SplitMode.item;
       _ensureFixedBillAdjustments();
@@ -5385,7 +5485,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                   icon: Icons.list_alt_outlined,
                   subtitle: _skipItemSplit
                       ? 'Use one total amount'
-                      : 'Assign items, VAT, discount and rounding',
+                      : 'Assign items, service charge, VAT, and discount',
                   trailing: _CountPill(
                     label:
                         '${_billItemDrafts().length} ${_billItemDrafts().length == 1 ? 'item' : 'items'}',
@@ -6031,7 +6131,7 @@ class _BillAdjustmentsSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Service charge and VAT',
+            'Service charge, VAT, and discount',
             style: Theme.of(
               context,
             ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900),
@@ -6061,9 +6161,12 @@ class _BillAdjustmentDraftRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = item.kind == _BillLineKind.serviceCharge
-        ? 'Service charge'
-        : 'VAT';
+    final label = switch (item.kind) {
+      _BillLineKind.serviceCharge => 'Service charge',
+      _BillLineKind.tax => 'VAT',
+      _BillLineKind.discount => 'Discount',
+      _ => 'Adjustment',
+    };
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -8041,13 +8144,10 @@ class NetResultRow extends StatelessWidget {
     final net = paidMinor - shareMinor;
     final scheme = Theme.of(context).colorScheme;
     final accent = toneColor(context, Tone.success);
-    final result = net > 0
-        ? 'gets back ${statementMoney(net)}'
-        : net < 0
-        ? 'pays ${statementMoney(net.abs())}'
-        : 'settled';
-    final paid = paidMinor > 0 ? ' · paid ${statementMoney(paidMinor)}' : '';
-    final label = 'Owes ${statementMoney(shareMinor)}$paid · $result';
+    final isPayer = paidMinor > 0;
+    final label = isPayer
+        ? 'Receivable ${statementMoney(math.max(net, 0))}'
+        : 'Payable ${statementMoney(net < 0 ? net.abs() : shareMinor)}';
     final color = net > 0 ? accent : scheme.onSurfaceVariant;
     final icon = net > 0
         ? Icons.call_received_rounded

@@ -31,22 +31,9 @@ class SettingsScreen extends StatelessWidget {
         final state = controller.state;
         final profile = authController.state.activeUser ?? UserProfile.demo();
         return Scaffold(
-          appBar: AppBar(title: const Text('Profile')),
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              Text(
-                'Profile',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Manage your profile, social finance, payments, and Sajha Kharcha preferences.',
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-              const SizedBox(height: 16),
               SettingsProfileCard(
                 profile: profile,
                 onEdit: () => _openEditProfile(context),

@@ -65,6 +65,7 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
                 ),
               )
             : DhukutiDetailScreen(
+                key: ValueKey('dhukuti-detail-${selected.id}'),
                 store: store,
                 pool: selected,
                 onBack: twoPane

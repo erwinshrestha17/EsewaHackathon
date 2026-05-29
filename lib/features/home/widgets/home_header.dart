@@ -5,14 +5,12 @@ class HomeHeader extends StatelessWidget {
     required this.displayName,
     required this.hasUnreadNotifications,
     required this.onNotifications,
-    required this.onSettings,
     super.key,
   });
 
   final String displayName;
   final bool hasUnreadNotifications;
   final VoidCallback onNotifications;
-  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -76,12 +74,6 @@ class HomeHeader extends StatelessWidget {
             isLabelVisible: hasUnreadNotifications,
             child: const Icon(Icons.notifications_outlined),
           ),
-        ),
-        const SizedBox(width: 8),
-        IconButton.filledTonal(
-          tooltip: 'Settings',
-          onPressed: onSettings,
-          icon: const Icon(Icons.settings_outlined),
         ),
       ],
     );

@@ -42,29 +42,35 @@ class _AuthTextFieldState extends State<AuthTextField> {
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      controller: widget.controller,
-      keyboardType: widget.keyboardType,
-      textInputAction: widget.textInputAction,
-      inputFormatters: widget.inputFormatters,
-      obscureText: _hidden,
-      validator: widget.validator,
-      decoration: InputDecoration(
-        labelText: widget.label,
-        hintText: widget.hintText,
-        prefixIcon: Icon(widget.icon),
-        prefixText: widget.prefixText,
-        suffixIcon: widget.obscureText
-            ? IconButton(
-                tooltip: _hidden ? 'Show password' : 'Hide password',
-                onPressed: () => setState(() => _hidden = !_hidden),
-                icon: Icon(
-                  _hidden
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                ),
-              )
-            : null,
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: TextFormField(
+        controller: widget.controller,
+        keyboardType: widget.keyboardType,
+        textInputAction: widget.textInputAction,
+        inputFormatters: widget.inputFormatters,
+        obscureText: _hidden,
+        validator: widget.validator,
+        decoration: InputDecoration(
+          labelText: widget.label,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          hintText: widget.hintText,
+          prefixIcon: Icon(widget.icon),
+          prefixText: widget.prefixText,
+          isDense: false,
+          contentPadding: const EdgeInsets.fromLTRB(12, 18, 12, 14),
+          suffixIcon: widget.obscureText
+              ? IconButton(
+                  tooltip: _hidden ? 'Show password' : 'Hide password',
+                  onPressed: () => setState(() => _hidden = !_hidden),
+                  icon: Icon(
+                    _hidden
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                )
+              : null,
+        ),
       ),
     );
   }
