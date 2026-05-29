@@ -1893,6 +1893,11 @@ class AppStore extends ChangeNotifier {
     for (final cycle in dhukutiCycles.where(
       (cycle) => cycle.poolId == poolId,
     )) {
+      if (cycle.status == DhukutiCycleStatus.paidOut ||
+          cycle.status == DhukutiCycleStatus.closed ||
+          cycle.status == DhukutiCycleStatus.cancelled) {
+        continue;
+      }
       final contributions = dhukutiContributions.where(
         (item) => item.cycleId == cycle.id,
       );
@@ -2069,7 +2074,31 @@ class AppStore extends ChangeNotifier {
       createdBy: 'u-arjun',
       createdAt: DateTime(2026, 5, 13),
     );
-    groups.addAll(<Group>[dashain, trek, apartment]);
+    final family = Group(
+      id: 'g-shrestha-family',
+      name: 'Shrestha Family',
+      category: GroupCategory.festival,
+      template: 'Family Dhukuti',
+      createdBy: 'u-sita',
+      createdAt: DateTime(2026, 5, 14),
+    );
+    final college = Group(
+      id: 'g-college-friends',
+      name: 'College Friends',
+      category: GroupCategory.custom,
+      template: 'Friends Circle',
+      createdBy: 'u-maya',
+      createdAt: DateTime(2026, 5, 15),
+    );
+    final office = Group(
+      id: 'g-office-circle',
+      name: 'Office Savings Circle',
+      category: GroupCategory.custom,
+      template: 'Work Circle',
+      createdBy: 'u-arjun',
+      createdAt: DateTime(2026, 5, 16),
+    );
+    groups.addAll(<Group>[dashain, trek, apartment, family, college, office]);
     selectedGroupId = dashain.id;
 
     void member(String groupId, String userId, MemberRole role) {
@@ -2106,6 +2135,49 @@ class AppStore extends ChangeNotifier {
     member(apartment.id, 'u-sita', MemberRole.member);
     member(apartment.id, 'u-arjun', MemberRole.admin);
     member(apartment.id, 'u-laxmi', MemberRole.treasurer);
+    for (final memberId in <String>[
+      'u-sita',
+      'u-arjun',
+      'u-maya',
+      'u-nabin',
+      'u-laxmi',
+      'u-rina',
+    ]) {
+      member(
+        family.id,
+        memberId,
+        memberId == 'u-sita' ? MemberRole.admin : MemberRole.member,
+      );
+    }
+    for (final memberId in <String>[
+      'u-sita',
+      'u-arjun',
+      'u-maya',
+      'u-nabin',
+      'u-pasang',
+    ]) {
+      member(
+        college.id,
+        memberId,
+        memberId == 'u-maya' ? MemberRole.admin : MemberRole.member,
+      );
+    }
+    for (final memberId in <String>[
+      'u-sita',
+      'u-arjun',
+      'u-maya',
+      'u-nabin',
+      'u-laxmi',
+      'u-rina',
+      'u-pasang',
+      'u-kabir',
+    ]) {
+      member(
+        office.id,
+        memberId,
+        memberId == 'u-arjun' ? MemberRole.admin : MemberRole.member,
+      );
+    }
 
     addExpense(
       groupId: dashain.id,
@@ -2196,43 +2268,46 @@ class AppStore extends ChangeNotifier {
       message: 'A group envelope for Laxmi.',
     );
 
-    final pool = DhukutiPool(
-      id: 'd-maitri',
-      groupId: dashain.id,
-      name: 'Maitri Digital Dhukuti',
-      contributionAmountMinor: npr(2000),
-      frequency: 'monthly',
-      startDate: DateTime(2026, 5, 15),
-      createdBy: 'u-sita',
-      status: DhukutiPoolStatus.active,
-      createdAt: DateTime(2026, 5, 15),
-    );
-    dhukutiPools.add(pool);
-    selectedDhukutiPoolId = pool.id;
-    for (var i = 0; i < 6; i++) {
-      final memberId = <String>[
-        'u-sita',
-        'u-arjun',
-        'u-maya',
-        'u-nabin',
-        'u-laxmi',
-        'u-rina',
-      ][i];
-      dhukutiMembers.add(
-        DhukutiMember(
-          id: _id('dhukuti-member'),
-          poolId: pool.id,
-          userId: memberId,
-          payoutOrder: i + 1,
-          status: DhukutiMemberStatus.active,
-        ),
+    DhukutiPool seedDhukutiPool({
+      required String id,
+      required Group group,
+      required String name,
+      required int amountMinor,
+      required DateTime startDate,
+      required String createdBy,
+      required List<String> memberIds,
+    }) {
+      final pool = DhukutiPool(
+        id: id,
+        groupId: group.id,
+        name: name,
+        contributionAmountMinor: amountMinor,
+        frequency: 'monthly',
+        startDate: startDate,
+        createdBy: createdBy,
+        status: DhukutiPoolStatus.active,
+        createdAt: startDate,
       );
+      dhukutiPools.add(pool);
+      for (var i = 0; i < memberIds.length; i++) {
+        dhukutiMembers.add(
+          DhukutiMember(
+            id: _id('dhukuti-member'),
+            poolId: pool.id,
+            userId: memberIds[i],
+            payoutOrder: i + 1,
+            status: DhukutiMemberStatus.active,
+          ),
+        );
+      }
+      _generateDhukutiSchedule(pool.id);
+      return pool;
     }
-    _generateDhukutiSchedule(pool.id);
-    for (final contribution
-        in dhukutiContributions
-            .where((item) => item.poolId == pool.id && item.cycleNumber == 1)
-            .take(4)) {
+
+    void markContributionPaid(
+      DhukutiContribution contribution,
+      DateTime paidAt,
+    ) {
       final payment = _payment(
         actorId: contribution.userId,
         entityId: contribution.id,
@@ -2243,25 +2318,244 @@ class AppStore extends ChangeNotifier {
       );
       contribution
         ..status = ContributionStatus.paid
-        ..paidAt = DateTime(2026, 5, 22)
+        ..paidAt = paidAt
         ..paymentTransactionId = payment.id;
     }
-    final lateContribution = dhukutiContributions.firstWhere(
-      (item) => item.poolId == pool.id && item.userId == 'u-laxmi',
-    );
-    lateContribution.status = ContributionStatus.late;
-    _refreshDhukutiCycles(pool.id);
 
-    _activity(
-      actorId: null,
-      actorType: 'system',
-      groupId: dashain.id,
-      eventType: 'dhukuti_seeded',
+    void setCycleState(
+      String poolId,
+      int cycleNumber,
+      DhukutiCycleStatus status, {
+      List<String> paidMembers = const <String>[],
+      List<String> lateMembers = const <String>[],
+      List<String> missedMembers = const <String>[],
+    }) {
+      final cycle = dhukutiCycles.firstWhere(
+        (item) => item.poolId == poolId && item.cycleNumber == cycleNumber,
+      );
+      cycle.status = status;
+      final contributions = dhukutiContributions.where(
+        (item) => item.cycleId == cycle.id,
+      );
+      for (final contribution in contributions) {
+        if (paidMembers.contains(contribution.userId)) {
+          markContributionPaid(contribution, cycle.dueDate);
+        } else if (lateMembers.contains(contribution.userId)) {
+          contribution.status = ContributionStatus.late;
+        } else if (missedMembers.contains(contribution.userId)) {
+          contribution.status = ContributionStatus.missed;
+        } else {
+          contribution.status = status == DhukutiCycleStatus.upcoming
+              ? ContributionStatus.pending
+              : ContributionStatus.due;
+        }
+      }
+      cycle.paidContributionTotalMinor = contributions
+          .where((item) => item.status == ContributionStatus.paid)
+          .fold<int>(0, (sum, item) => sum + item.amountMinor);
+      if (status == DhukutiCycleStatus.paidOut ||
+          status == DhukutiCycleStatus.closed) {
+        final payout = dhukutiPayouts.firstWhere(
+          (item) => item.cycleId == cycle.id,
+        );
+        payout
+          ..status = PayoutStatus.paid
+          ..paidAt = cycle.dueDate.add(const Duration(days: 1));
+      }
+    }
+
+    void addDhukutiLedger({
+      required DhukutiPool pool,
+      required String eventType,
+      required String entityType,
+      required String entityId,
+      required String title,
+      required String body,
+      String? actorId,
+    }) {
+      _activity(
+        actorId: actorId,
+        actorType: actorId == null ? 'system' : 'user',
+        groupId: pool.groupId,
+        eventType: eventType,
+        entityType: entityType,
+        entityId: entityId,
+        title: title,
+        body: body,
+      );
+    }
+
+    final familyDhukuti = seedDhukutiPool(
+      id: 'd-family-dashain',
+      group: family,
+      name: 'Family Dashain Dhukuti',
+      amountMinor: npr(5000),
+      startDate: DateTime(2026, 3, 15),
+      createdBy: 'u-sita',
+      memberIds: <String>[
+        'u-arjun',
+        'u-maya',
+        'u-sita',
+        'u-nabin',
+        'u-laxmi',
+        'u-rina',
+      ],
+    );
+    familyDhukuti.createdAt = DateTime(2026, 5, 28);
+    selectedDhukutiPoolId = familyDhukuti.id;
+    setCycleState(
+      familyDhukuti.id,
+      1,
+      DhukutiCycleStatus.paidOut,
+      paidMembers: <String>[
+        'u-arjun',
+        'u-maya',
+        'u-sita',
+        'u-nabin',
+        'u-laxmi',
+        'u-rina',
+      ],
+    );
+    setCycleState(
+      familyDhukuti.id,
+      2,
+      DhukutiCycleStatus.paidOut,
+      paidMembers: <String>[
+        'u-arjun',
+        'u-maya',
+        'u-sita',
+        'u-nabin',
+        'u-laxmi',
+        'u-rina',
+      ],
+    );
+    setCycleState(
+      familyDhukuti.id,
+      3,
+      DhukutiCycleStatus.open,
+      paidMembers: <String>['u-arjun', 'u-maya', 'u-nabin', 'u-rina'],
+    );
+    addDhukutiLedger(
+      pool: familyDhukuti,
+      actorId: 'u-arjun',
+      eventType: 'dhukuti_contribution_paid',
+      entityType: 'dhukuti_contribution',
+      entityId: dhukutiContributions
+          .firstWhere(
+            (item) =>
+                item.poolId == familyDhukuti.id &&
+                item.cycleNumber == 3 &&
+                item.userId == 'u-arjun',
+          )
+          .id,
+      title: 'Arjun paid contribution',
+      body: 'Cycle 3 contribution recorded through mock eSewa confirmation.',
+    );
+    addDhukutiLedger(
+      pool: familyDhukuti,
+      eventType: 'dhukuti_cycle_opened',
       entityType: 'dhukuti_pool',
-      entityId: pool.id,
-      title: 'Seeded Dhukuti ledger ready',
-      body:
-          'Contribution schedule, payout order, and at-risk cycle are visible.',
+      entityId: familyDhukuti.id,
+      title: 'Cycle 3 opened',
+      body: 'Monthly contribution schedule is open for the current cycle.',
+    );
+    addDhukutiLedger(
+      pool: familyDhukuti,
+      actorId: 'u-sita',
+      eventType: 'dhukuti_recipient_current',
+      entityType: 'dhukuti_pool',
+      entityId: familyDhukuti.id,
+      title: 'Sita is current payout recipient',
+      body: 'Payout turn follows the visible rotation order.',
+    );
+    addDhukutiLedger(
+      pool: familyDhukuti,
+      actorId: 'u-maya',
+      eventType: 'dhukuti_member_accepted',
+      entityType: 'dhukuti_member',
+      entityId: familyDhukuti.id,
+      title: 'Member accepted Dhukuti invitation',
+      body: 'Maya joined the transparent contribution schedule.',
+    );
+
+    final collegeDhukuti = seedDhukutiPool(
+      id: 'd-college-friends',
+      group: college,
+      name: 'College Friends Dhukuti',
+      amountMinor: npr(2000),
+      startDate: DateTime(2026, 4, 15),
+      createdBy: 'u-maya',
+      memberIds: <String>['u-sita', 'u-maya', 'u-arjun', 'u-nabin', 'u-pasang'],
+    );
+    collegeDhukuti.createdAt = DateTime(2026, 5, 27);
+    setCycleState(
+      collegeDhukuti.id,
+      1,
+      DhukutiCycleStatus.paidOut,
+      paidMembers: <String>[
+        'u-sita',
+        'u-maya',
+        'u-arjun',
+        'u-nabin',
+        'u-pasang',
+      ],
+    );
+    setCycleState(
+      collegeDhukuti.id,
+      2,
+      DhukutiCycleStatus.atRisk,
+      paidMembers: <String>['u-sita', 'u-maya'],
+      lateMembers: <String>['u-arjun'],
+      missedMembers: <String>['u-pasang'],
+    );
+    addDhukutiLedger(
+      pool: collegeDhukuti,
+      actorId: 'u-arjun',
+      eventType: 'dhukuti_contribution_late',
+      entityType: 'dhukuti_contribution',
+      entityId: collegeDhukuti.id,
+      title: 'Arjun contribution marked late',
+      body: 'Cycle 2 remains visible as at risk until pending statuses clear.',
+    );
+
+    final officeDhukuti = seedDhukutiPool(
+      id: 'd-office-circle',
+      group: office,
+      name: 'Office Savings Circle',
+      amountMinor: npr(3000),
+      startDate: DateTime(2026, 6, 15),
+      createdBy: 'u-arjun',
+      memberIds: <String>[
+        'u-sita',
+        'u-arjun',
+        'u-maya',
+        'u-nabin',
+        'u-laxmi',
+        'u-rina',
+        'u-pasang',
+        'u-kabir',
+      ],
+    );
+    officeDhukuti.createdAt = DateTime(2026, 5, 26);
+    setCycleState(officeDhukuti.id, 1, DhukutiCycleStatus.upcoming);
+    addDhukutiLedger(
+      pool: officeDhukuti,
+      eventType: 'dhukuti_created',
+      entityType: 'dhukuti_pool',
+      entityId: officeDhukuti.id,
+      title: 'Office Savings Circle scheduled',
+      body: 'First contribution cycle is upcoming.',
+    );
+
+    addDhukutiLedger(
+      pool: familyDhukuti,
+      eventType: 'dhukuti_payout_completed',
+      entityType: 'dhukuti_payout',
+      entityId: dhukutiPayouts
+          .firstWhere((item) => item.poolId == familyDhukuti.id)
+          .id,
+      title: 'Cycle 2 payout completed',
+      body: 'The previous cycle was settled in the mock ledger.',
     );
     _notify(
       'u-sita',

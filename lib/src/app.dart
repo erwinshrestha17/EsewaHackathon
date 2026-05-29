@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../features/dhukuti/dhukuti_list_screen.dart';
 import 'app_state.dart';
 import 'finance.dart';
 import 'models.dart';
@@ -113,7 +114,7 @@ class _SangaiShellState extends State<SangaiShell> {
       1 => const GroupsScreen(),
       2 => const ConnectionsScreen(),
       3 => const GiftsScreen(),
-      4 => const DhukutiScreen(),
+      4 => DigitalDhukutiScreen(store: store),
       _ => const ActivityScreen(),
     };
 
