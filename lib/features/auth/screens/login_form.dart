@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../auth_controller.dart';
 import '../widgets/auth_text_field.dart';
@@ -38,6 +39,11 @@ class _LoginFormState extends State<LoginForm> {
             icon: Icons.phone_iphone_outlined,
             keyboardType: TextInputType.phone,
             textInputAction: TextInputAction.next,
+            prefixText: '+977 ',
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10),
+            ],
             validator: _nepalMobileValidator,
           ),
           if (_otpRequested) ...[
@@ -79,7 +85,7 @@ class _LoginFormState extends State<LoginForm> {
             onPressed: _submitting
                 ? null
                 : () => _showError(
-                    'Use a Nepal mobile number such as 98XXXXXXXX or +977 98XXXXXXXX.',
+                    'Enter exactly 10 digits after +977, such as 98XXXXXXXX.',
                   ),
             icon: const Icon(Icons.help_outline),
             label: const Text('Need help?'),
@@ -98,17 +104,13 @@ class _LoginFormState extends State<LoginForm> {
     if (required != null) {
       return required;
     }
-    final normalized = _normalizeNepalMobile(value!);
-    final valid = RegExp(r'^9[678]\d{8}$').hasMatch(normalized);
-    return valid ? null : 'Enter a valid Nepal mobile number.';
-  }
-
-  String _normalizeNepalMobile(String value) {
-    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length == 13 && digits.startsWith('977')) {
-      return digits.substring(3);
+    final digits = value!.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length != 10) {
+      return 'Enter exactly 10 digits after +977.';
     }
-    return digits;
+    return RegExp(r'^9[678]\d{8}$').hasMatch(digits)
+        ? null
+        : 'Enter a valid Nepal mobile number.';
   }
 
   String? _otpValidator(String? value) {

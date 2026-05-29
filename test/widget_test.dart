@@ -17,11 +17,27 @@ void main() {
           controller.login(identifier: 'demo@esewa', password: 'demo-password'),
       throwsA(isA<AuthValidationException>()),
     );
-
-    await controller.login(
-      identifier: '+977 9800000001',
-      password: 'demo-password',
+    expect(
+      () =>
+          controller.login(identifier: '980000001', password: 'demo-password'),
+      throwsA(isA<AuthValidationException>()),
     );
+    expect(
+      () => controller.login(
+        identifier: '98000000011',
+        password: 'demo-password',
+      ),
+      throwsA(isA<AuthValidationException>()),
+    );
+    expect(
+      () => controller.login(
+        identifier: '+977 9800000001',
+        password: 'demo-password',
+      ),
+      throwsA(isA<AuthValidationException>()),
+    );
+
+    await controller.login(identifier: '9800000001', password: 'demo-password');
 
     expect(controller.state.isLoggedIn, isTrue);
     expect(controller.state.activeUser?.phone, '9800000001');
@@ -40,7 +56,16 @@ void main() {
     );
 
     expect(find.text('Nepal mobile number'), findsOneWidget);
+    expect(find.text('+977 '), findsOneWidget);
     expect(find.text('Login with QR'), findsNothing);
+
+    await tester.enterText(find.byType(TextFormField).first, '98000000011');
+    await tester.pump();
+
+    final phoneField = tester.widget<TextFormField>(
+      find.byType(TextFormField).first,
+    );
+    expect(phoneField.controller?.text, '9800000001');
   });
 
   Future<void> pumpGroupsForAddExpense(

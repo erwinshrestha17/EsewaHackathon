@@ -66,10 +66,7 @@ class AuthController extends ChangeNotifier {
 
   String? _normalizeNepalMobile(String value) {
     final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-    final mobile = digits.length == 13 && digits.startsWith('977')
-        ? digits.substring(3)
-        : digits;
-    return RegExp(r'^9[678]\d{8}$').hasMatch(mobile) ? mobile : null;
+    return RegExp(r'^9[678]\d{8}$').hasMatch(digits) ? digits : null;
   }
 
   Future<void> register({
