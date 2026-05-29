@@ -132,22 +132,6 @@ class SettingsState {
   }
 }
 
-class ProfileDraft {
-  const ProfileDraft({
-    required this.displayName,
-    required this.phone,
-    required this.esewaId,
-    required this.district,
-    required this.avatarInitials,
-  });
-
-  final String displayName;
-  final String phone;
-  final String esewaId;
-  final String district;
-  final String avatarInitials;
-}
-
 extension ConnectionRequestPreferenceLabel on ConnectionRequestPreference {
   String get label {
     return switch (this) {

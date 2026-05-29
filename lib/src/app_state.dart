@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../features/auth/models/user_profile.dart';
 import 'finance.dart';
 import 'models.dart';
 
@@ -42,6 +43,41 @@ class AppStore extends ChangeNotifier {
   AppUser get currentUser => userById(currentUserId);
 
   AppUser userById(String id) => users.firstWhere((user) => user.id == id);
+
+  void applyActiveUserProfile(UserProfile profile) {
+    final index = users.indexWhere((user) => user.id == profile.id);
+    final existing = index == -1 ? null : users[index];
+    final updated = AppUser(
+      id: profile.id,
+      displayName: profile.displayName,
+      phone: profile.phone,
+      avatar: profile.initials,
+      district: profile.district,
+      createdAt: profile.createdAt,
+      privacyMode: existing?.privacyMode ?? PrivacyMode.everyone,
+    );
+    final changed =
+        existing == null ||
+        existing.displayName != updated.displayName ||
+        existing.phone != updated.phone ||
+        existing.avatar != updated.avatar ||
+        existing.district != updated.district ||
+        currentUserId != profile.id;
+    if (!changed) {
+      return;
+    }
+    if (index == -1) {
+      users.add(updated);
+    } else {
+      users[index] = updated;
+    }
+    currentUserId = profile.id;
+    selectedGroupId = visibleGroups.isEmpty ? null : visibleGroups.first.id;
+    selectedDhukutiPoolId = visibleDhukutiPools.isEmpty
+        ? null
+        : visibleDhukutiPools.first.id;
+    notifyListeners();
+  }
 
   Group groupById(String id) => groups.firstWhere((group) => group.id == id);
 
@@ -1510,6 +1546,40 @@ class AppStore extends ChangeNotifier {
           '${nameOf(currentUserId)} paid ${money(contribution.amountMinor)} for cycle ${contribution.cycleNumber}.',
     );
     notifyListeners();
+  }
+
+  String confirmDhukutiPayoutReview(String cycleId) {
+    final cycle = dhukutiCycles.firstWhere((item) => item.id == cycleId);
+    final payout = dhukutiPayouts.firstWhere((item) => item.cycleId == cycleId);
+    if (cycle.status == DhukutiCycleStatus.readyForPayout) {
+      payout
+        ..status = PayoutStatus.paid
+        ..paidAt = _now;
+      cycle.status = DhukutiCycleStatus.paidOut;
+      _activity(
+        actorId: currentUserId,
+        groupId: poolById(cycle.poolId).groupId,
+        eventType: 'dhukuti_payout_completed',
+        entityType: 'dhukuti_payout',
+        entityId: payout.id,
+        title: 'Dhukuti payout recorded',
+        body:
+            'Cycle ${cycle.cycleNumber} payout was recorded in the transparent ledger.',
+      );
+    } else {
+      _activity(
+        actorId: currentUserId,
+        groupId: poolById(cycle.poolId).groupId,
+        eventType: 'dhukuti_payout_reviewed',
+        entityType: 'dhukuti_payout',
+        entityId: payout.id,
+        title: 'Dhukuti payout reviewed',
+        body:
+            'Cycle ${cycle.cycleNumber} payout was reviewed without changing ledger balances.',
+      );
+    }
+    notifyListeners();
+    return payout.id;
   }
 
   void requestEmergencyExit(String poolId, String reason) {

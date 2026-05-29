@@ -1,5 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../features/settings/settings_models.dart';
+import '../../shared/transactions/transaction_confirmation_controller.dart';
+import '../../shared/transactions/transaction_confirmation_data.dart';
+import '../../shared/transactions/transaction_status.dart';
+import '../../shared/transactions/transaction_type.dart';
 import '../../src/app_state.dart';
 import '../../src/finance.dart';
 import '../../src/models.dart';
@@ -279,10 +286,76 @@ class _HeroCycleCard extends StatelessWidget {
               ],
             ),
           ],
+          if (cycle.status == DhukutiCycleStatus.readyForPayout ||
+              cycle.status == DhukutiCycleStatus.atRisk) ...[
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: () => unawaited(
+                openTransactionConfirmation(
+                  context,
+                  _payoutConfirmationData(store, pool, cycle),
+                  () async {
+                    final wasReady =
+                        cycle.status == DhukutiCycleStatus.readyForPayout;
+                    final reference = store.confirmDhukutiPayoutReview(
+                      cycle.id,
+                    );
+                    return TransactionResult.success(
+                      title: wasReady
+                          ? 'Payout Recorded'
+                          : 'Payout Review Recorded',
+                      message:
+                          'Your Dhukuti ledger has been updated without implying a guaranteed payout.',
+                      amount: cycle.expectedContributionTotalMinor,
+                      transactionReference: reference,
+                      createdAt: DateTime.now(),
+                    );
+                  },
+                ),
+              ),
+              icon: const Icon(Icons.fact_check_outlined),
+              label: const Text('Review payout'),
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+TransactionConfirmationData _payoutConfirmationData(
+  AppStore store,
+  DhukutiPool pool,
+  DhukutiCycle cycle,
+) {
+  return TransactionConfirmationData(
+    id: 'dhukuti-payout-${cycle.id}',
+    transactionType: TransactionType.dhukutiPayout,
+    title: 'Confirm Payout',
+    subtitle: '${pool.name} • Cycle ${cycle.cycleNumber}',
+    amount: cycle.expectedContributionTotalMinor,
+    payerName: pool.name,
+    payerAvatarUrl: 'D',
+    recipientName: store.nameOf(cycle.payoutRecipientId),
+    recipientAvatarUrl: store.userById(cycle.payoutRecipientId).avatar,
+    poolName: pool.name,
+    warningMessage: cycle.status == DhukutiCycleStatus.atRisk
+        ? 'Some contributions are unpaid. This payout should not be shown as guaranteed.'
+        : null,
+    complianceNote: dhukutiSafetyNoteText,
+    confirmationButtonText: 'Confirm Payout',
+    createdAt: DateTime.now(),
+    idempotencyKey: '${pool.id}-payout-${cycle.cycleNumber}',
+    operationType: 'dhukuti_payout',
+    details: [
+      TransactionDetail('Cycle', 'Cycle ${cycle.cycleNumber}'),
+      TransactionDetail(
+        'Paid contribution total',
+        money(cycle.paidContributionTotalMinor),
+      ),
+      TransactionDetail('Cycle status', enumLabel(cycle.status)),
+    ],
+  );
 }
 
 class _Tabs extends StatelessWidget {

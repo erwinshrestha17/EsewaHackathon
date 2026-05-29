@@ -9,6 +9,7 @@ class SettingsTile extends StatelessWidget {
     this.onTap,
     this.enabled = true,
     this.showChevron = true,
+    this.danger = false,
     super.key,
   });
 
@@ -19,15 +20,19 @@ class SettingsTile extends StatelessWidget {
   final VoidCallback? onTap;
   final bool enabled;
   final bool showChevron;
+  final bool danger;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final activeColor = danger ? colorScheme.error : colorScheme.primary;
     final foreground = enabled
-        ? colorScheme.onSurface
+        ? danger
+              ? colorScheme.error
+              : colorScheme.onSurface
         : colorScheme.onSurface.withValues(alpha: 0.44);
     final iconColor = enabled
-        ? colorScheme.primary
+        ? activeColor
         : colorScheme.onSurfaceVariant.withValues(alpha: 0.56);
     return ListTile(
       minTileHeight: 56,

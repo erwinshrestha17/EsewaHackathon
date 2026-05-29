@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../auth/auth_controller.dart';
+import '../auth/models/user_profile.dart';
 import 'edit_profile_screen.dart';
 import 'notification_settings_screen.dart';
 import 'settings_controller.dart';
@@ -12,16 +14,22 @@ import 'widgets/settings_switch_tile.dart';
 import 'widgets/settings_tile.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({required this.controller, super.key});
+  const SettingsScreen({
+    required this.controller,
+    required this.authController,
+    super.key,
+  });
 
   final SettingsController controller;
+  final AuthController authController;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
+    return ListenableBuilder(
+      listenable: Listenable.merge([controller, authController]),
       builder: (context, _) {
         final state = controller.state;
+        final profile = authController.state.activeUser ?? UserProfile.demo();
         return Scaffold(
           appBar: AppBar(title: const Text('Settings')),
           body: ListView(
@@ -40,7 +48,7 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               SettingsProfileCard(
-                state: state,
+                profile: profile,
                 onEdit: () => _openEditProfile(context),
               ),
               const SizedBox(height: 20),
@@ -51,6 +59,13 @@ class SettingsScreen extends StatelessWidget {
                     icon: Icons.person_outline,
                     title: 'Edit Profile',
                     onTap: () => _openEditProfile(context),
+                  ),
+                  SettingsTile(
+                    icon: Icons.logout,
+                    title: 'Logout',
+                    subtitle: 'Return to prototype login on this device.',
+                    onTap: () => _confirmLogout(context),
+                    danger: true,
                   ),
                 ],
               ),
@@ -73,33 +88,12 @@ class SettingsScreen extends StatelessWidget {
                       emptyMessage: 'No blocked users.',
                     ),
                   ),
-                  SettingsTile(
-                    icon: Icons.person_remove_outlined,
-                    title: 'Removed Connections',
-                    onTap: () => _showUserList(
-                      context,
-                      title: 'Removed Connections',
-                      emptyMessage: 'No removed connections.',
-                    ),
-                  ),
                 ],
               ),
               const SizedBox(height: 20),
               SettingsSection(
                 title: 'Groups & Expenses',
                 children: [
-                  SettingsTile(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'Default Split Mode',
-                    value: state.defaultSplitMode.label,
-                    onTap: () => _chooseDefaultSplitMode(context),
-                  ),
-                  SettingsTile(
-                    icon: Icons.timeline_outlined,
-                    title: 'Activity Timeline Limit',
-                    value: state.activityTimelineLimit.label,
-                    onTap: () => _chooseActivityTimelineLimit(context),
-                  ),
                   SettingsSwitchTile(
                     icon: Icons.calculate_outlined,
                     title: 'Show Rounding Note',
@@ -245,19 +239,59 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Future<void> _openEditProfile(BuildContext context) async {
-    final draft = await showModalBottomSheet<ProfileDraft>(
+    final profile = authController.state.activeUser ?? UserProfile.demo();
+    final updated = await showModalBottomSheet<UserProfile>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => EditProfileSheet(state: controller.state),
+      builder: (_) => EditProfileSheet(profile: profile),
     );
-    if (draft == null || !context.mounted) {
+    if (updated == null || !context.mounted) {
       return;
     }
-    controller.updateProfile(draft);
+    await authController.updateProfile(updated);
+    if (!context.mounted) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Profile updated for this demo session.')),
     );
+  }
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Log out of Sangai?'),
+          content: const Text(
+            'You will need to log in again to access your groups, gifts, and Dhukuti details on this device.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Log Out'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+    await authController.logout();
+    if (!context.mounted) {
+      return;
+    }
+    Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
   }
 
   Future<void> _chooseConnectionRequestPreference(BuildContext context) async {
@@ -273,36 +307,6 @@ class SettingsScreen extends StatelessWidget {
         );
     if (value != null) {
       controller.setConnectionRequestPreference(value);
-    }
-  }
-
-  Future<void> _chooseDefaultSplitMode(BuildContext context) async {
-    final value = await showSettingsChoiceBottomSheet<DefaultSplitMode>(
-      context: context,
-      title: 'Default Split Mode',
-      selectedValue: controller.state.defaultSplitMode,
-      options: [
-        for (final mode in DefaultSplitMode.values)
-          SettingsChoiceOption(value: mode, label: mode.label),
-      ],
-    );
-    if (value != null) {
-      controller.setDefaultSplitMode(value);
-    }
-  }
-
-  Future<void> _chooseActivityTimelineLimit(BuildContext context) async {
-    final value = await showSettingsChoiceBottomSheet<ActivityTimelineLimit>(
-      context: context,
-      title: 'Activity Timeline Limit',
-      selectedValue: controller.state.activityTimelineLimit,
-      options: [
-        for (final limit in ActivityTimelineLimit.values)
-          SettingsChoiceOption(value: limit, label: limit.label),
-      ],
-    );
-    if (value != null) {
-      controller.setActivityTimelineLimit(value);
     }
   }
 

@@ -53,7 +53,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
         children: [
           DhukutiHeader(
             title: 'Create Dhukuti Pool',
-            subtitle: 'Phase 2 setup preview for trusted contribution circles.',
+            subtitle: 'Set up a trusted contribution circle.',
           ),
           DhukutiSection(
             title: 'Pool Details',
@@ -181,7 +181,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                     ),
                   ),
                   child: const Text(
-                    'Digital Dhukuti in this prototype is a contribution schedule and transparent ledger. It does not provide credit, interest, investment return, or guaranteed payout.',
+                    'Digital Dhukuti is a contribution schedule and transparent ledger. It does not provide credit, interest, investment return, or guaranteed payout.',
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -218,7 +218,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'For this MVP demo, new Dhukuti pools are not saved. The seeded pools show the transparent schedule and ledger flow.',
+                  'Pool creation is not connected yet. Existing pools show the transparent schedule and ledger flow.',
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
