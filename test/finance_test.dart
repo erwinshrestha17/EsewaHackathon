@@ -198,6 +198,62 @@ void main() {
     );
   });
 
+  test('zero-value gifts are rejected', () {
+    final store = AppStore();
+
+    expect(
+      store.sendGift(
+        recipientId: 'u-maya',
+        template: 'Dashain',
+        amountMinor: 0,
+        message: 'Hello',
+      ),
+      contains('greater than zero'),
+    );
+    expect(store.gifts.where((g) => g.amountMinor == 0), isEmpty);
+  });
+
+  test('a gift can be cancelled only while unopened and reverses payment', () {
+    final store = AppStore();
+    store.sendGift(
+      recipientId: 'u-maya',
+      template: 'Birthday',
+      amountMinor: npr(200),
+      message: 'Happy birthday',
+    );
+    final gift = store.gifts.firstWhere((g) => g.template == 'Birthday');
+
+    expect(store.cancelGift(gift.id), contains('reversed'));
+    expect(gift.status, GiftStatus.cancelled);
+    final payment = store.payments.firstWhere(
+      (p) => p.id == gift.paymentTransactionId,
+    );
+    expect(payment.status, PaymentStatus.refunded);
+  });
+
+  test('an opened gift cannot be cancelled but can be refunded', () {
+    final store = AppStore();
+    store.sendGift(
+      recipientId: 'u-maya',
+      template: 'Wedding',
+      amountMinor: npr(300),
+      message: 'Congrats',
+    );
+    final gift = store.gifts.firstWhere((g) => g.template == 'Wedding');
+
+    // Recipient opens the gift.
+    store.switchUser('u-maya');
+    expect(store.openGift(gift.id), isTrue);
+    expect(gift.status, GiftStatus.opened);
+
+    // Sender can no longer cancel, but can refund after opening.
+    store.switchUser('u-sita');
+    expect(store.cancelGift(gift.id), contains('unopened'));
+    expect(gift.status, GiftStatus.opened);
+    expect(store.refundGift(gift.id), contains('refunded'));
+    expect(gift.status, GiftStatus.refunded);
+  });
+
   test('QR invites preserve hyphenated user IDs', () {
     final store = AppStore()..switchUser('u-arjun');
     final code = store.qrInviteCodeFor(store.userById('u-kabir'));

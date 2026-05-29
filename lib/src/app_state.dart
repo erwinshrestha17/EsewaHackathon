@@ -1117,7 +1117,7 @@ class AppStore extends ChangeNotifier {
         entityType: 'settlement',
         entityId: settlement.id,
         title: 'Settlement failed',
-        body: 'Mock eSewa marked the payment as failed.',
+        body: 'The mock payment was marked as failed.',
       );
     } else {
       settlement
@@ -1142,7 +1142,7 @@ class AppStore extends ChangeNotifier {
         entityId: settlement.id,
         title: 'Settlement paid',
         body:
-            '${nameOf(settlement.payerId)} paid ${nameOf(settlement.payeeId)} ${money(settlement.amountMinor)} via mock eSewa.',
+            '${nameOf(settlement.payerId)} paid ${nameOf(settlement.payeeId)} ${money(settlement.amountMinor)} via Sangai Pay.',
       );
     }
     notifyListeners();
@@ -1187,6 +1187,9 @@ class AppStore extends ChangeNotifier {
   }) {
     if (!canInviteOrGift(currentUserId, recipientId)) {
       return 'Gifts can only be sent to active, unblocked connections.';
+    }
+    if (amountMinor <= 0) {
+      return 'Enter a gift amount greater than zero.';
     }
     final existing = gifts.where(
       (gift) =>
@@ -1240,28 +1243,73 @@ class AppStore extends ChangeNotifier {
     return 'Gift sent to ${nameOf(recipientId)}.';
   }
 
-  void openGift(String giftId) {
+  bool openGift(String giftId) {
     final gift = gifts.firstWhere((item) => item.id == giftId);
     if (gift.recipientId == currentUserId && gift.status == GiftStatus.sent) {
       gift
         ..status = GiftStatus.opened
         ..openedAt = _now;
+      _activity(
+        actorId: currentUserId,
+        eventType: 'gift_opened',
+        entityType: 'gift_card',
+        entityId: giftId,
+        title: 'Gift opened',
+        body: '${nameOf(currentUserId)} opened a ${gift.template} gift.',
+      );
       notifyListeners();
+      return true;
     }
+    return false;
   }
 
-  void refundGift(String giftId) {
+  // A gift sent to the wrong recipient can be cancelled only while it is still
+  // unopened. Cancelling reverses the Sangai Pay payment that delivered it.
+  String cancelGift(String giftId) {
     final gift = gifts.firstWhere((item) => item.id == giftId);
+    if (gift.senderId != currentUserId) {
+      return 'Only the sender can cancel a gift.';
+    }
+    if (gift.status != GiftStatus.sent) {
+      return 'Only an unopened gift can be cancelled.';
+    }
+    gift
+      ..status = GiftStatus.cancelled
+      ..refundedAt = _now;
+    _reverseGiftPayment(gift);
+    _activity(
+      actorId: currentUserId,
+      eventType: 'gift_cancelled',
+      entityType: 'gift_card',
+      entityId: giftId,
+      title: 'Gift cancelled',
+      body: 'The ${gift.template} gift was cancelled before it was opened.',
+    );
+    _notify(
+      gift.recipientId,
+      'gift',
+      'Gift cancelled',
+      'A ${gift.template} gift was cancelled by the sender.',
+    );
+    notifyListeners();
+    return 'Gift cancelled and the Sangai Pay payment was reversed.';
+  }
+
+  // Sent gifts cannot be silently deleted; they require a refund. A refund may
+  // happen after the recipient has opened the card, in which case the card
+  // stays visible with a refunded status and no success celebration.
+  String refundGift(String giftId) {
+    final gift = gifts.firstWhere((item) => item.id == giftId);
+    if (gift.senderId != currentUserId) {
+      return 'Only the sender can refund a gift.';
+    }
+    if (gift.status != GiftStatus.sent && gift.status != GiftStatus.opened) {
+      return 'Only a delivered gift can be refunded.';
+    }
     gift
       ..status = GiftStatus.refunded
       ..refundedAt = _now;
-    final payment = payments.firstWhere(
-      (item) => item.id == gift.paymentTransactionId,
-    );
-    payment
-      ..status = PaymentStatus.refunded
-      ..refundedAt = _now
-      ..updatedAt = _now;
+    _reverseGiftPayment(gift);
     _activity(
       actorId: currentUserId,
       eventType: 'gift_refunded',
@@ -1270,7 +1318,24 @@ class AppStore extends ChangeNotifier {
       title: 'Gift refunded',
       body: 'The ${gift.template} gift was refunded.',
     );
+    _notify(
+      gift.recipientId,
+      'gift',
+      'Gift refunded',
+      'The ${gift.template} gift was refunded by the sender.',
+    );
     notifyListeners();
+    return 'Gift refunded through Sangai Pay.';
+  }
+
+  void _reverseGiftPayment(GiftCard gift) {
+    final payment = payments.firstWhere(
+      (item) => item.id == gift.paymentTransactionId,
+    );
+    payment
+      ..status = PaymentStatus.refunded
+      ..refundedAt = _now
+      ..updatedAt = _now;
   }
 
   String createGiftPool({
@@ -1705,8 +1770,8 @@ class AppStore extends ChangeNotifier {
   }) {
     final payment = PaymentTransaction(
       id: _id('payment'),
-      paymentProvider: 'mock_esewa',
-      paymentReference: 'ESEWA-${_sequence + 777}',
+      paymentProvider: 'sangai_pay',
+      paymentReference: 'TXN-${_sequence + 777}',
       operationType: operationType,
       entityType: entityType,
       entityId: entityId,
@@ -1718,7 +1783,7 @@ class AppStore extends ChangeNotifier {
       confirmedAt: status == PaymentStatus.paid ? _now : null,
       failedAt: status == PaymentStatus.failed ? _now : null,
       rawPayload:
-          '{"provider":"mock_esewa","entity":"$entityType","amount_minor":$amountMinor}',
+          '{"provider":"sangai_pay","entity":"$entityType","amount_minor":$amountMinor}',
     );
     payments.add(payment);
     return payment;
