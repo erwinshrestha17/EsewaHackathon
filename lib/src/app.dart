@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -2712,6 +2713,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
 
   var _cameraReady = false;
   var _runningOcr = false;
+  var _autoOcrStarted = false;
   var _flashOn = false;
   var _scanVersion = 0;
   String? _cameraIssue;
@@ -2791,6 +2793,24 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
     setState(() {
       _cameraReady = true;
       _cameraIssue = null;
+    });
+    _scheduleAutoBillDetection();
+  }
+
+  void _scheduleAutoBillDetection() {
+    if (_autoOcrStarted || !_cameraReady) {
+      return;
+    }
+    _autoOcrStarted = true;
+    setState(() => _scanMessage = 'Looking for a bill in the frame...');
+    Timer(const Duration(milliseconds: 700), () {
+      if (!mounted ||
+          !_cameraReady ||
+          _runningOcr ||
+          _scannedItems.isNotEmpty) {
+        return;
+      }
+      unawaited(_runOcr());
     });
   }
 
@@ -3036,48 +3056,45 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
                       ),
                     ),
                   if (_scanMessage != null) const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (_desktopWeb) ...[
-                        FilledButton.icon(
-                          onPressed: _runningOcr
-                              ? null
-                              : () => _runOcr(fromUpload: true),
-                          icon: const Icon(Icons.upload_file_outlined),
-                          label: const Text('Upload bill image'),
-                        ),
-                        const SizedBox(width: 12),
-                      ],
-                      _CaptureButton(
-                        onPressed: _cameraReady && !_runningOcr
-                            ? () => _runOcr()
-                            : null,
-                      ),
-                    ],
-                  ),
+                  if (_desktopWeb)
+                    FilledButton.icon(
+                      onPressed: _runningOcr
+                          ? null
+                          : () => _runOcr(fromUpload: true),
+                      icon: const Icon(Icons.upload_file_outlined),
+                      label: const Text('Upload bill image'),
+                    ),
                 ],
               ),
             ),
-            DraggableScrollableSheet(
-              controller: _sheetController,
-              initialChildSize: 0.16,
-              minChildSize: 0.13,
-              maxChildSize: 0.92,
-              snap: true,
-              snapSizes: const [0.16, 0.92],
-              builder: (context, scrollController) {
-                return _ManualEntrySheet(
-                  key: ValueKey(_scanVersion),
-                  groupId: widget.groupId,
-                  scrollController: scrollController,
-                  scannedItems: _scannedItems,
-                  reviewMessage: _scannedItems.isEmpty
-                      ? null
-                      : 'Review scanned items before saving.',
-                  onSaved: () => Navigator.pop(context),
-                );
-              },
+            ScrollConfiguration(
+              behavior: const _ManualSheetScrollBehavior(),
+              child: DraggableScrollableSheet(
+                controller: _sheetController,
+                expand: true,
+                initialChildSize: _ManualEntrySheet.collapsedExtent,
+                minChildSize: _ManualEntrySheet.minExtent,
+                maxChildSize: _ManualEntrySheet.expandedExtent,
+                snap: true,
+                snapSizes: const [
+                  _ManualEntrySheet.collapsedExtent,
+                  _ManualEntrySheet.expandedExtent,
+                ],
+                shouldCloseOnMinExtent: false,
+                builder: (context, scrollController) {
+                  return _ManualEntrySheet(
+                    key: ValueKey(_scanVersion),
+                    groupId: widget.groupId,
+                    sheetController: _sheetController,
+                    scrollController: scrollController,
+                    scannedItems: _scannedItems,
+                    reviewMessage: _scannedItems.isEmpty
+                        ? null
+                        : 'Review scanned items before saving.',
+                    onSaved: () => Navigator.pop(context),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -3159,29 +3176,6 @@ class _ScanScrimPainter extends CustomPainter {
   }
 }
 
-class _CaptureButton extends StatelessWidget {
-  const _CaptureButton({required this.onPressed});
-
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox.square(
-      dimension: 74,
-      child: FilledButton(
-        onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          padding: EdgeInsets.zero,
-          shape: const CircleBorder(),
-          backgroundColor: Colors.white,
-          foregroundColor: Theme.of(context).colorScheme.primary,
-        ),
-        child: const Icon(Icons.camera_alt, size: 32),
-      ),
-    );
-  }
-}
-
 class _ScanStatusPill extends StatelessWidget {
   const _ScanStatusPill({
     required this.message,
@@ -3253,6 +3247,19 @@ class _ScanStatusPill extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ManualSheetScrollBehavior extends MaterialScrollBehavior {
+  const _ManualSheetScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.invertedStylus,
+    PointerDeviceKind.trackpad,
+  };
 }
 
 enum _BillLineKind { item, serviceCharge, tax, discount, rounding }
@@ -3335,6 +3342,7 @@ List<_ExpenseItemDraft> _demoScannedBillItems() {
 class _ManualEntrySheet extends StatefulWidget {
   const _ManualEntrySheet({
     required this.groupId,
+    required this.sheetController,
     required this.scrollController,
     required this.scannedItems,
     required this.onSaved,
@@ -3342,7 +3350,12 @@ class _ManualEntrySheet extends StatefulWidget {
     super.key,
   });
 
+  static const minExtent = 0.13;
+  static const collapsedExtent = 0.16;
+  static const expandedExtent = 0.92;
+
   final String groupId;
+  final DraggableScrollableController sheetController;
   final ScrollController scrollController;
   final List<_ExpenseItemDraft> scannedItems;
   final String? reviewMessage;
@@ -3528,6 +3541,62 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
     });
   }
 
+  Future<void> _toggleSheet() async {
+    if (!widget.sheetController.isAttached) {
+      return;
+    }
+    final target =
+        widget.sheetController.size <
+            (_ManualEntrySheet.collapsedExtent +
+                    _ManualEntrySheet.expandedExtent) /
+                2
+        ? _ManualEntrySheet.expandedExtent
+        : _ManualEntrySheet.collapsedExtent;
+    await widget.sheetController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _dragSheet(DragUpdateDetails details) {
+    if (!widget.sheetController.isAttached) {
+      return;
+    }
+    final height = MediaQuery.sizeOf(context).height;
+    if (height <= 0) {
+      return;
+    }
+    final delta = -(details.primaryDelta ?? 0) / height;
+    final next = (widget.sheetController.size + delta).clamp(
+      _ManualEntrySheet.minExtent,
+      _ManualEntrySheet.expandedExtent,
+    );
+    widget.sheetController.jumpTo(next);
+  }
+
+  Future<void> _settleSheet(DragEndDetails details) async {
+    if (!widget.sheetController.isAttached) {
+      return;
+    }
+    final velocity = details.primaryVelocity ?? 0;
+    final midpoint =
+        (_ManualEntrySheet.collapsedExtent + _ManualEntrySheet.expandedExtent) /
+        2;
+    final target = velocity < -250
+        ? _ManualEntrySheet.expandedExtent
+        : velocity > 250
+        ? _ManualEntrySheet.collapsedExtent
+        : widget.sheetController.size >= midpoint
+        ? _ManualEntrySheet.expandedExtent
+        : _ManualEntrySheet.collapsedExtent;
+    await widget.sheetController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   void _save({
     required int total,
     required Map<String, int> payerAmounts,
@@ -3656,45 +3725,55 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
         controller: widget.scrollController,
         slivers: [
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-              child: Column(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                      borderRadius: BorderRadius.circular(999),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => unawaited(_toggleSheet()),
+              onVerticalDragUpdate: _dragSheet,
+              onVerticalDragEnd: (details) => unawaited(_settleSheet(details)),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.edit_note_outlined,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Manual Entry',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w900),
-                            ),
-                            const Text(
-                              'Enter bill manually or edit scanned items',
-                            ),
-                          ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.edit_note_outlined,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Manual Entry',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w900),
+                              ),
+                              const Text(
+                                'Enter bill manually or edit scanned items',
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.keyboard_arrow_up_rounded,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
               ),
             ),
           ),
