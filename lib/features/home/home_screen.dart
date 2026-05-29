@@ -26,7 +26,6 @@ class HomeScreen extends StatefulWidget {
     required this.onNavigate,
     required this.onOpenSettings,
     required this.onOpenNotifications,
-    required this.onAddExpense,
     required this.onCreateGroup,
     required this.onSettle,
     required this.onScanBill,
@@ -42,7 +41,6 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<int> onNavigate;
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenNotifications;
-  final VoidCallback onAddExpense;
   final VoidCallback onCreateGroup;
   final VoidCallback onSettle;
   final VoidCallback onScanBill;
@@ -97,8 +95,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       summary: data.balanceSummary,
                       groupCount: data.activeGroups.length,
                       pendingCount: data.pendingSettlements.length,
-                      onPrimaryAction: () => _primaryBalanceAction(data),
-                      onViewGroups: () => widget.onNavigate(1),
                     ),
                     const SizedBox(height: 18),
                     QuickActionGrid(
@@ -151,17 +147,6 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
-  }
-
-  void _primaryBalanceAction(HomeDashboardData data) {
-    final net = data.balanceSummary.netBalance;
-    if (net < 0) {
-      widget.onSettle();
-    } else if (net > 0) {
-      widget.onNavigate(1);
-    } else {
-      widget.onAddExpense();
-    }
   }
 
   void _handleQuickAction(String id) {

@@ -8,16 +8,12 @@ class BalanceSummaryCard extends StatelessWidget {
     required this.summary,
     required this.groupCount,
     required this.pendingCount,
-    required this.onPrimaryAction,
-    required this.onViewGroups,
     super.key,
   });
 
   final HomeBalanceSummary summary;
   final int groupCount;
   final int pendingCount;
-  final VoidCallback onPrimaryAction;
-  final VoidCallback onViewGroups;
 
   @override
   Widget build(BuildContext context) {
@@ -35,11 +31,6 @@ class BalanceSummaryCard extends StatelessWidget {
         : net < 0
         ? 'You have ${money(net.abs())} to settle across your groups.'
         : 'All clear. No open dues right now.';
-    final primaryLabel = net < 0
-        ? 'Settle Now'
-        : net > 0
-        ? 'View Balances'
-        : 'Add Expense';
 
     return Container(
       width: double.infinity,
@@ -110,29 +101,6 @@ class BalanceSummaryCard extends StatelessWidget {
                   label: 'Pending',
                   value: money(summary.pendingAmount),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: scheme.primary,
-                ),
-                onPressed: onPrimaryAction,
-                child: Text(primaryLabel),
-              ),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Colors.white70),
-                ),
-                onPressed: onViewGroups,
-                child: const Text('View Groups'),
               ),
             ],
           ),

@@ -175,6 +175,8 @@ void main() {
     expect(find.text('Namaste, Erwin'), findsOneWidget);
     expect(find.text('Fast Demo Flow'), findsOneWidget);
     expect(find.text('Scan Receipt'), findsNothing);
+    expect(find.text('Settle Now'), findsNothing);
+    expect(find.text('View Groups'), findsNothing);
     expect(find.text('Add Expense'), findsNothing);
     expect(find.text('Create Group'), findsNothing);
     expect(find.text('Send Gift'), findsWidgets);

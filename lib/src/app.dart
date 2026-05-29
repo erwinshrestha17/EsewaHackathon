@@ -288,7 +288,6 @@ class _SangaiShellState extends State<SangaiShell> {
         onNavigate: _navigateFromHome,
         onOpenSettings: _openSettings,
         onOpenNotifications: _openNotifications,
-        onAddExpense: _openAddExpenseFromHome,
         onCreateGroup: () => showCreateGroupDialog(context),
         onSettle: () =>
             _openFirstSettlementConfirmation(context, store, _navigateFromHome),
@@ -315,7 +314,6 @@ class _SangaiShellState extends State<SangaiShell> {
         onNavigate: _navigateFromHome,
         onOpenSettings: _openSettings,
         onOpenNotifications: _openNotifications,
-        onAddExpense: _openAddExpenseFromHome,
         onCreateGroup: () => showCreateGroupDialog(context),
         onSettle: () =>
             _openFirstSettlementConfirmation(context, store, _navigateFromHome),
@@ -499,21 +497,6 @@ class _SangaiShellState extends State<SangaiShell> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
     );
-  }
-
-  void _openAddExpenseFromHome() {
-    final store = StoreScope.of(context);
-    final groups = store.visibleExpenseGroups;
-    final group = groups.isEmpty
-        ? null
-        : groups.any((group) => group.id == store.selectedGroupId)
-        ? store.groupByIdOrNull(store.selectedGroupId)
-        : groups.first;
-    if (group == null) {
-      showCreateGroupDialog(context);
-      return;
-    }
-    showAddExpenseOcrFlow(context, group.id);
   }
 
   void _openScanBillFromHome() {
