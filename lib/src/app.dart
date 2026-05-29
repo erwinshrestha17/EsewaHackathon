@@ -1271,7 +1271,6 @@ class _GiftsScreenState extends State<GiftsScreen> {
                         padding: const EdgeInsets.only(bottom: 14),
                         child: GiftEnvelopeCard(
                           gift: gift,
-                          isSender: gift.senderId == store.currentUserId,
                           isRecipient: gift.recipientId == store.currentUserId,
                           senderName: store.nameOf(gift.senderId),
                           recipientName: store.nameOf(gift.recipientId),
@@ -1285,10 +1284,6 @@ class _GiftsScreenState extends State<GiftsScreen> {
                               );
                             }
                           },
-                          onCancel: () =>
-                              showSnack(context, store.cancelGift(gift.id)),
-                          onRefund: () =>
-                              showSnack(context, store.refundGift(gift.id)),
                         ),
                       ),
                   ],
@@ -1940,34 +1935,25 @@ const giftStickerEmojis = <String>[
 class GiftEnvelopeCard extends StatelessWidget {
   const GiftEnvelopeCard({
     required this.gift,
-    required this.isSender,
     required this.isRecipient,
     required this.senderName,
     required this.recipientName,
     required this.onOpen,
-    required this.onCancel,
-    required this.onRefund,
     super.key,
   });
 
   final GiftCard gift;
-  final bool isSender;
   final bool isRecipient;
   final String senderName;
   final String recipientName;
   final VoidCallback onOpen;
-  final VoidCallback onCancel;
-  final VoidCallback onRefund;
 
   @override
   Widget build(BuildContext context) {
     final theme = giftThemeFor(gift.template);
-    final reversed =
-        gift.status == GiftStatus.refunded ||
-        gift.status == GiftStatus.cancelled;
+    // Gifts are final once sent: the recipient can open a sent gift, but it
+    // can no longer be cancelled or refunded.
     final canOpen = isRecipient && gift.status == GiftStatus.sent;
-    final canCancel = isSender && gift.status == GiftStatus.sent;
-    final canRefund = isSender && gift.status == GiftStatus.opened;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1978,7 +1964,6 @@ class GiftEnvelopeCard extends StatelessWidget {
           fromName: senderName.split(' ').first,
           toName: recipientName.split(' ').first,
           message: gift.message,
-          faded: reversed,
         ),
         const SizedBox(height: 10),
         Row(
@@ -1994,23 +1979,8 @@ class GiftEnvelopeCard extends StatelessWidget {
                 icon: const Icon(Icons.drafts_outlined, size: 18),
                 label: const Text('Open'),
               ),
-            if (canCancel)
-              OutlinedButton(onPressed: onCancel, child: const Text('Cancel')),
-            if (canRefund)
-              OutlinedButton(onPressed: onRefund, child: const Text('Refund')),
           ],
         ),
-        if (reversed) ...[
-          const SizedBox(height: 6),
-          Text(
-            gift.status == GiftStatus.cancelled
-                ? 'Cancelled before opening • Sangai Pay payment reversed.'
-                : 'Refunded • Sangai Pay payment reversed.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
       ],
     );
   }
