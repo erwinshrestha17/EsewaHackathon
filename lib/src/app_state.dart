@@ -1603,6 +1603,40 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  String confirmDhukutiPayoutReview(String cycleId) {
+    final cycle = dhukutiCycles.firstWhere((item) => item.id == cycleId);
+    final payout = dhukutiPayouts.firstWhere((item) => item.cycleId == cycleId);
+    if (cycle.status == DhukutiCycleStatus.readyForPayout) {
+      payout
+        ..status = PayoutStatus.paid
+        ..paidAt = _now;
+      cycle.status = DhukutiCycleStatus.paidOut;
+      _activity(
+        actorId: currentUserId,
+        groupId: poolById(cycle.poolId).groupId,
+        eventType: 'dhukuti_payout_completed',
+        entityType: 'dhukuti_payout',
+        entityId: payout.id,
+        title: 'Dhukuti payout recorded',
+        body:
+            'Cycle ${cycle.cycleNumber} payout was recorded in the transparent ledger.',
+      );
+    } else {
+      _activity(
+        actorId: currentUserId,
+        groupId: poolById(cycle.poolId).groupId,
+        eventType: 'dhukuti_payout_reviewed',
+        entityType: 'dhukuti_payout',
+        entityId: payout.id,
+        title: 'Dhukuti payout reviewed',
+        body:
+            'Cycle ${cycle.cycleNumber} payout was reviewed without changing ledger balances.',
+      );
+    }
+    notifyListeners();
+    return payout.id;
+  }
+
   void requestEmergencyExit(String poolId, String reason) {
     emergencyExitRequests.add(
       EmergencyExitRequest(

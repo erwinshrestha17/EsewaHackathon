@@ -88,33 +88,12 @@ class SettingsScreen extends StatelessWidget {
                       emptyMessage: 'No blocked users.',
                     ),
                   ),
-                  SettingsTile(
-                    icon: Icons.person_remove_outlined,
-                    title: 'Removed Connections',
-                    onTap: () => _showUserList(
-                      context,
-                      title: 'Removed Connections',
-                      emptyMessage: 'No removed connections.',
-                    ),
-                  ),
                 ],
               ),
               const SizedBox(height: 20),
               SettingsSection(
                 title: 'Groups & Expenses',
                 children: [
-                  SettingsTile(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'Default Split Mode',
-                    value: state.defaultSplitMode.label,
-                    onTap: () => _chooseDefaultSplitMode(context),
-                  ),
-                  SettingsTile(
-                    icon: Icons.timeline_outlined,
-                    title: 'Activity Timeline Limit',
-                    value: state.activityTimelineLimit.label,
-                    onTap: () => _chooseActivityTimelineLimit(context),
-                  ),
                   SettingsSwitchTile(
                     icon: Icons.calculate_outlined,
                     title: 'Show Rounding Note',
@@ -328,36 +307,6 @@ class SettingsScreen extends StatelessWidget {
         );
     if (value != null) {
       controller.setConnectionRequestPreference(value);
-    }
-  }
-
-  Future<void> _chooseDefaultSplitMode(BuildContext context) async {
-    final value = await showSettingsChoiceBottomSheet<DefaultSplitMode>(
-      context: context,
-      title: 'Default Split Mode',
-      selectedValue: controller.state.defaultSplitMode,
-      options: [
-        for (final mode in DefaultSplitMode.values)
-          SettingsChoiceOption(value: mode, label: mode.label),
-      ],
-    );
-    if (value != null) {
-      controller.setDefaultSplitMode(value);
-    }
-  }
-
-  Future<void> _chooseActivityTimelineLimit(BuildContext context) async {
-    final value = await showSettingsChoiceBottomSheet<ActivityTimelineLimit>(
-      context: context,
-      title: 'Activity Timeline Limit',
-      selectedValue: controller.state.activityTimelineLimit,
-      options: [
-        for (final limit in ActivityTimelineLimit.values)
-          SettingsChoiceOption(value: limit, label: limit.label),
-      ],
-    );
-    if (value != null) {
-      controller.setActivityTimelineLimit(value);
     }
   }
 

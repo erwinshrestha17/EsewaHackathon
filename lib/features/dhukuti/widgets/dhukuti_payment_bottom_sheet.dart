@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../src/app_state.dart';
 import '../../../src/finance.dart';
 import '../../../src/models.dart';
+import '../../../features/settings/settings_models.dart';
+import '../../../shared/transactions/transaction_confirmation_controller.dart';
+import '../../../shared/transactions/transaction_confirmation_data.dart';
+import '../../../shared/transactions/transaction_status.dart';
+import '../../../shared/transactions/transaction_type.dart';
 import 'dhukuti_tokens.dart';
 
 Future<bool> showDhukutiPaymentBottomSheet({
@@ -11,19 +16,48 @@ Future<bool> showDhukutiPaymentBottomSheet({
   required DhukutiPool pool,
   required DhukutiContribution contribution,
 }) async {
-  final result = await showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (sheetContext) {
-      return _DhukutiPaymentSheet(
-        store: store,
-        pool: pool,
-        contribution: contribution,
+  final cycle = store.dhukutiCycles.firstWhere(
+    (item) => item.id == contribution.cycleId,
+  );
+  final result = await openTransactionConfirmation(
+    context,
+    TransactionConfirmationData(
+      id: contribution.id,
+      transactionType: TransactionType.dhukutiContribution,
+      title: 'Confirm Dhukuti Contribution',
+      subtitle: '${pool.name} • Cycle ${contribution.cycleNumber}',
+      amount: contribution.amountMinor,
+      payerName: store.nameOf(contribution.userId),
+      payerAvatarUrl: store.userById(contribution.userId).avatar,
+      recipientName: store.nameOf(cycle.payoutRecipientId),
+      recipientAvatarUrl: store.userById(cycle.payoutRecipientId).avatar,
+      poolName: pool.name,
+      complianceNote: dhukutiSafetyNoteText,
+      confirmationButtonText: 'Pay Contribution',
+      createdAt: DateTime.now(),
+      idempotencyKey: contribution.idempotencyKey,
+      operationType: contribution.operationType,
+      details: [
+        TransactionDetail('Cycle', 'Cycle ${contribution.cycleNumber}'),
+        TransactionDetail('Due date', dateLabel(contribution.dueDate)),
+        TransactionDetail(
+          'Current payout recipient',
+          store.nameOf(cycle.payoutRecipientId),
+        ),
+      ],
+    ),
+    () async {
+      store.payDhukutiContribution(contribution.id);
+      return TransactionResult.success(
+        title: 'Contribution Paid',
+        message: 'Your Dhukuti ledger has been updated.',
+        amount: contribution.amountMinor,
+        transactionReference: contribution.id,
+        createdAt: DateTime.now(),
       );
     },
   );
-  return result ?? false;
+  return result?.isSuccess ?? false;
 }
 
 class _DhukutiPaymentSheet extends StatefulWidget {

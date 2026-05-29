@@ -13,9 +13,14 @@ import '../features/auth/screens/auth_screen.dart';
 import '../features/auth/screens/onboarding_screen.dart';
 import '../features/auth/screens/splash_screen.dart';
 import '../features/dhukuti/dhukuti_list_screen.dart';
+import '../features/home/home_screen.dart';
 import '../features/settings/settings_controller.dart';
 import '../features/settings/settings_models.dart';
 import '../features/settings/settings_screen.dart';
+import '../shared/transactions/transaction_confirmation_controller.dart';
+import '../shared/transactions/transaction_confirmation_data.dart';
+import '../shared/transactions/transaction_status.dart';
+import '../shared/transactions/transaction_type.dart';
 import 'app_state.dart';
 import 'finance.dart';
 import 'models.dart';
@@ -92,6 +97,134 @@ class SangaiApp extends StatelessWidget {
   }
 }
 
+TransactionResult _successResult({
+  required String title,
+  required String message,
+  required int amount,
+  required String reference,
+  TransactionStatus status = TransactionStatus.paid,
+}) {
+  return TransactionResult.success(
+    title: title,
+    message: message,
+    amount: amount,
+    transactionReference: reference,
+    createdAt: DateTime.now(),
+    status: status,
+  );
+}
+
+TransactionConfirmationData _settlementConfirmationData(
+  AppStore store,
+  SettlementSuggestion suggestion,
+) {
+  final group = store.groupById(suggestion.groupId);
+  final balances = store.balancesForGroup(group.id);
+  return TransactionConfirmationData(
+    id: 'settlement-${suggestion.groupId}-${suggestion.payerId}-${suggestion.payeeId}-${suggestion.amountMinor}',
+    transactionType: TransactionType.settlement,
+    title: 'Confirm Settlement',
+    subtitle:
+        '${store.nameOf(suggestion.payerId)} pays ${store.nameOf(suggestion.payeeId)}',
+    amount: suggestion.amountMinor,
+    payerName: store.nameOf(suggestion.payerId),
+    payerAvatarUrl: store.userById(suggestion.payerId).avatar,
+    recipientName: store.nameOf(suggestion.payeeId),
+    recipientAvatarUrl: store.userById(suggestion.payeeId).avatar,
+    groupName: group.name,
+    confirmationButtonText: 'Pay with eSewa',
+    createdAt: DateTime.now(),
+    idempotencyKey:
+        '${suggestion.groupId}-${suggestion.payerId}-${suggestion.payeeId}-${suggestion.amountMinor}',
+    operationType: 'settlement',
+    details: [
+      const TransactionDetail('Source', 'Greedy min-cash-flow suggestion'),
+      TransactionDetail(
+        'Balance snapshot',
+        balances.entries
+            .map((entry) => '${store.nameOf(entry.key)} ${money(entry.value)}')
+            .join(' • '),
+      ),
+    ],
+  );
+}
+
+TransactionConfirmationData _giftConfirmationData({
+  required AppStore store,
+  required String recipientId,
+  required String template,
+  required int amountMinor,
+  required String message,
+}) {
+  return TransactionConfirmationData(
+    id: 'gift-${store.currentUserId}-$recipientId-$amountMinor-$template',
+    transactionType: TransactionType.gift,
+    title: 'Confirm Gift',
+    subtitle: '$template envelope to ${store.nameOf(recipientId)}',
+    amount: amountMinor,
+    payerName: store.nameOf(store.currentUserId),
+    payerAvatarUrl: store.currentUser.avatar,
+    recipientName: store.nameOf(recipientId),
+    recipientAvatarUrl: store.userById(recipientId).avatar,
+    note: message,
+    warningMessage: 'Gift messages are visible only to sender and recipient.',
+    confirmationButtonText: 'Confirm & Send Gift',
+    createdAt: DateTime.now(),
+    idempotencyKey: '$recipientId-$amountMinor-$template',
+    operationType: 'gift',
+    details: [TransactionDetail('Gift template', template)],
+  );
+}
+
+List<TransactionParticipant> _transactionParticipantsFromShares(
+  AppStore store,
+  Map<String, int> shares, {
+  String roleLabel = 'Share',
+}) {
+  return [
+    for (final entry in shares.entries)
+      TransactionParticipant(
+        id: entry.key,
+        name: store.nameOf(entry.key),
+        avatarUrl: store.userById(entry.key).avatar,
+        amountShare: entry.value,
+        roleLabel: roleLabel,
+      ),
+  ];
+}
+
+void _openFirstSettlementConfirmation(
+  BuildContext context,
+  AppStore store,
+  ValueChanged<int> onNavigate,
+) {
+  for (final group in store.visibleGroups) {
+    for (final suggestion in store.suggestionsForGroup(group.id)) {
+      if (suggestion.payerId == store.currentUserId && !suggestion.hasPending) {
+        unawaited(
+          openTransactionConfirmation(
+            context,
+            _settlementConfirmationData(store, suggestion),
+            () async {
+              final settlement = store.createOrReuseSettlement(suggestion);
+              store.confirmSettlement(settlement.id);
+              return _successResult(
+                title: 'Payment Successful',
+                message: 'Your settlement has been marked as paid.',
+                amount: suggestion.amountMinor,
+                reference: settlement.id,
+              );
+            },
+          ),
+        );
+        return;
+      }
+    }
+  }
+  onNavigate(1);
+  showSnack(context, 'No payable settlement is open for this user.');
+}
+
 class SangaiShell extends StatefulWidget {
   const SangaiShell({super.key});
 
@@ -154,7 +287,17 @@ class _SangaiShellState extends State<SangaiShell> {
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final body = switch (_index) {
-      0 => HomeScreen(onNavigate: _go),
+      0 => HomeScreen(
+        store: store,
+        onNavigate: _go,
+        onOpenSettings: _openSettings,
+        onOpenNotifications: _openNotifications,
+        onAddExpense: _openAddExpenseFromHome,
+        onCreateGroup: () => showCreateGroupDialog(context),
+        onSettle: () => _openFirstSettlementConfirmation(context, store, _go),
+        onScanBill: _openScanBillFromHome,
+        onExploreTemplates: _showFestivalTemplates,
+      ),
       1 => GroupsScreen(
         activityTimelineLimit:
             _settingsController.state.activityTimelineLimit.count,
@@ -163,69 +306,81 @@ class _SangaiShellState extends State<SangaiShell> {
       3 => const GiftsScreen(),
       4 => DigitalDhukutiScreen(store: store),
       5 => const ActivityScreen(),
-      _ => HomeScreen(onNavigate: _go),
+      _ => HomeScreen(
+        store: store,
+        onNavigate: _go,
+        onOpenSettings: _openSettings,
+        onOpenNotifications: _openNotifications,
+        onAddExpense: _openAddExpenseFromHome,
+        onCreateGroup: () => showCreateGroupDialog(context),
+        onSettle: () => _openFirstSettlementConfirmation(context, store, _go),
+        onScanBill: _openScanBillFromHome,
+        onExploreTemplates: _showFestivalTemplates,
+      ),
     };
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 900;
         return Scaffold(
-          appBar: AppBar(
-            title: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'S',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          appBar: _index == 0
+              ? null
+              : AppBar(
+                  title: Row(
                     children: [
-                      Text('Sangai'),
-                      Text(
-                        'Connect, split, gift, settle',
-                        style: TextStyle(fontSize: 12),
+                      Container(
+                        width: 36,
+                        height: 36,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'S',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Sangai'),
+                            Text(
+                              'Connect, split, gift, settle',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
+                  actions: [
+                    IconButton(
+                      tooltip: 'Settings',
+                      onPressed: _openSettings,
+                      icon: const Icon(Icons.settings_outlined),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      tooltip: 'Notifications',
+                      onPressed: _openNotifications,
+                      icon: Badge(
+                        isLabelVisible: store.currentNotifications
+                            .where((item) => !item.read)
+                            .isNotEmpty,
+                        child: const Icon(Icons.notifications_outlined),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    _CurrentUserBadge(store: store),
+                    const SizedBox(width: 12),
+                  ],
                 ),
-              ],
-            ),
-            actions: [
-              IconButton(
-                tooltip: 'Settings',
-                onPressed: _openSettings,
-                icon: const Icon(Icons.settings_outlined),
-              ),
-              const SizedBox(width: 4),
-              IconButton(
-                tooltip: 'Notifications',
-                onPressed: _openNotifications,
-                icon: Badge(
-                  isLabelVisible: store.currentNotifications
-                      .where((item) => !item.read)
-                      .isNotEmpty,
-                  child: const Icon(Icons.notifications_outlined),
-                ),
-              ),
-              const SizedBox(width: 4),
-              _CurrentUserBadge(store: store),
-              const SizedBox(width: 12),
-            ],
-          ),
           body: Row(
             children: [
               if (wide)
@@ -309,6 +464,116 @@ class _SangaiShellState extends State<SangaiShell> {
       MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
     );
   }
+
+  void _openAddExpenseFromHome() {
+    final store = StoreScope.of(context);
+    final group = store.visibleGroups.isEmpty
+        ? null
+        : store.groupByIdOrNull(store.selectedGroupId) ??
+              store.visibleGroups.first;
+    if (group == null) {
+      showCreateGroupDialog(context);
+      return;
+    }
+    showAddExpenseOcrFlow(context, group.id);
+  }
+
+  void _openScanBillFromHome() {
+    final store = StoreScope.of(context);
+    final group = store.visibleGroups.isEmpty
+        ? null
+        : store.groupByIdOrNull(store.selectedGroupId) ??
+              store.visibleGroups.first;
+    if (group == null) {
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Scan Bill',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Create a group first, then scan a bill or use Manual Entry.',
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    showCreateGroupDialog(context);
+                  },
+                  child: const Text('Create Group'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    showAddExpenseOcrFlow(context, group.id);
+  }
+
+  void _showFestivalTemplates() {
+    final store = StoreScope.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final templates = const [
+          'Dashain Khasi Split',
+          'Tihar Gift Pool',
+          'New Year Trek',
+          'Office Bhoj',
+          'College Picnic',
+          'Apartment Monthly',
+        ];
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Festival templates',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Festival templates are available in the demo flow.',
+                ),
+                const SizedBox(height: 12),
+                for (final template in templates)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.celebration_outlined),
+                    title: Text(template),
+                    onTap: () {
+                      final id = store.createFestivalTemplate(template);
+                      store.selectedGroupId = id;
+                      Navigator.pop(context);
+                      _go(1);
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _Destination {
@@ -317,162 +582,6 @@ class _Destination {
   final String label;
   final IconData icon;
   final IconData selectedIcon;
-}
-
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({required this.onNavigate, super.key});
-
-  final ValueChanged<int> onNavigate;
-
-  @override
-  Widget build(BuildContext context) {
-    final store = StoreScope.of(context);
-    final dhukutiDue = store.dhukutiContributions
-        .where(
-          (item) =>
-              item.userId == store.currentUserId &&
-              (item.status == ContributionStatus.due ||
-                  item.status == ContributionStatus.late),
-        )
-        .fold<int>(0, (sum, item) => sum + item.amountMinor);
-
-    return AppScrollView(
-      children: [
-        Text(
-          'Namaste, ${store.currentUser.displayName.split(' ').first}',
-          style: Theme.of(
-            context,
-          ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        Text(
-          'A local wallet-style prototype with seeded demo data and no backend calls.',
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-        ResponsiveWrap(
-          children: [
-            StatTile(
-              label: 'You owe',
-              value: shortMoney(store.totalOwedByCurrentUser),
-              icon: Icons.north_east,
-              tone: Tone.warning,
-            ),
-            StatTile(
-              label: 'Owed to you',
-              value: shortMoney(store.totalOwedToCurrentUser),
-              icon: Icons.south_west,
-              tone: Tone.success,
-            ),
-            StatTile(
-              label: 'Pending settlements',
-              value: '${store.pendingSettlementsForCurrentUser.length}',
-              icon: Icons.hourglass_top,
-              tone: Tone.info,
-            ),
-            StatTile(
-              label: 'Dhukuti dues',
-              value: shortMoney(dhukutiDue),
-              icon: Icons.account_balance_wallet,
-              tone: Tone.neutral,
-            ),
-          ],
-        ),
-        SectionPanel(
-          title: 'Fast Demo Flow',
-          action: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton.icon(
-                onPressed: () {
-                  final id = store.createFestivalTemplate(
-                    'Dashain Khasi Split',
-                  );
-                  store.selectedGroupId = id;
-                  onNavigate(1);
-                },
-                icon: const Icon(Icons.celebration_outlined),
-                label: const Text('Dashain split'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () {
-                  final count = store.settleAllForCurrentUserAcrossGroups();
-                  showSnack(
-                    context,
-                    count == 0
-                        ? 'No current payable suggestions for this user.'
-                        : 'Confirmed $count mock settlement(s).',
-                  );
-                },
-                icon: const Icon(Icons.payments_outlined),
-                label: const Text('Settle my dues'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => onNavigate(3),
-                icon: const Icon(Icons.card_giftcard_outlined),
-                label: const Text('Send gift'),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'The recommended story arc is ready: create a Dashain group, add an expense, split it, settle through Sangai Pay, send a gift, then show the Digital Dhukuti ledger.',
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: const [
-                  FeatureChip(label: 'P0 loop complete'),
-                  FeatureChip(label: 'P1 split modes'),
-                  FeatureChip(label: 'P2 Flutter prototype'),
-                  FeatureChip(label: 'No backend touched'),
-                ],
-              ),
-            ],
-          ),
-        ),
-        SectionPanel(
-          title: 'Groups Snapshot',
-          action: TextButton.icon(
-            onPressed: () => onNavigate(1),
-            icon: const Icon(Icons.arrow_forward),
-            label: const Text('Open'),
-          ),
-          child: Column(
-            children: [
-              for (final group in store.visibleGroups.take(4))
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    child: Icon(iconForCategory(group.category)),
-                  ),
-                  title: Text(group.name),
-                  subtitle: Text(
-                    '${enumLabel(group.category)} • ${group.template}',
-                  ),
-                  trailing: BalancePill(
-                    amountMinor: store.balanceForUserInGroup(
-                      group.id,
-                      store.currentUserId,
-                    ),
-                  ),
-                  onTap: () {
-                    store.selectedGroupId = group.id;
-                    onNavigate(1);
-                  },
-                ),
-            ],
-          ),
-        ),
-        SectionPanel(
-          title: 'Recent Activity',
-          child: ActivityList(items: store.visibleActivity.take(6).toList()),
-        ),
-      ],
-    );
-  }
 }
 
 class ActivityScreen extends StatelessWidget {
@@ -1050,25 +1159,36 @@ class GroupDetail extends StatelessWidget {
                         children: [
                           BalancePill(amountMinor: -suggestion.amountMinor),
                           if (!suggestion.hasPending)
-                            FilledButton(
-                              onPressed: () {
-                                final settlement = store
-                                    .createOrReuseSettlement(suggestion);
-                                showSnack(
-                                  context,
-                                  'Pending settlement ${settlement.id} created.',
-                                );
-                              },
-                              child: const Text('Create'),
+                            FilledButton.icon(
+                              onPressed:
+                                  suggestion.payerId == store.currentUserId
+                                  ? () => openTransactionConfirmation(
+                                      context,
+                                      _settlementConfirmationData(
+                                        store,
+                                        suggestion,
+                                      ),
+                                      () async {
+                                        final settlement = store
+                                            .createOrReuseSettlement(
+                                              suggestion,
+                                            );
+                                        store.confirmSettlement(settlement.id);
+                                        return _successResult(
+                                          title: 'Payment Successful',
+                                          message:
+                                              'Your settlement has been marked as paid.',
+                                          amount: suggestion.amountMinor,
+                                          reference: settlement.id,
+                                        );
+                                      },
+                                    )
+                                  : null,
+                              icon: const Icon(Icons.account_balance_wallet),
+                              label: const Text('Pay'),
                             )
                           else
-                            FilledButton.icon(
-                              onPressed: () => store.confirmSettlement(
-                                suggestion.pendingSettlementId!,
-                              ),
-                              icon: const Icon(Icons.check),
-                              label: const Text('Confirm'),
-                            ),
+                            const StatusPill(label: 'Pending', tone: Tone.info),
                         ],
                       ),
                     ),
@@ -1454,33 +1574,66 @@ class _GiftsScreenState extends State<GiftsScreen> {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: valid ? () => _send(context, store, amountMinor) : null,
+            onPressed: valid
+                ? () => unawaited(_send(context, store, amountMinor))
+                : null,
             icon: const Icon(Icons.card_giftcard),
-            label: const Text('Send'),
+            label: const Text('Send Gift'),
           ),
         ),
       ],
     );
   }
 
-  void _send(BuildContext context, AppStore store, int amountMinor) {
+  Future<void> _send(
+    BuildContext context,
+    AppStore store,
+    int amountMinor,
+  ) async {
     final toName = store.nameOf(_recipientId!);
-    final message = store.sendGift(
-      recipientId: _recipientId!,
-      template: _theme.label,
-      amountMinor: amountMinor,
-      message: _message.text,
+    final giftMessage = _message.text;
+    final result = await openTransactionConfirmation(
+      context,
+      _giftConfirmationData(
+        store: store,
+        recipientId: _recipientId!,
+        template: _theme.label,
+        amountMinor: amountMinor,
+        message: giftMessage,
+      ),
+      () async {
+        final message = store.sendGift(
+          recipientId: _recipientId!,
+          template: _theme.label,
+          amountMinor: amountMinor,
+          message: giftMessage,
+        );
+        if (!message.startsWith('Gift sent')) {
+          return TransactionResult.failure(
+            reason: message,
+            amount: amountMinor,
+            transactionReference: 'gift-failed',
+            createdAt: DateTime.now(),
+            status: TransactionStatus.failedReview,
+          );
+        }
+        return _successResult(
+          title: 'Gift Sent',
+          message: 'Your gift envelope has been delivered.',
+          amount: amountMinor,
+          reference: 'gift-${DateTime.now().millisecondsSinceEpoch}',
+          status: TransactionStatus.sent,
+        );
+      },
     );
-    if (message.startsWith('Gift sent')) {
+    if (result?.isSuccess == true && mounted) {
       setState(() {
         _sent = true;
         _sentTheme = _theme;
         _sentAmountMinor = amountMinor;
         _sentToName = toName;
-        _sentMessage = _message.text;
+        _sentMessage = giftMessage;
       });
-    } else {
-      showSnack(context, message);
     }
   }
 
@@ -1558,7 +1711,10 @@ class _GiftsScreenState extends State<GiftsScreen> {
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),
@@ -1580,9 +1736,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
           width: 66,
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 7),
           decoration: BoxDecoration(
-            color: selected
-                ? green.withValues(alpha: 0.10)
-                : scheme.surface,
+            color: selected ? green.withValues(alpha: 0.10) : scheme.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: selected ? green : scheme.outlineVariant,
@@ -1717,8 +1871,9 @@ class _GiftsScreenState extends State<GiftsScreen> {
             onTap: () => _insertIntoMessage(' :${sticker.id}: '),
             child: Container(
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.4),
+                color: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Column(
@@ -1923,9 +2078,7 @@ class GiftCardVisual extends StatelessWidget {
               bottom: -40,
               child: const SizedBox.square(
                 dimension: 110,
-                child: CustomPaint(
-                  painter: GiftMandalaPainter(opacity: 0.25),
-                ),
+                child: CustomPaint(painter: GiftMandalaPainter(opacity: 0.25)),
               ),
             ),
             Padding(
@@ -2052,11 +2205,46 @@ class GiftMandalaPainter extends CustomPainter {
 /// Emoji stickers a sender can drop into a gift message. These insert as plain
 /// characters, so they round-trip through the message string unchanged.
 const giftStickerEmojis = <String>[
-  '🌺', '🪔', '🎉', '🎊', '✨', '🎆', '🎇', '🕉️',
-  '🙏', '🛕', '🪷', '🎁', '🍰', '🧧', '🪙', '🌟',
-  '😀', '😄', '😍', '🥰', '😘', '🤗', '😎', '🥳',
-  '❤️', '🧡', '💛', '💚', '💙', '💜', '💖', '💝',
-  '👍', '👏', '🙌', '🤝', '💪', '🔥', '🎈', '💫',
+  '🌺',
+  '🪔',
+  '🎉',
+  '🎊',
+  '✨',
+  '🎆',
+  '🎇',
+  '🕉️',
+  '🙏',
+  '🛕',
+  '🪷',
+  '🎁',
+  '🍰',
+  '🧧',
+  '🪙',
+  '🌟',
+  '😀',
+  '😄',
+  '😍',
+  '🥰',
+  '😘',
+  '🤗',
+  '😎',
+  '🥳',
+  '❤️',
+  '🧡',
+  '💛',
+  '💚',
+  '💙',
+  '💜',
+  '💖',
+  '💝',
+  '👍',
+  '👏',
+  '🙌',
+  '🤝',
+  '💪',
+  '🔥',
+  '🎈',
+  '💫',
 ];
 
 /// Animation styles used to bring a [GifSticker] to life without bundled
@@ -4597,55 +4785,126 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
     );
   }
 
-  void _save({
+  Future<void> _save({
     required int total,
     required Map<String, int> payerAmounts,
     required List<String> selectedParticipants,
-  }) {
+    required Map<String, int> splitPreview,
+  }) async {
     final store = StoreScope.of(context);
     final effectiveSplitMode = _skipItemSplit && _splitMode == SplitMode.item
         ? SplitMode.equal
         : _splitMode;
     final totals = _billTotals;
     try {
-      store.addExpense(
-        groupId: widget.groupId,
-        title: _title.text.trim().isEmpty
-            ? 'Shared expense'
-            : _title.text.trim(),
-        totalMinor: total,
-        payerId: payerAmounts.keys.first,
-        payerAmounts: payerAmounts,
-        category: store.groupById(widget.groupId).category.name,
-        splitMode: effectiveSplitMode,
-        participantIds: selectedParticipants,
+      final expenseTitle = _title.text.trim().isEmpty
+          ? 'Shared expense'
+          : _title.text.trim();
+      final receiptItems = effectiveSplitMode == SplitMode.item
+          ? _receiptItems()
+          : <ParsedReceiptItem>[];
+      final itemAssignments = effectiveSplitMode == SplitMode.item
+          ? _itemAssignments(selectedParticipants)
+          : null;
+      final category = store.groupById(widget.groupId).category.name;
+      final data = TransactionConfirmationData(
+        id: 'expense-${widget.groupId}-${DateTime.now().microsecondsSinceEpoch}',
+        transactionType: effectiveSplitMode == SplitMode.item
+            ? (widget.scannedItems.isEmpty
+                  ? TransactionType.manualItemExpense
+                  : TransactionType.ocrExpense)
+            : TransactionType.groupExpense,
+        title: effectiveSplitMode == SplitMode.item
+            ? 'Confirm Bill'
+            : 'Confirm Expense',
+        subtitle: expenseTitle,
+        amount: total,
+        payerName: store.nameOf(payerAmounts.keys.first),
+        payerAvatarUrl: store.userById(payerAmounts.keys.first).avatar,
+        groupName: store.groupById(widget.groupId).name,
+        category: category,
+        splitMode: enumLabel(effectiveSplitMode),
+        participants: _transactionParticipantsFromShares(store, splitPreview),
+        items: [
+          for (var i = 0; i < receiptItems.length; i++)
+            TransactionItem(
+              id: 'item-$i',
+              title: receiptItems[i].label,
+              quantity: receiptItems[i].quantity,
+              amount: receiptItems[i].amountMinor,
+              assignedMembers: (itemAssignments?[i] ?? selectedParticipants)
+                  .map(store.nameOf)
+                  .toList(),
+            ),
+        ],
         note: _note.text,
-        equalAmounts: effectiveSplitMode == SplitMode.equal
-            ? _equalPreview
-            : null,
-        customAmounts: _custom.map(
-          (key, value) => MapEntry(key, parseMoneyToMinor(value)),
-        ),
-        percentages: _percentages.map(
-          (key, value) => MapEntry(key, double.tryParse(value) ?? 0),
-        ),
-        shareUnits: _shares.map(
-          (key, value) => MapEntry(key, int.tryParse(value) ?? 1),
-        ),
-        receiptItems: effectiveSplitMode == SplitMode.item
-            ? _receiptItems()
-            : <ParsedReceiptItem>[],
-        itemAssignments: effectiveSplitMode == SplitMode.item
-            ? _itemAssignments(selectedParticipants)
-            : null,
-        taxMinor: totals.taxMinor,
-        serviceChargeMinor: totals.serviceChargeMinor,
-        discountMinor: totals.discountMinor.abs(),
-        roundingAdjustmentMinor: totals.roundingAdjustmentMinor,
+        warningMessage: widget.scannedItems.isEmpty
+            ? null
+            : 'OCR values may need correction. Confirm only after reviewing items and assignments.',
+        confirmationButtonText: effectiveSplitMode == SplitMode.item
+            ? 'Confirm & Add Bill'
+            : 'Confirm & Add Expense',
+        createdAt: DateTime.now(),
+        idempotencyKey:
+            'expense-${widget.groupId}-$expenseTitle-$total-${selectedParticipants.join('-')}',
+        operationType: effectiveSplitMode == SplitMode.item
+            ? 'bill_expense'
+            : 'group_expense',
+        details: [
+          if (effectiveSplitMode == SplitMode.item) ...[
+            TransactionDetail('Tax/VAT', money(totals.taxMinor)),
+            TransactionDetail(
+              'Service charge',
+              money(totals.serviceChargeMinor),
+            ),
+            TransactionDetail('Discount', money(totals.discountMinor)),
+          ],
+        ],
       );
-      widget.onSaved();
+      final result = await openTransactionConfirmation(context, data, () async {
+        final expenseId = store.addExpense(
+          groupId: widget.groupId,
+          title: expenseTitle,
+          totalMinor: total,
+          payerId: payerAmounts.keys.first,
+          payerAmounts: payerAmounts,
+          category: category,
+          splitMode: effectiveSplitMode,
+          participantIds: selectedParticipants,
+          note: _note.text,
+          equalAmounts: effectiveSplitMode == SplitMode.equal
+              ? _equalPreview
+              : null,
+          customAmounts: _custom.map(
+            (key, value) => MapEntry(key, parseMoneyToMinor(value)),
+          ),
+          percentages: _percentages.map(
+            (key, value) => MapEntry(key, double.tryParse(value) ?? 0),
+          ),
+          shareUnits: _shares.map(
+            (key, value) => MapEntry(key, int.tryParse(value) ?? 1),
+          ),
+          receiptItems: receiptItems,
+          itemAssignments: itemAssignments,
+          taxMinor: totals.taxMinor,
+          serviceChargeMinor: totals.serviceChargeMinor,
+          discountMinor: totals.discountMinor.abs(),
+          roundingAdjustmentMinor: totals.roundingAdjustmentMinor,
+        );
+        return _successResult(
+          title: 'Expense Added',
+          message: 'Your group balances have been updated.',
+          amount: total,
+          reference: expenseId,
+        );
+      });
+      if (result?.isSuccess == true) {
+        widget.onSaved();
+      }
     } on ArgumentError catch (error) {
-      showSnack(context, error.message.toString());
+      if (mounted) {
+        showSnack(context, error.message.toString());
+      }
     }
   }
 
@@ -5046,10 +5305,13 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                     Expanded(
                       child: FilledButton(
                         onPressed: readyToSave
-                            ? () => _save(
-                                total: total,
-                                payerAmounts: payerAmounts,
-                                selectedParticipants: selectedParticipants,
+                            ? () => unawaited(
+                                _save(
+                                  total: total,
+                                  payerAmounts: payerAmounts,
+                                  selectedParticipants: selectedParticipants,
+                                  splitPreview: splitPreview,
+                                ),
                               )
                             : null,
                         child: const Text('Save expense'),
@@ -6266,47 +6528,114 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                           final parsed = splitMode == SplitMode.item
                               ? parseControlledReceipt(receipt.text)
                               : <ParsedReceiptItem>[];
-                          store.addExpense(
-                            groupId: groupId,
-                            title: title.text.trim().isEmpty
-                                ? 'Shared expense'
-                                : title.text.trim(),
-                            totalMinor: total == 0 && parsed.isNotEmpty
-                                ? parsed.fold<int>(
-                                    0,
-                                    (sum, item) => sum + item.amountMinor,
-                                  )
-                                : total,
-                            payerId: payerAmounts.keys.first,
-                            payerAmounts: payerAmounts,
-                            category: store.groupById(groupId).category.name,
-                            splitMode: splitMode,
-                            participantIds: ids,
+                          final expenseTitle = title.text.trim().isEmpty
+                              ? 'Shared expense'
+                              : title.text.trim();
+                          final totalMinor = total == 0 && parsed.isNotEmpty
+                              ? parsed.fold<int>(
+                                  0,
+                                  (sum, item) => sum + item.amountMinor,
+                                )
+                              : total;
+                          final category = store
+                              .groupById(groupId)
+                              .category
+                              .name;
+                          final assignmentMap = {
+                            for (final entry in itemAssignments.entries)
+                              entry.key: entry.value == 'all'
+                                  ? ids
+                                  : <String>[entry.value],
+                          };
+                          final customAmounts = custom.map(
+                            (key, value) =>
+                                MapEntry(key, parseMoneyToMinor(value)),
+                          );
+                          final percentageAmounts = percentages.map(
+                            (key, value) =>
+                                MapEntry(key, double.tryParse(value) ?? 0),
+                          );
+                          final shareAmounts = shares.map(
+                            (key, value) =>
+                                MapEntry(key, int.tryParse(value) ?? 1),
+                          );
+                          final data = TransactionConfirmationData(
+                            id: 'expense-$groupId-${DateTime.now().microsecondsSinceEpoch}',
+                            transactionType: splitMode == SplitMode.item
+                                ? TransactionType.manualItemExpense
+                                : TransactionType.groupExpense,
+                            title: splitMode == SplitMode.item
+                                ? 'Confirm Bill'
+                                : 'Confirm Expense',
+                            subtitle: expenseTitle,
+                            amount: totalMinor,
+                            payerName: store.nameOf(payerAmounts.keys.first),
+                            payerAvatarUrl: store
+                                .userById(payerAmounts.keys.first)
+                                .avatar,
+                            groupName: store.groupById(groupId).name,
+                            category: category,
+                            splitMode: enumLabel(splitMode),
+                            participants: _transactionParticipantsFromShares(
+                              store,
+                              splitPreview,
+                            ),
+                            items: [
+                              for (var i = 0; i < parsed.length; i++)
+                                TransactionItem(
+                                  id: 'item-$i',
+                                  title: parsed[i].label,
+                                  quantity: parsed[i].quantity,
+                                  amount: parsed[i].amountMinor,
+                                  assignedMembers: (assignmentMap[i] ?? ids)
+                                      .map(store.nameOf)
+                                      .toList(),
+                                ),
+                            ],
                             note: note.text,
-                            equalAmounts: splitMode == SplitMode.equal
-                                ? equalPreview
-                                : null,
-                            customAmounts: custom.map(
-                              (key, value) =>
-                                  MapEntry(key, parseMoneyToMinor(value)),
-                            ),
-                            percentages: percentages.map(
-                              (key, value) =>
-                                  MapEntry(key, double.tryParse(value) ?? 0),
-                            ),
-                            shareUnits: shares.map(
-                              (key, value) =>
-                                  MapEntry(key, int.tryParse(value) ?? 1),
-                            ),
-                            receiptItems: parsed,
-                            itemAssignments: {
-                              for (final entry in itemAssignments.entries)
-                                entry.key: entry.value == 'all'
-                                    ? ids
-                                    : <String>[entry.value],
-                            },
+                            confirmationButtonText: splitMode == SplitMode.item
+                                ? 'Confirm & Add Bill'
+                                : 'Confirm & Add Expense',
+                            createdAt: DateTime.now(),
+                            idempotencyKey:
+                                'expense-$groupId-$expenseTitle-$totalMinor-${ids.join('-')}',
+                            operationType: 'group_expense',
                           );
                           Navigator.pop(dialogContext);
+                          unawaited(
+                            openTransactionConfirmation(
+                              context,
+                              data,
+                              () async {
+                                final expenseId = store.addExpense(
+                                  groupId: groupId,
+                                  title: expenseTitle,
+                                  totalMinor: totalMinor,
+                                  payerId: payerAmounts.keys.first,
+                                  payerAmounts: payerAmounts,
+                                  category: category,
+                                  splitMode: splitMode,
+                                  participantIds: ids,
+                                  note: note.text,
+                                  equalAmounts: splitMode == SplitMode.equal
+                                      ? equalPreview
+                                      : null,
+                                  customAmounts: customAmounts,
+                                  percentages: percentageAmounts,
+                                  shareUnits: shareAmounts,
+                                  receiptItems: parsed,
+                                  itemAssignments: assignmentMap,
+                                );
+                                return _successResult(
+                                  title: 'Expense Added',
+                                  message:
+                                      'Your group balances have been updated.',
+                                  amount: totalMinor,
+                                  reference: expenseId,
+                                );
+                              },
+                            ),
+                          );
                         } on ArgumentError catch (error) {
                           showSnack(context, error.message.toString());
                         }
@@ -7398,14 +7727,67 @@ Future<void> showAdjustmentDialog(
               FilledButton(
                 onPressed: () {
                   try {
-                    store.createZeroSumAdjustment(
-                      groupId: groupId,
-                      creditUserId: creditUserId,
-                      debitUserId: debitUserId,
-                      amountMinor: parseMoneyToMinor(amount.text),
-                      reason: reason.text,
+                    final amountMinor = parseMoneyToMinor(amount.text);
+                    final data = TransactionConfirmationData(
+                      id: 'adjustment-$groupId-${DateTime.now().microsecondsSinceEpoch}',
+                      transactionType: TransactionType.adjustment,
+                      title: 'Confirm Adjustment',
+                      subtitle: reason.text.trim().isEmpty
+                          ? 'Locked expense correction'
+                          : reason.text.trim(),
+                      amount: amountMinor,
+                      payerName: store.nameOf(store.currentUserId),
+                      payerAvatarUrl: store.currentUser.avatar,
+                      groupName: store.groupById(groupId).name,
+                      participants: [
+                        TransactionParticipant(
+                          id: creditUserId,
+                          name: store.nameOf(creditUserId),
+                          avatarUrl: store.userById(creditUserId).avatar,
+                          amountShare: amountMinor,
+                          roleLabel: 'Credit',
+                        ),
+                        TransactionParticipant(
+                          id: debitUserId,
+                          name: store.nameOf(debitUserId),
+                          avatarUrl: store.userById(debitUserId).avatar,
+                          amountShare: -amountMinor,
+                          roleLabel: 'Debit',
+                        ),
+                      ],
+                      note: reason.text,
+                      warningMessage:
+                          'Corrections are recorded as adjustment entries. Historical paid records are not deleted.',
+                      confirmationButtonText: 'Confirm Adjustment',
+                      createdAt: DateTime.now(),
+                      idempotencyKey:
+                          'adjustment-$groupId-$creditUserId-$debitUserId-$amountMinor',
+                      operationType: 'adjustment',
+                      details: [
+                        TransactionDetail('Total credit', money(amountMinor)),
+                        TransactionDetail('Total debit', money(amountMinor)),
+                        const TransactionDetail('Zero-sum status', 'Balanced'),
+                      ],
                     );
                     Navigator.pop(dialogContext);
+                    unawaited(
+                      openTransactionConfirmation(context, data, () async {
+                        final adjustmentId = store.createZeroSumAdjustment(
+                          groupId: groupId,
+                          creditUserId: creditUserId,
+                          debitUserId: debitUserId,
+                          amountMinor: amountMinor,
+                          reason: reason.text,
+                        );
+                        return _successResult(
+                          title: 'Adjustment Recorded',
+                          message:
+                              'The correction entry has been added without deleting historical records.',
+                          amount: amountMinor,
+                          reference: adjustmentId,
+                        );
+                      }),
+                    );
                   } on ArgumentError catch (error) {
                     showSnack(context, error.message.toString());
                   }
@@ -8130,17 +8512,63 @@ Future<void> showContributeToGiftPoolDialog(
               FilledButton(
                 onPressed: amountMinor > 0
                     ? () {
-                        store.contributeToGiftPool(pool.id, amountMinor);
                         Navigator.pop(dialogContext);
-                        messenger
-                          ..hideCurrentSnackBar()
-                          ..showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Added ${money(amountMinor)} to ${pool.title}.',
-                              ),
+                        unawaited(
+                          openTransactionConfirmation(
+                            context,
+                            TransactionConfirmationData(
+                              id: 'gift-pool-${pool.id}-${store.currentUserId}-$amountMinor',
+                              transactionType:
+                                  TransactionType.giftPoolContribution,
+                              title: 'Confirm Gift Pool',
+                              subtitle: pool.title,
+                              amount: amountMinor,
+                              payerName: store.nameOf(store.currentUserId),
+                              payerAvatarUrl: store.currentUser.avatar,
+                              recipientName: store.nameOf(pool.recipientId),
+                              recipientAvatarUrl: store
+                                  .userById(pool.recipientId)
+                                  .avatar,
+                              groupName: store.groupById(pool.groupId).name,
+                              poolName: pool.title,
+                              confirmationButtonText: 'Confirm Contribution',
+                              createdAt: DateTime.now(),
+                              idempotencyKey:
+                                  '${pool.id}-${store.currentUserId}-$amountMinor',
+                              operationType: 'gift_pool_contribution',
+                              details: [
+                                TransactionDetail(
+                                  'Raised so far',
+                                  money(store.giftPoolTotal(pool.id)),
+                                ),
+                                TransactionDetail(
+                                  'Target',
+                                  money(pool.targetAmountMinor),
+                                ),
+                              ],
                             ),
-                          );
+                            () async {
+                              store.contributeToGiftPool(pool.id, amountMinor);
+                              messenger
+                                ..hideCurrentSnackBar()
+                                ..showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Added ${money(amountMinor)} to ${pool.title}.',
+                                    ),
+                                  ),
+                                );
+                              return _successResult(
+                                title: 'Contribution Added',
+                                message:
+                                    'Your group gift pool contribution has been recorded.',
+                                amount: amountMinor,
+                                reference:
+                                    'gift-pool-${DateTime.now().millisecondsSinceEpoch}',
+                              );
+                            },
+                          ),
+                        );
                       }
                     : null,
                 child: const Text('Contribute'),
