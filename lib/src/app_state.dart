@@ -891,7 +891,7 @@ class AppStore extends ChangeNotifier {
     final items = <ExpenseItem>[];
     final shareAmounts = <String, int>{};
     final subtotal = receiptItems == null || receiptItems.isEmpty
-        ? totalMinor - taxMinor - tipMinor + discountMinor
+        ? totalMinor - taxMinor - serviceChargeMinor - tipMinor + discountMinor
         : receiptItems.fold<int>(0, (sum, item) => sum + item.amountMinor);
     final finalTotal = totalMinor;
 

@@ -181,8 +181,10 @@ void main() {
     expect(find.text('Activity'), findsNothing);
   });
 
-  testWidgets('Main navigation excludes Scan tab', (tester) async {
-    tester.view.physicalSize = const Size(800, 600);
+  testWidgets('Main navigation includes Connections and excludes Scan tab', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -204,6 +206,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Scan'), findsNothing);
+    expect(find.text('Connections'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Connections'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mobile Contacts'), findsOneWidget);
 
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
@@ -213,6 +221,44 @@ void main() {
         'Manage your profile, social finance, payments, and Sajha Kharcha preferences.',
       ),
       findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Dhukuti quick action opens Dhukuti Groups inside Groups tab', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    SharedPreferences.setMockInitialValues({
+      'auth.hasSeenIntro': true,
+      'auth.isLoggedIn': true,
+      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
+    });
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(),
+        child: StoreScope(notifier: AppStore(), child: const SangaiApp()),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    final dhukutiAction = find.text('Dhukuti').first;
+    await tester.ensureVisible(dhukutiAction);
+    await tester.tap(dhukutiAction);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dhukuti Groups'), findsOneWidget);
+    expect(find.text('Digital Dhukuti'), findsOneWidget);
+    expect(
+      find.text('Expense groups stay separate from Dhukuti commitments.'),
+      findsNothing,
     );
     expect(tester.takeException(), isNull);
   });
@@ -669,7 +715,7 @@ void main() {
       findsNothing,
     );
     expect(find.text('Service charge and VAT'), findsOneWidget);
-    expect(find.text('Service charge'), findsOneWidget);
+    expect(find.text('Service charge'), findsWidgets);
     expect(find.text('VAT'), findsOneWidget);
     expect(find.text('Line type'), findsNothing);
     expect(
@@ -680,7 +726,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Manual entry excludes service charge from bill total', (
+  testWidgets('Manual entry includes service charge in bill total', (
     tester,
   ) async {
     final store = AppStore()..selectedGroupId = 'g-dashain';
@@ -720,9 +766,9 @@ void main() {
     );
     expect(
       tester.widget<TextField>(totalAmountField).controller?.text,
-      '100.00',
+      '150.00',
     );
-    expect(find.text('Service charge (excluded)'), findsOneWidget);
+    expect(find.text('Service charge'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 

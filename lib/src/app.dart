@@ -234,6 +234,7 @@ class SangaiShell extends StatefulWidget {
 
 class _SangaiShellState extends State<SangaiShell> {
   var _index = 0;
+  var _groupsInitialTab = GroupKind.expense;
   final _settingsController = SettingsController();
   AuthController? _authController;
   AppStore? _store;
@@ -241,6 +242,7 @@ class _SangaiShellState extends State<SangaiShell> {
   static const _destinations = <_Destination>[
     _Destination('Home', Icons.home_outlined, Icons.home),
     _Destination('Groups', Icons.groups_outlined, Icons.groups),
+    _Destination('Connections', Icons.people_alt_outlined, Icons.people_alt),
     _Destination(
       'Send Gift',
       Icons.card_giftcard_outlined,
@@ -283,40 +285,44 @@ class _SangaiShellState extends State<SangaiShell> {
     final body = switch (_index) {
       0 => HomeScreen(
         store: store,
-        onNavigate: _go,
+        onNavigate: _navigateFromHome,
         onOpenSettings: _openSettings,
         onOpenNotifications: _openNotifications,
         onAddExpense: _openAddExpenseFromHome,
         onCreateGroup: () => showCreateGroupDialog(context),
-        onSettle: () => _openFirstSettlementConfirmation(context, store, _go),
+        onSettle: () =>
+            _openFirstSettlementConfirmation(context, store, _navigateFromHome),
         onScanBill: _openScanBillFromHome,
-        onSendGift: () => _go(2),
-        onOpenDhukuti: _openDhukutiScreen,
-        onOpenFriends: () => _openStandaloneScreen(const ConnectionsScreen()),
+        onSendGift: () => _go(3),
+        onOpenDhukuti: _openDhukutiGroups,
+        onOpenFriends: () => _go(2),
         onViewActivity: () => _openStandaloneScreen(const ActivityScreen()),
         onExploreTemplates: _showFestivalTemplates,
       ),
       1 => GroupsScreen(
+        initialTab: _groupsInitialTab,
         activityTimelineLimit:
             _settingsController.state.activityTimelineLimit.count,
       ),
-      2 => const GiftsScreen(),
-      3 => SettingsScreen(
+      2 => const ConnectionsScreen(),
+      3 => const GiftsScreen(),
+      4 => SettingsScreen(
         controller: _settingsController,
         authController: AuthScope.of(context),
       ),
       _ => HomeScreen(
         store: store,
-        onNavigate: _go,
+        onNavigate: _navigateFromHome,
         onOpenSettings: _openSettings,
         onOpenNotifications: _openNotifications,
         onAddExpense: _openAddExpenseFromHome,
         onCreateGroup: () => showCreateGroupDialog(context),
-        onSettle: () => _openFirstSettlementConfirmation(context, store, _go),
+        onSettle: () =>
+            _openFirstSettlementConfirmation(context, store, _navigateFromHome),
         onScanBill: _openScanBillFromHome,
-        onSendGift: () => _go(2),
-        onOpenDhukuti: _openDhukutiScreen,
-        onOpenFriends: () => _openStandaloneScreen(const ConnectionsScreen()),
+        onSendGift: () => _go(3),
+        onOpenDhukuti: _openDhukutiGroups,
+        onOpenFriends: () => _go(2),
         onViewActivity: () => _openStandaloneScreen(const ActivityScreen()),
         onExploreTemplates: _showFestivalTemplates,
       ),
@@ -389,7 +395,7 @@ class _SangaiShellState extends State<SangaiShell> {
               if (wide)
                 NavigationRail(
                   selectedIndex: _index,
-                  onDestinationSelected: _go,
+                  onDestinationSelected: _handleDestinationSelected,
                   labelType: NavigationRailLabelType.all,
                   destinations: [
                     for (final destination in _destinations)
@@ -407,7 +413,7 @@ class _SangaiShellState extends State<SangaiShell> {
               ? null
               : NavigationBar(
                   selectedIndex: _index,
-                  onDestinationSelected: _go,
+                  onDestinationSelected: _handleDestinationSelected,
                   destinations: [
                     for (final destination in _destinations)
                       NavigationDestination(
@@ -424,6 +430,33 @@ class _SangaiShellState extends State<SangaiShell> {
 
   void _go(int index) {
     setState(() => _index = index);
+  }
+
+  void _handleDestinationSelected(int index) {
+    if (index == 1) {
+      _openGroupsTab(GroupKind.expense);
+      return;
+    }
+    _go(index);
+  }
+
+  void _navigateFromHome(int index) {
+    if (index == 1) {
+      _openGroupsTab(GroupKind.expense);
+      return;
+    }
+    _go(index);
+  }
+
+  void _openGroupsTab(GroupKind tab) {
+    setState(() {
+      _groupsInitialTab = tab;
+      _index = 1;
+    });
+  }
+
+  void _openDhukutiGroups() {
+    _openGroupsTab(GroupKind.dhukuti);
   }
 
   void _handleSettingsChanged() {
@@ -532,10 +565,6 @@ class _SangaiShellState extends State<SangaiShell> {
 
   void _openStandaloneScreen(Widget screen) {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
-  }
-
-  void _openDhukutiScreen() {
-    _openStandaloneScreen(DigitalDhukutiScreen(store: StoreScope.of(context)));
   }
 
   void _showFestivalTemplates() {
@@ -869,8 +898,13 @@ class _ConnectionTile extends StatelessWidget {
 }
 
 class GroupsScreen extends StatefulWidget {
-  const GroupsScreen({this.activityTimelineLimit = 5, super.key});
+  const GroupsScreen({
+    this.initialTab = GroupKind.expense,
+    this.activityTimelineLimit = 5,
+    super.key,
+  });
 
+  final GroupKind initialTab;
   final int activityTimelineLimit;
 
   @override
@@ -878,7 +912,15 @@ class GroupsScreen extends StatefulWidget {
 }
 
 class _GroupsScreenState extends State<GroupsScreen> {
-  var _tab = GroupKind.expense;
+  late var _tab = widget.initialTab;
+
+  @override
+  void didUpdateWidget(covariant GroupsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTab != oldWidget.initialTab) {
+      _tab = widget.initialTab;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -6120,7 +6162,11 @@ class _BillTotals {
   final int roundingAdjustmentMinor;
 
   int get finalTotalMinor =>
-      subtotalMinor + taxMinor + discountMinor + roundingAdjustmentMinor;
+      subtotalMinor +
+      serviceChargeMinor +
+      taxMinor +
+      discountMinor +
+      roundingAdjustmentMinor;
 }
 
 class _BillTotalsCard extends StatelessWidget {
@@ -6136,13 +6182,15 @@ class _BillTotalsCard extends StatelessWidget {
       child: Column(
         children: [
           _BillTotalLine('Items subtotal', totals.subtotalMinor),
-          _BillTotalLine(
-            'Service charge (excluded)',
-            totals.serviceChargeMinor,
-          ),
+          _BillTotalLine('Service charge', totals.serviceChargeMinor),
           _BillTotalLine('VAT/Tax', totals.taxMinor),
-          _BillTotalLine('Discount', totals.discountMinor),
-          _BillTotalLine('Rounding adjustment', totals.roundingAdjustmentMinor),
+          if (totals.discountMinor != 0)
+            _BillTotalLine('Discount', totals.discountMinor),
+          if (totals.roundingAdjustmentMinor != 0)
+            _BillTotalLine(
+              'Rounding adjustment',
+              totals.roundingAdjustmentMinor,
+            ),
           const Divider(),
           _BillTotalLine(
             'Final total',

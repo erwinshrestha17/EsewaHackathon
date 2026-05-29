@@ -67,7 +67,7 @@ void main() {
     );
   });
 
-  test('service charge is stored but excluded from expense subtotal math', () {
+  test('service charge is stored and included in total math', () {
     final store = AppStore();
     final groupId = store.createGroup(
       name: 'Service charge test',
@@ -88,7 +88,7 @@ void main() {
     );
 
     final expense = store.expenses.firstWhere((item) => item.id == expenseId);
-    expect(expense.subtotalMinor, npr(100));
+    expect(expense.subtotalMinor, npr(90));
     expect(expense.totalMinor, npr(113));
     expect(expense.billServiceChargeMinor, npr(10));
     expect(
