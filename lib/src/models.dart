@@ -222,6 +222,8 @@ class Group {
     required this.createdBy,
     required this.createdAt,
     this.latestSettlementLockAt,
+    this.disbandedAt,
+    this.disbandedBy,
   });
 
   final String id;
@@ -231,6 +233,10 @@ class Group {
   final String createdBy;
   final DateTime createdAt;
   DateTime? latestSettlementLockAt;
+  DateTime? disbandedAt;
+  String? disbandedBy;
+
+  bool get isDisbanded => disbandedAt != null;
 }
 
 class GroupMember {
@@ -811,10 +817,14 @@ class ParsedReceiptItem {
   ParsedReceiptItem({
     required this.label,
     required this.amountMinor,
+    this.quantity = 1,
+    int? unitAmountMinor,
     this.confidence = 0.94,
-  });
+  }) : unitAmountMinor = unitAmountMinor ?? amountMinor;
 
   final String label;
   final int amountMinor;
+  final int quantity;
+  final int unitAmountMinor;
   final double confidence;
 }

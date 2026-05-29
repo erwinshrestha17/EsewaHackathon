@@ -4,6 +4,36 @@ import 'package:sangai/src/app.dart';
 import 'package:sangai/src/app_state.dart';
 
 void main() {
+  Future<void> pumpGroupsForAddExpense(
+    WidgetTester tester,
+    AppStore store,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 3200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: const MaterialApp(home: GroupsScreen()),
+      ),
+    );
+  }
+
+  Future<void> openManualEntry(WidgetTester tester) async {
+    await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Align the bill inside the frame'), findsOneWidget);
+    expect(find.text('Manual Entry'), findsOneWidget);
+
+    await tester.drag(find.text('Manual Entry'), const Offset(0, -1800));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('Sangai shell renders seeded dashboard', (tester) async {
     await tester.pumpWidget(
       StoreScope(notifier: AppStore(), child: const SangaiApp()),
@@ -29,11 +59,12 @@ void main() {
     expect(find.text('Select a group'), findsNothing);
   });
 
-  testWidgets('inactive current member cannot open add expense flow', (
+  testWidgets('inactive current member no longer sees group detail', (
     tester,
   ) async {
     final store = AppStore()
-      ..removeGroupMember('g-dashain', 'u-sita')
+      ..switchUser('u-rina')
+      ..removeGroupMember('g-dashain', 'u-rina')
       ..selectedGroupId = 'g-dashain';
 
     await tester.pumpWidget(
@@ -43,10 +74,8 @@ void main() {
       ),
     );
 
-    final addExpense = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Add expense'),
-    );
-    expect(addExpense.onPressed, isNull);
+    expect(find.widgetWithText(FilledButton, 'Add expense'), findsNothing);
+    expect(find.text('Dashain Khasi Split'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -80,25 +109,36 @@ void main() {
   ) async {
     final store = AppStore();
 
-    await tester.pumpWidget(
-      StoreScope(
-        notifier: store,
-        child: const MaterialApp(home: GroupsScreen()),
-      ),
-    );
-
-    await tester.tap(find.widgetWithText(FilledButton, 'Add expense'));
-    await tester.pumpAndSettle();
+    await pumpGroupsForAddExpense(tester, store);
+    await openManualEntry(tester);
 
     expect(find.text('Participants'), findsOneWidget);
     expect(find.text('Expense details'), findsOneWidget);
     expect(find.text('Who paid?'), findsWidgets);
     expect(find.text('Split preview'), findsOneWidget);
+    expect(find.text('Calculated equal split'), findsOneWidget);
+    expect(find.text('Participants & shares'), findsOneWidget);
+    expect(find.text('Paid by'), findsOneWidget);
+    expect(find.text('Net result'), findsOneWidget);
     expect(find.text('Status: Ready to save'), findsOneWidget);
 
     final addPayer = find.widgetWithText(OutlinedButton, 'Add another payer');
     await tester.ensureVisible(addPayer);
-    await tester.tap(addPayer);
+    expect(tester.widget<OutlinedButton>(addPayer).onPressed, isNull);
+
+    final payerAmountField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == 'Amount paid',
+    );
+    await tester.enterText(payerAmountField, '1300');
+    await tester.pump();
+    expect(tester.widget<OutlinedButton>(addPayer).onPressed, isNull);
+
+    await tester.enterText(payerAmountField, '600');
+    await tester.pump();
+    expect(tester.widget<OutlinedButton>(addPayer).onPressed, isNotNull);
+
+    tester.widget<OutlinedButton>(addPayer).onPressed!();
     await tester.pumpAndSettle();
 
     final save = tester.widget<FilledButton>(
@@ -106,6 +146,66 @@ void main() {
     );
     expect(save.onPressed, isNull);
     expect(find.text('Enter the amount paid by each payer.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Add expense participant cards toggle split preview', (
+    tester,
+  ) async {
+    final store = AppStore();
+
+    await pumpGroupsForAddExpense(tester, store);
+    await openManualEntry(tester);
+
+    final participantCards = find.byType(ParticipantSelectorCard);
+    final cardCount = participantCards.evaluate().length;
+    expect(cardCount, greaterThan(0));
+
+    for (var index = 0; index < cardCount; index++) {
+      await tester.ensureVisible(participantCards.at(index));
+      await tester.tap(participantCards.at(index));
+      await tester.pump();
+    }
+
+    expect(find.text('Please select participants.'), findsWidgets);
+    final save = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Save expense'),
+    );
+    expect(save.onPressed, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Add expense percentage split rejects values above 100', (
+    tester,
+  ) async {
+    final store = AppStore();
+
+    await pumpGroupsForAddExpense(tester, store);
+    await openManualEntry(tester);
+
+    final splitModeDropdown = find.byWidgetPredicate(
+      (widget) =>
+          widget.runtimeType.toString().startsWith('DropdownButtonFormField'),
+    );
+    await tester.ensureVisible(splitModeDropdown.last);
+    await tester.tap(splitModeDropdown.last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Percentage').last);
+    await tester.pumpAndSettle();
+
+    final percentageField = find.widgetWithText(
+      TextFormField,
+      'Sita Shrestha Percentage',
+    );
+    expect(percentageField, findsWidgets);
+
+    await tester.enterText(percentageField.first, '101');
+    await tester.pump();
+    expect(find.text('101'), findsNothing);
+
+    await tester.enterText(percentageField.first, '100');
+    await tester.pump();
+    expect(find.text('100'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
