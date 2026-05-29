@@ -86,7 +86,26 @@ List<int> distributeByWeights(int totalMinor, List<int> weights) {
 }
 
 List<int> equalShares(int totalMinor, List<String> userIds) {
-  return distributeByWeights(totalMinor, List<int>.filled(userIds.length, 1));
+  if (userIds.isEmpty) {
+    return <int>[];
+  }
+  final base = totalMinor ~/ userIds.length;
+  var remainder = totalMinor - (base * userIds.length);
+  final shares = List<int>.filled(userIds.length, base);
+  final indices = List<int>.generate(userIds.length, (index) => index)
+    ..shuffle();
+  var cursor = 0;
+  while (remainder > 0) {
+    shares[indices[cursor % indices.length]] += 1;
+    remainder -= 1;
+    cursor += 1;
+  }
+  while (remainder < 0) {
+    shares[indices[cursor % indices.length]] -= 1;
+    remainder += 1;
+    cursor += 1;
+  }
+  return shares;
 }
 
 List<int> percentageShares(int totalMinor, List<double> percentages) {
@@ -105,10 +124,23 @@ List<int> unitShares(int totalMinor, List<int> units) {
   return distributeByWeights(totalMinor, units);
 }
 
-void validateExactShares(int totalMinor, Iterable<int> shares) {
+void validateCustomShares(int totalMinor, Iterable<int> shares) {
+  if (shares.any((amount) => amount < 0)) {
+    throw ArgumentError('Custom shares cannot be negative.');
+  }
   final sum = shares.fold<int>(0, (total, amount) => total + amount);
   if (sum != totalMinor) {
-    throw ArgumentError('Exact shares must add up to ${money(totalMinor)}.');
+    throw ArgumentError('Custom shares must add up to ${money(totalMinor)}.');
+  }
+}
+
+void validatePayerAmounts(int totalMinor, Iterable<int> payerAmounts) {
+  if (payerAmounts.any((amount) => amount < 0)) {
+    throw ArgumentError('Payer amounts cannot be negative.');
+  }
+  final sum = payerAmounts.fold<int>(0, (total, amount) => total + amount);
+  if (sum != totalMinor) {
+    throw ArgumentError('Payer amounts must add up to ${money(totalMinor)}.');
   }
 }
 
@@ -126,8 +158,15 @@ Map<String, int> calculateBalances({
   for (final expense in expenses.where(
     (item) => item.groupId == groupId && item.status == ExpenseStatus.active,
   )) {
-    balances[expense.payerId] =
-        (balances[expense.payerId] ?? 0) + expense.totalMinor;
+    if (expense.payers.isEmpty) {
+      balances[expense.payerId] =
+          (balances[expense.payerId] ?? 0) + expense.totalMinor;
+    } else {
+      for (final payer in expense.payers) {
+        balances[payer.userId] =
+            (balances[payer.userId] ?? 0) + payer.amountMinor;
+      }
+    }
     for (final share in expense.shares) {
       balances[share.userId] =
           (balances[share.userId] ?? 0) - share.amountMinor;

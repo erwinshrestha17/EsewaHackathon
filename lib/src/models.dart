@@ -17,7 +17,7 @@ enum GroupCategory {
   custom,
 }
 
-enum SplitMode { equal, exact, percentage, shares, item }
+enum SplitMode { equal, custom, percentage, shares, item }
 
 enum ExpenseStatus { draft, active, voided }
 
@@ -321,6 +321,20 @@ class ExpenseItem {
   final List<ExpenseItemAssignment> assignments;
 }
 
+class ExpensePayer {
+  ExpensePayer({
+    required this.id,
+    required this.expenseId,
+    required this.userId,
+    required this.amountMinor,
+  });
+
+  final String id;
+  final String expenseId;
+  final String userId;
+  int amountMinor;
+}
+
 class Expense {
   Expense({
     required this.id,
@@ -346,9 +360,11 @@ class Expense {
     this.voidedAt,
     this.voidedBy,
     this.voidReason,
+    List<ExpensePayer>? payers,
     List<ExpenseShare>? shares,
     List<ExpenseItem>? items,
-  }) : shares = shares ?? <ExpenseShare>[],
+  }) : payers = payers ?? <ExpensePayer>[],
+       shares = shares ?? <ExpenseShare>[],
        items = items ?? <ExpenseItem>[];
 
   final String id;
@@ -374,6 +390,7 @@ class Expense {
   String? voidReason;
   final String createdBy;
   final DateTime createdAt;
+  final List<ExpensePayer> payers;
   final List<ExpenseShare> shares;
   final List<ExpenseItem> items;
 }

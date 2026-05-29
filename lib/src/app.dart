@@ -634,7 +634,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
     final store = StoreScope.of(context);
     final groups = store.visibleGroups;
     final selectedId = store.selectedGroupId;
-    final selected = selectedId == null ? null : store.groupById(selectedId);
+    final selected = groups.any((group) => group.id == selectedId)
+        ? store.groupByIdOrNull(selectedId)
+        : null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -701,7 +703,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             ),
                             title: Text(group.name),
                             subtitle: Text(
-                              '${enumLabel(group.category)} • ${store.membersForGroup(group.id).length} members',
+                              '${enumLabel(group.category)} • ${store.membersForGroup(group.id, activeOnly: true).length} active members',
                             ),
                             trailing: BalancePill(
                               amountMinor: store.balanceForUserInGroup(
@@ -728,7 +730,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       'Pick a group from the list or create a Festival Mode template.',
                 ),
               )
-            : GroupDetail(group: selected);
+            : GroupDetail(group: selected, scrollable: twoPane);
 
         if (twoPane) {
           return Row(
@@ -758,9 +760,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
 }
 
 class GroupDetail extends StatelessWidget {
-  const GroupDetail({required this.group, super.key});
+  const GroupDetail({required this.group, this.scrollable = true, super.key});
 
   final Group group;
+  final bool scrollable;
 
   @override
   Widget build(BuildContext context) {
@@ -768,290 +771,305 @@ class GroupDetail extends StatelessWidget {
     final members = store.membersForGroup(group.id);
     final balances = store.balancesForGroup(group.id);
     final suggestions = store.suggestionsForGroup(group.id);
+    final canAddExpense = store.isActiveGroupMember(
+      group.id,
+      store.currentUserId,
+    );
     final groupExpenses =
         store.expenses.where((expense) => expense.groupId == group.id).toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-    return AppScrollView(
-      children: [
-        ScreenHeader(
-          title: group.name,
-          subtitle:
-              '${enumLabel(group.category)} • ${group.template} • ${members.length} historical member(s)',
-          icon: iconForCategory(group.category),
-          action: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton.icon(
-                onPressed: () => showAddExpenseDialog(context, group.id),
-                icon: const Icon(Icons.receipt_long),
-                label: const Text('Add expense'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => showStatementDialog(context, group.id),
-                icon: const Icon(Icons.description_outlined),
-                label: const Text('Statement'),
-              ),
-            ],
-          ),
-        ),
-        ResponsiveWrap(
+    final children = [
+      ScreenHeader(
+        title: group.name,
+        subtitle:
+            '${enumLabel(group.category)} • ${group.template} • ${members.length} historical member(s)',
+        icon: iconForCategory(group.category),
+        action: Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            StatTile(
-              label: 'Group balance',
-              value: money(
-                balances.values.fold<int>(0, (sum, value) => sum + value).abs(),
-              ),
-              icon: Icons.balance,
-              tone: Tone.neutral,
+            FilledButton.icon(
+              onPressed: canAddExpense
+                  ? () => showAddExpenseDialog(context, group.id)
+                  : null,
+              icon: const Icon(Icons.receipt_long),
+              label: const Text('Add expense'),
             ),
-            StatTile(
-              label: 'Your position',
-              value: money(
-                store.balanceForUserInGroup(group.id, store.currentUserId),
-              ),
-              icon: Icons.account_balance,
-              tone:
-                  store.balanceForUserInGroup(group.id, store.currentUserId) >=
-                      0
-                  ? Tone.success
-                  : Tone.warning,
-            ),
-            StatTile(
-              label: 'Suggestions',
-              value: '${suggestions.length}',
-              icon: Icons.route_outlined,
-              tone: Tone.info,
-            ),
-            StatTile(
-              label: 'Locked through',
-              value: group.latestSettlementLockAt == null
-                  ? 'Open'
-                  : dateLabel(group.latestSettlementLockAt!),
-              icon: Icons.lock_clock_outlined,
-              tone: Tone.neutral,
+            OutlinedButton.icon(
+              onPressed: () => showStatementDialog(context, group.id),
+              icon: const Icon(Icons.description_outlined),
+              label: const Text('Statement'),
             ),
           ],
         ),
-        SectionPanel(
-          title: 'Members and Roles',
-          action: OutlinedButton.icon(
-            onPressed: () => showAddMemberDialog(context, group.id),
-            icon: const Icon(Icons.person_add_alt_1),
-            label: const Text('Add'),
+      ),
+      ResponsiveWrap(
+        children: [
+          StatTile(
+            label: 'Group balance',
+            value: money(
+              balances.values.fold<int>(0, (sum, value) => sum + value).abs(),
+            ),
+            icon: Icons.balance,
+            tone: Tone.neutral,
           ),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final member in members)
-                InputChip(
-                  avatar: UserAvatar(
-                    user: store.userById(member.userId),
-                    small: true,
-                  ),
-                  label: Text(
-                    '${store.nameOf(member.userId)} • ${enumLabel(member.role)}'
-                    '${member.status == MemberStatus.removed ? ' • inactive' : ''}',
-                  ),
-                  onDeleted:
-                      member.userId == store.currentUserId ||
-                          member.status == MemberStatus.removed
-                      ? null
-                      : () => store.removeGroupMember(group.id, member.userId),
-                  onPressed: () => showRoleDialog(context, group.id, member),
-                ),
-            ],
+          StatTile(
+            label: 'Your position',
+            value: money(
+              store.balanceForUserInGroup(group.id, store.currentUserId),
+            ),
+            icon: Icons.account_balance,
+            tone:
+                store.balanceForUserInGroup(group.id, store.currentUserId) >= 0
+                ? Tone.success
+                : Tone.warning,
           ),
+          StatTile(
+            label: 'Suggestions',
+            value: '${suggestions.length}',
+            icon: Icons.route_outlined,
+            tone: Tone.info,
+          ),
+          StatTile(
+            label: 'Locked through',
+            value: group.latestSettlementLockAt == null
+                ? 'Open'
+                : dateLabel(group.latestSettlementLockAt!),
+            icon: Icons.lock_clock_outlined,
+            tone: Tone.neutral,
+          ),
+        ],
+      ),
+      SectionPanel(
+        title: 'Members and Roles',
+        action: OutlinedButton.icon(
+          onPressed: () => showAddMemberDialog(context, group.id),
+          icon: const Icon(Icons.person_add_alt_1),
+          label: const Text('Add'),
         ),
-        SectionPanel(
-          title: 'Balances',
-          child: balances.isEmpty
-              ? const EmptyState(
-                  icon: Icons.check_circle_outline,
-                  title: 'All settled',
-                  body:
-                      'Open balance is zero after paid settlements and adjustments.',
-                )
-              : Column(
-                  children: [
-                    for (final entry in balances.entries)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: UserAvatar(user: store.userById(entry.key)),
-                        title: Text(store.nameOf(entry.key)),
-                        subtitle: Text(entry.value >= 0 ? 'Is owed' : 'Owes'),
-                        trailing: BalancePill(amountMinor: entry.value),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final member in members)
+              InputChip(
+                avatar: UserAvatar(
+                  user: store.userById(member.userId),
+                  small: true,
+                ),
+                label: Text(
+                  '${store.nameOf(member.userId)} • ${enumLabel(member.role)}'
+                  '${member.status == MemberStatus.removed ? ' • inactive' : ''}',
+                ),
+                onDeleted:
+                    member.userId == store.currentUserId ||
+                        member.status == MemberStatus.removed
+                    ? null
+                    : () => store.removeGroupMember(group.id, member.userId),
+                onPressed: () => showRoleDialog(context, group.id, member),
+              ),
+          ],
+        ),
+      ),
+      SectionPanel(
+        title: 'Balances',
+        child: balances.isEmpty
+            ? const EmptyState(
+                icon: Icons.check_circle_outline,
+                title: 'All settled',
+                body:
+                    'Open balance is zero after paid settlements and adjustments.',
+              )
+            : Column(
+                children: [
+                  for (final entry in balances.entries)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: UserAvatar(user: store.userById(entry.key)),
+                      title: Text(store.nameOf(entry.key)),
+                      subtitle: Text(entry.value >= 0 ? 'Is owed' : 'Owes'),
+                      trailing: BalancePill(amountMinor: entry.value),
+                    ),
+                ],
+              ),
+      ),
+      SectionPanel(
+        title: 'Settlement Suggestions',
+        child: suggestions.isEmpty
+            ? const EmptyState(
+                icon: Icons.done_all,
+                title: 'No settlement needed',
+                body: 'The greedy net-balance simplifier found no open debts.',
+              )
+            : Column(
+                children: [
+                  for (final suggestion in suggestions)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const CircleAvatar(child: Icon(Icons.payments)),
+                      title: Text(
+                        '${store.nameOf(suggestion.payerId)} pays ${store.nameOf(suggestion.payeeId)}',
                       ),
-                  ],
-                ),
-        ),
-        SectionPanel(
-          title: 'Settlement Suggestions',
-          child: suggestions.isEmpty
-              ? const EmptyState(
-                  icon: Icons.done_all,
-                  title: 'No settlement needed',
-                  body:
-                      'The greedy net-balance simplifier found no open debts.',
-                )
-              : Column(
-                  children: [
-                    for (final suggestion in suggestions)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.payments),
-                        ),
-                        title: Text(
-                          '${store.nameOf(suggestion.payerId)} pays ${store.nameOf(suggestion.payeeId)}',
-                        ),
-                        subtitle: Text(
-                          suggestion.hasPending
-                              ? 'Pending payment already exists'
-                              : 'Greedy min-cash-flow suggestion',
-                        ),
-                        trailing: Wrap(
-                          spacing: 8,
+                      subtitle: Text(
+                        suggestion.hasPending
+                            ? 'Pending payment already exists'
+                            : 'Greedy min-cash-flow suggestion',
+                      ),
+                      trailing: Wrap(
+                        spacing: 8,
+                        children: [
+                          BalancePill(amountMinor: -suggestion.amountMinor),
+                          if (!suggestion.hasPending)
+                            FilledButton(
+                              onPressed: () {
+                                final settlement = store
+                                    .createOrReuseSettlement(suggestion);
+                                showSnack(
+                                  context,
+                                  'Pending settlement ${settlement.id} created.',
+                                );
+                              },
+                              child: const Text('Create'),
+                            )
+                          else
+                            FilledButton.icon(
+                              onPressed: () => store.confirmSettlement(
+                                suggestion.pendingSettlementId!,
+                              ),
+                              icon: const Icon(Icons.check),
+                              label: const Text('Confirm'),
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+      ),
+      SectionPanel(
+        title: 'Expenses',
+        child: groupExpenses.isEmpty
+            ? const EmptyState(
+                icon: Icons.receipt_long_outlined,
+                title: 'No expenses yet',
+                body: 'Add a manual or receipt-assisted expense.',
+              )
+            : Column(
+                children: [
+                  for (final expense in groupExpenses)
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      leading: Icon(
+                        expense.status == ExpenseStatus.voided
+                            ? Icons.cancel_outlined
+                            : Icons.receipt_long,
+                      ),
+                      title: Text(expense.title),
+                      subtitle: Text(
+                        '${money(expense.totalMinor)} • ${enumLabel(expense.splitMode)} • paid by ${payerSummary(store, expense)}',
+                      ),
+                      trailing: StatusPill(
+                        label: expense.lockedAt == null
+                            ? enumLabel(expense.status)
+                            : 'Locked',
+                        tone: expense.status == ExpenseStatus.voided
+                            ? Tone.warning
+                            : Tone.neutral,
+                      ),
+                      children: [
+                        for (final share in expense.shares)
+                          ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: UserAvatar(
+                              user: store.userById(share.userId),
+                              small: true,
+                            ),
+                            title: Text(store.nameOf(share.userId)),
+                            trailing: Text(money(share.amountMinor)),
+                          ),
+                        if (expense.items.isNotEmpty)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final item in expense.items)
+                                  Chip(
+                                    avatar: const Icon(
+                                      Icons.restaurant_menu,
+                                      size: 16,
+                                    ),
+                                    label: Text(
+                                      '${item.label} • ${money(item.totalAmountMinor)}',
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        OverflowBar(
+                          alignment: MainAxisAlignment.start,
                           children: [
-                            BalancePill(amountMinor: -suggestion.amountMinor),
-                            if (!suggestion.hasPending)
-                              FilledButton(
-                                onPressed: () {
-                                  final settlement = store
-                                      .createOrReuseSettlement(suggestion);
-                                  showSnack(
-                                    context,
-                                    'Pending settlement ${settlement.id} created.',
-                                  );
-                                },
-                                child: const Text('Create'),
-                              )
-                            else
-                              FilledButton.icon(
-                                onPressed: () => store.confirmSettlement(
-                                  suggestion.pendingSettlementId!,
+                            TextButton.icon(
+                              onPressed: () =>
+                                  showEditExpenseDialog(context, expense),
+                              icon: const Icon(Icons.edit_outlined),
+                              label: const Text('Edit'),
+                            ),
+                            TextButton.icon(
+                              onPressed: () {
+                                final ok = store.voidExpense(
+                                  expense.id,
+                                  'Demo void requested',
+                                );
+                                showSnack(
+                                  context,
+                                  ok
+                                      ? 'Expense voided.'
+                                      : 'Expense is locked; use adjustment.',
+                                );
+                              },
+                              icon: const Icon(Icons.cancel_outlined),
+                              label: const Text('Void'),
+                            ),
+                            if (expense.lockedAt != null)
+                              TextButton.icon(
+                                onPressed: () => showAdjustmentDialog(
+                                  context,
+                                  group.id,
+                                  expense.payers.isEmpty
+                                      ? expense.payerId
+                                      : expense.payers.first.userId,
                                 ),
-                                icon: const Icon(Icons.check),
-                                label: const Text('Confirm'),
+                                icon: const Icon(Icons.tune),
+                                label: const Text('Adjust'),
                               ),
                           ],
                         ),
-                      ),
-                  ],
-                ),
+                      ],
+                    ),
+                ],
+              ),
+      ),
+      SectionPanel(
+        title: 'Activity Timeline',
+        child: ActivityList(
+          items: store.activityForGroup(group.id).take(8).toList(),
         ),
-        SectionPanel(
-          title: 'Expenses',
-          child: groupExpenses.isEmpty
-              ? const EmptyState(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'No expenses yet',
-                  body: 'Add a manual or receipt-assisted expense.',
-                )
-              : Column(
-                  children: [
-                    for (final expense in groupExpenses)
-                      ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        leading: Icon(
-                          expense.status == ExpenseStatus.voided
-                              ? Icons.cancel_outlined
-                              : Icons.receipt_long,
-                        ),
-                        title: Text(expense.title),
-                        subtitle: Text(
-                          '${money(expense.totalMinor)} • ${enumLabel(expense.splitMode)} • paid by ${store.nameOf(expense.payerId)}',
-                        ),
-                        trailing: StatusPill(
-                          label: expense.lockedAt == null
-                              ? enumLabel(expense.status)
-                              : 'Locked',
-                          tone: expense.status == ExpenseStatus.voided
-                              ? Tone.warning
-                              : Tone.neutral,
-                        ),
-                        children: [
-                          for (final share in expense.shares)
-                            ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: UserAvatar(
-                                user: store.userById(share.userId),
-                                small: true,
-                              ),
-                              title: Text(store.nameOf(share.userId)),
-                              trailing: Text(money(share.amountMinor)),
-                            ),
-                          if (expense.items.isNotEmpty)
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  for (final item in expense.items)
-                                    Chip(
-                                      avatar: const Icon(
-                                        Icons.restaurant_menu,
-                                        size: 16,
-                                      ),
-                                      label: Text(
-                                        '${item.label} • ${money(item.totalAmountMinor)}',
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          OverflowBar(
-                            alignment: MainAxisAlignment.start,
-                            children: [
-                              TextButton.icon(
-                                onPressed: () =>
-                                    showEditExpenseDialog(context, expense),
-                                icon: const Icon(Icons.edit_outlined),
-                                label: const Text('Edit'),
-                              ),
-                              TextButton.icon(
-                                onPressed: () {
-                                  final ok = store.voidExpense(
-                                    expense.id,
-                                    'Demo void requested',
-                                  );
-                                  showSnack(
-                                    context,
-                                    ok
-                                        ? 'Expense voided.'
-                                        : 'Expense is locked; use adjustment.',
-                                  );
-                                },
-                                icon: const Icon(Icons.cancel_outlined),
-                                label: const Text('Void'),
-                              ),
-                              if (expense.lockedAt != null)
-                                TextButton.icon(
-                                  onPressed: () => showAdjustmentDialog(
-                                    context,
-                                    group.id,
-                                    expense.payerId,
-                                  ),
-                                  icon: const Icon(Icons.tune),
-                                  label: const Text('Adjust'),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-        ),
-        SectionPanel(
-          title: 'Activity Timeline',
-          child: ActivityList(
-            items: store.activityForGroup(group.id).take(8).toList(),
-          ),
-        ),
+      ),
+    ];
+
+    if (scrollable) {
+      return AppScrollView(children: children);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var index = 0; index < children.length; index++) ...[
+          if (index > 0) const SizedBox(height: 16),
+          children[index],
+        ],
       ],
     );
   }
@@ -2117,6 +2135,17 @@ IconData iconForCategory(GroupCategory category) {
   };
 }
 
+String payerSummary(AppStore store, Expense expense) {
+  if (expense.payers.isEmpty) {
+    return store.nameOf(expense.payerId);
+  }
+  return expense.payers
+      .map(
+        (payer) => '${store.nameOf(payer.userId)} ${money(payer.amountMinor)}',
+      )
+      .join(' + ');
+}
+
 void showSnack(BuildContext context, String message) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
@@ -2578,7 +2607,7 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
 Future<void> showAddMemberDialog(BuildContext context, String groupId) async {
   final store = StoreScope.of(context);
   final existing = store
-      .membersForGroup(groupId)
+      .membersForGroup(groupId, activeOnly: true)
       .map((member) => member.userId)
       .toSet();
   final candidates = store
@@ -2705,18 +2734,48 @@ Future<void> showRoleDialog(
 Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
   final store = StoreScope.of(context);
   final members = store.membersForGroup(groupId, activeOnly: true);
+  if (members.isEmpty ||
+      !store.isActiveGroupMember(groupId, store.currentUserId)) {
+    showSnack(context, 'Only active group members can add expenses.');
+    return;
+  }
   final title = TextEditingController(text: 'Shared expense');
   final amount = TextEditingController(text: '1200');
   final note = TextEditingController();
   final receipt = TextEditingController();
   var splitMode = SplitMode.equal;
-  var payerId = store.currentUserId;
+  final payerAmounts = <String, String>{store.currentUserId: amount.text};
   final participants = <String>{for (final member in members) member.userId};
-  final exact = <String, String>{};
+  final custom = <String, String>{};
   final percentages = <String, String>{};
   final shares = <String, String>{};
+  var equalPreview = <String, int>{};
   var parsedItems = parseControlledReceipt('');
   final itemAssignments = <int, String>{};
+
+  void refreshEqualPreview() {
+    final ids = participants.toList();
+    final amounts = equalShares(parseMoneyToMinor(amount.text), ids);
+    equalPreview = {
+      for (var index = 0; index < ids.length; index++)
+        ids[index]: amounts[index],
+    };
+  }
+
+  void syncSinglePayerToTotal() {
+    final payerIds = payerAmounts.entries
+        .where((entry) => parseMoneyToMinor(entry.value) > 0)
+        .map((entry) => entry.key)
+        .toList();
+    if (payerIds.length <= 1) {
+      payerAmounts
+        ..clear()
+        ..[payerIds.isEmpty ? store.currentUserId : payerIds.first] =
+            amount.text;
+    }
+  }
+
+  refreshEqualPreview();
 
   await showDialog<void>(
     context: context,
@@ -2745,20 +2804,20 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                         labelText: 'Total amount',
                         prefixText: 'NPR ',
                       ),
+                      onChanged: (_) {
+                        setState(() {
+                          syncSinglePayerToTotal();
+                          refreshEqualPreview();
+                        });
+                      },
                     ),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: payerId,
-                      decoration: const InputDecoration(labelText: 'Payer'),
-                      items: [
-                        for (final member in members)
-                          DropdownMenuItem(
-                            value: member.userId,
-                            child: Text(store.nameOf(member.userId)),
-                          ),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => payerId = value ?? payerId),
+                    _AmountGrid(
+                      ids: [for (final member in members) member.userId],
+                      label: 'Paid amount',
+                      values: payerAmounts,
+                      suffix: 'NPR',
+                      onChanged: () => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<SplitMode>(
@@ -2799,18 +2858,25 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                                 checked
                                     ? participants.add(member.userId)
                                     : participants.remove(member.userId);
+                                refreshEqualPreview();
                               });
                             },
                           ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    if (splitMode == SplitMode.exact)
+                    if (splitMode == SplitMode.equal)
+                      _AmountPreview(
+                        title: 'Calculated equal split',
+                        amounts: equalPreview,
+                      ),
+                    if (splitMode == SplitMode.custom)
                       _AmountGrid(
                         ids: selectedParticipants,
-                        label: 'Exact amount',
-                        values: exact,
+                        label: 'Custom amount',
+                        values: custom,
                         suffix: 'NPR',
+                        onChanged: () => setState(() {}),
                       ),
                     if (splitMode == SplitMode.percentage)
                       _AmountGrid(
@@ -2818,6 +2884,7 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                         label: 'Percentage',
                         values: percentages,
                         suffix: '%',
+                        onChanged: () => setState(() {}),
                       ),
                     if (splitMode == SplitMode.shares)
                       _AmountGrid(
@@ -2825,6 +2892,7 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                         label: 'Share units',
                         values: shares,
                         suffix: 'x',
+                        onChanged: () => setState(() {}),
                       ),
                     if (splitMode == SplitMode.item) ...[
                       TextField(
@@ -2848,6 +2916,8 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                                         ) /
                                         100)
                                     .toStringAsFixed(0);
+                            syncSinglePayerToTotal();
+                            refreshEqualPreview();
                           });
                         },
                         icon: const Icon(Icons.document_scanner_outlined),
@@ -2900,6 +2970,13 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                   try {
                     final total = parseMoneyToMinor(amount.text);
                     final ids = participants.toList();
+                    final paidBy = payerAmounts.map(
+                      (key, value) => MapEntry(key, parseMoneyToMinor(value)),
+                    )..removeWhere((_, value) => value == 0);
+                    if (paidBy.isEmpty) {
+                      showSnack(context, 'Choose at least one payer.');
+                      return;
+                    }
                     final parsed = splitMode == SplitMode.item
                         ? parseControlledReceipt(receipt.text)
                         : <ParsedReceiptItem>[];
@@ -2914,12 +2991,16 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                               (sum, item) => sum + item.amountMinor,
                             )
                           : total,
-                      payerId: payerId,
+                      payerId: paidBy.keys.first,
+                      payerAmounts: paidBy,
                       category: store.groupById(groupId).category.name,
                       splitMode: splitMode,
                       participantIds: ids,
                       note: note.text,
-                      exactAmounts: exact.map(
+                      equalAmounts: splitMode == SplitMode.equal
+                          ? equalPreview
+                          : null,
+                      customAmounts: custom.map(
                         (key, value) => MapEntry(key, parseMoneyToMinor(value)),
                       ),
                       percentages: percentages.map(
@@ -2962,12 +3043,14 @@ class _AmountGrid extends StatelessWidget {
     required this.label,
     required this.values,
     required this.suffix,
+    this.onChanged,
   });
 
   final List<String> ids;
   final String label;
   final Map<String, String> values;
   final String suffix;
+  final VoidCallback? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -2984,8 +3067,49 @@ class _AmountGrid extends StatelessWidget {
                 suffixText: suffix,
               ),
               keyboardType: TextInputType.number,
-              onChanged: (value) => values[id] = value,
+              onChanged: (value) {
+                values[id] = value;
+                onChanged?.call();
+              },
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AmountPreview extends StatelessWidget {
+  const _AmountPreview({required this.title, required this.amounts});
+
+  final String title;
+  final Map<String, int> amounts;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final entry in amounts.entries)
+                Chip(
+                  avatar: UserAvatar(
+                    user: store.userById(entry.key),
+                    small: true,
+                  ),
+                  label: Text(
+                    '${store.nameOf(entry.key)}: ${money(entry.value)}',
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );

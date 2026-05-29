@@ -45,6 +45,18 @@ class AppStore extends ChangeNotifier {
 
   Group groupById(String id) => groups.firstWhere((group) => group.id == id);
 
+  Group? groupByIdOrNull(String? id) {
+    if (id == null) {
+      return null;
+    }
+    for (final group in groups) {
+      if (group.id == id) {
+        return group;
+      }
+    }
+    return null;
+  }
+
   DhukutiPool poolById(String id) =>
       dhukutiPools.firstWhere((pool) => pool.id == id);
 
@@ -455,23 +467,55 @@ class AppStore extends ChangeNotifier {
     if (!activeOnly) {
       return members.toList();
     }
-    return members
+    final activeMembers = members
         .where((member) => member.status == MemberStatus.active)
         .toList();
+    final latestByUser = <String, GroupMember>{};
+    for (final member in activeMembers) {
+      final existing = latestByUser[member.userId];
+      if (existing == null || existing.joinedAt.isBefore(member.joinedAt)) {
+        latestByUser[member.userId] = member;
+      }
+    }
+    return latestByUser.values.toList()
+      ..sort((a, b) => a.joinedAt.compareTo(b.joinedAt));
+  }
+
+  GroupMember? memberForGroup(String groupId, String userId) {
+    final matches =
+        groupMembers
+            .where(
+              (member) => member.groupId == groupId && member.userId == userId,
+            )
+            .toList()
+          ..sort((a, b) => b.joinedAt.compareTo(a.joinedAt));
+    if (matches.isEmpty) {
+      return null;
+    }
+    return matches.first;
+  }
+
+  bool isActiveGroupMember(String groupId, String userId) {
+    return groupMembers.any(
+      (member) =>
+          member.groupId == groupId &&
+          member.userId == userId &&
+          member.status == MemberStatus.active,
+    );
   }
 
   void addGroupMember(String groupId, String userId, MemberRole role) {
     if (!canInviteOrGift(currentUserId, userId)) {
       return;
     }
-    final existing = groupMembers.where(
-      (member) => member.groupId == groupId && member.userId == userId,
+    final activeExisting = groupMembers.where(
+      (member) =>
+          member.groupId == groupId &&
+          member.userId == userId &&
+          member.status == MemberStatus.active,
     );
-    if (existing.isNotEmpty) {
-      existing.first
-        ..status = MemberStatus.active
-        ..removedAt = null
-        ..role = role;
+    if (activeExisting.isNotEmpty) {
+      activeExisting.first.role = role;
     } else {
       groupMembers.add(
         GroupMember(
@@ -497,10 +541,21 @@ class AppStore extends ChangeNotifier {
   }
 
   void removeGroupMember(String groupId, String userId) {
-    final member = groupMembers.firstWhere(
-      (member) => member.groupId == groupId && member.userId == userId,
-    );
-    member
+    final member =
+        groupMembers
+            .where(
+              (member) =>
+                  member.groupId == groupId &&
+                  member.userId == userId &&
+                  member.status == MemberStatus.active,
+            )
+            .toList()
+          ..sort((a, b) => b.joinedAt.compareTo(a.joinedAt));
+    if (member.isEmpty) {
+      return;
+    }
+    final activePeriod = member.first;
+    activePeriod
       ..status = MemberStatus.removed
       ..removedAt = _now;
     _activity(
@@ -517,12 +572,11 @@ class AppStore extends ChangeNotifier {
   }
 
   void updateMemberRole(String groupId, String userId, MemberRole role) {
-    groupMembers
-            .firstWhere(
-              (member) => member.groupId == groupId && member.userId == userId,
-            )
-            .role =
-        role;
+    final member = memberForGroup(groupId, userId);
+    if (member == null) {
+      return;
+    }
+    member.role = role;
     _activity(
       actorId: currentUserId,
       groupId: groupId,
@@ -544,7 +598,9 @@ class AppStore extends ChangeNotifier {
     required SplitMode splitMode,
     required List<String> participantIds,
     String note = '',
-    Map<String, int>? exactAmounts,
+    Map<String, int>? payerAmounts,
+    Map<String, int>? equalAmounts,
+    Map<String, int>? customAmounts,
     Map<String, double>? percentages,
     Map<String, int>? shareUnits,
     List<ParsedReceiptItem>? receiptItems,
@@ -558,18 +614,33 @@ class AppStore extends ChangeNotifier {
     if (participants.isEmpty) {
       throw ArgumentError('Choose at least one participant.');
     }
+    final paidBy = payerAmounts ?? <String, int>{payerId: totalMinor};
+    if (paidBy.isEmpty) {
+      throw ArgumentError('Choose at least one payer.');
+    }
+    validatePayerAmounts(totalMinor, paidBy.values);
     final activeIds = membersForGroup(
       groupId,
       activeOnly: true,
     ).map((member) => member.userId);
     if (!participants.every(activeIds.contains) ||
-        !activeIds.contains(payerId)) {
+        !paidBy.keys.every(activeIds.contains)) {
       throw ArgumentError(
-        'Payer and participants must be active group members.',
+        'Payers and participants must be active group members.',
       );
     }
 
     final expenseId = _id('expense');
+    final payers = <ExpensePayer>[
+      for (final entry in paidBy.entries)
+        if (entry.value > 0)
+          ExpensePayer(
+            id: _id('expense-payer'),
+            expenseId: expenseId,
+            userId: entry.key,
+            amountMinor: entry.value,
+          ),
+    ];
     final shares = <ExpenseShare>[];
     final items = <ExpenseItem>[];
     final shareAmounts = <String, int>{};
@@ -580,15 +651,18 @@ class AppStore extends ChangeNotifier {
 
     switch (splitMode) {
       case SplitMode.equal:
-        final amounts = equalShares(finalTotal, participants);
+        final amounts = equalAmounts == null
+            ? equalShares(finalTotal, participants)
+            : participants.map((id) => equalAmounts[id] ?? 0).toList();
+        validateCustomShares(finalTotal, amounts);
         for (var i = 0; i < participants.length; i++) {
           shareAmounts[participants[i]] = amounts[i];
         }
-      case SplitMode.exact:
+      case SplitMode.custom:
         final amounts = participants
-            .map((id) => exactAmounts?[id] ?? 0)
+            .map((id) => customAmounts?[id] ?? 0)
             .toList();
-        validateExactShares(finalTotal, amounts);
+        validateCustomShares(finalTotal, amounts);
         for (var i = 0; i < participants.length; i++) {
           shareAmounts[participants[i]] = amounts[i];
         }
@@ -660,7 +734,8 @@ class AppStore extends ChangeNotifier {
         }
     }
 
-    for (final participantId in participants) {
+    for (var index = 0; index < participants.length; index++) {
+      final participantId = participants[index];
       shares.add(
         ExpenseShare(
           id: _id('share'),
@@ -673,7 +748,7 @@ class AppStore extends ChangeNotifier {
         ),
       );
     }
-    validateExactShares(finalTotal, shares.map((share) => share.amountMinor));
+    validateCustomShares(finalTotal, shares.map((share) => share.amountMinor));
 
     expenses.add(
       Expense(
@@ -694,6 +769,7 @@ class AppStore extends ChangeNotifier {
         billServiceChargeMinor: serviceChargeMinor,
         billDiscountMinor: discountMinor,
         billTipMinor: tipMinor,
+        payers: payers,
         shares: shares,
         items: items,
       ),
@@ -1424,12 +1500,20 @@ class AppStore extends ChangeNotifier {
     final buffer = StringBuffer();
     buffer.writeln('type,date,title,actor,counterparty,amount,status');
     for (final expense in expenses.where((item) => item.groupId == groupId)) {
+      final payerNames = expense.payers.isEmpty
+          ? nameOf(expense.payerId)
+          : expense.payers.map((payer) => nameOf(payer.userId)).join(' + ');
       buffer.writeln(
-        'expense,${expense.createdAt.toIso8601String()},${expense.title},${nameOf(expense.payerId)},,${expense.totalMinor},${enumLabel(expense.status)}',
+        'expense,${expense.createdAt.toIso8601String()},${expense.title},$payerNames,,${expense.totalMinor},${enumLabel(expense.status)}',
       );
+      for (final payer in expense.payers) {
+        buffer.writeln(
+          'expense_payer,${expense.createdAt.toIso8601String()},${expense.title},${nameOf(payer.userId)},,${payer.amountMinor},paid',
+        );
+      }
       for (final share in expense.shares) {
         buffer.writeln(
-          'expense_share,${expense.createdAt.toIso8601String()},${expense.title},${nameOf(share.userId)},${nameOf(expense.payerId)},${share.amountMinor},active',
+          'expense_share,${expense.createdAt.toIso8601String()},${expense.title},${nameOf(share.userId)},$payerNames,${share.amountMinor},active',
         );
       }
     }
@@ -1882,7 +1966,7 @@ class AppStore extends ChangeNotifier {
       totalMinor: npr(1800),
       payerId: 'u-arjun',
       category: 'festival',
-      splitMode: SplitMode.exact,
+      splitMode: SplitMode.custom,
       participantIds: <String>[
         'u-sita',
         'u-arjun',
@@ -1891,7 +1975,7 @@ class AppStore extends ChangeNotifier {
         'u-laxmi',
         'u-rina',
       ],
-      exactAmounts: <String, int>{
+      customAmounts: <String, int>{
         'u-sita': npr(300),
         'u-arjun': npr(300),
         'u-maya': npr(300),
