@@ -760,7 +760,7 @@ class GroupDetail extends StatelessWidget {
           children: [
             FilledButton.icon(
               onPressed: canAddExpense
-                  ? () => showAddExpenseDialog(context, group.id)
+                  ? () => showAddExpenseOcrFlow(context, group.id)
                   : null,
               icon: const Icon(Icons.receipt_long),
               label: const Text('Add expense'),
@@ -2668,6 +2668,1758 @@ Future<void> showScanQrDialog(BuildContext context) async {
   );
 }
 
+Future<void> showAddExpenseOcrFlow(BuildContext context, String groupId) async {
+  final store = StoreScope.of(context);
+  final members = store.membersForGroup(groupId, activeOnly: true);
+  if (members.isEmpty ||
+      !store.isActiveGroupMember(groupId, store.currentUserId)) {
+    showSnack(context, 'Only active group members can add expenses.');
+    return;
+  }
+
+  await showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    barrierLabel: 'Add expense OCR scanner',
+    transitionDuration: const Duration(milliseconds: 220),
+    pageBuilder: (dialogContext, animation, secondaryAnimation) {
+      return _AddExpenseOcrScreen(groupId: groupId);
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      return FadeTransition(opacity: animation, child: child);
+    },
+  );
+}
+
+class _AddExpenseOcrScreen extends StatefulWidget {
+  const _AddExpenseOcrScreen({required this.groupId});
+
+  final String groupId;
+
+  @override
+  State<_AddExpenseOcrScreen> createState() => _AddExpenseOcrScreenState();
+}
+
+class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
+  static const _scannerMethodChannel = MethodChannel(
+    'dev.steenbakker.mobile_scanner/scanner/method',
+  );
+
+  final DraggableScrollableController _sheetController =
+      DraggableScrollableController();
+  late final MobileScannerController _cameraController =
+      MobileScannerController(detectionSpeed: DetectionSpeed.noDuplicates);
+
+  var _cameraReady = false;
+  var _runningOcr = false;
+  var _flashOn = false;
+  var _scanVersion = 0;
+  String? _cameraIssue;
+  String? _scanMessage;
+  List<_ExpenseItemDraft> _scannedItems = <_ExpenseItemDraft>[];
+
+  bool get _desktopWeb {
+    if (!kIsWeb) {
+      return false;
+    }
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.macOS ||
+      TargetPlatform.windows ||
+      TargetPlatform.linux => true,
+      _ => false,
+    };
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_prepareCamera());
+  }
+
+  @override
+  void dispose() {
+    unawaited(_cameraController.dispose());
+    _sheetController.dispose();
+    for (final item in _scannedItems) {
+      item.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _prepareCamera() async {
+    if (kIsWeb && !_hasSecureWebCameraContext()) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _cameraReady = false;
+        _cameraIssue =
+            'Camera access is needed to scan bills. Use HTTPS, localhost, upload, or Manual Entry.';
+      });
+      return;
+    }
+
+    if (!kIsWeb) {
+      try {
+        await _scannerMethodChannel.invokeMethod<int>('state');
+      } on MissingPluginException {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _cameraReady = false;
+          _cameraIssue =
+              'Camera access is needed to scan bills. The scanner plugin is not ready in this app process.';
+        });
+        return;
+      } on PlatformException catch (error) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _cameraReady = false;
+          _cameraIssue =
+              error.message ?? 'Camera access is needed to scan bills.';
+        });
+        return;
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _cameraReady = true;
+      _cameraIssue = null;
+    });
+  }
+
+  bool _hasSecureWebCameraContext() {
+    final uri = Uri.base;
+    final host = uri.host.toLowerCase();
+    return uri.scheme == 'https' ||
+        host == 'localhost' ||
+        host == '::1' ||
+        host.startsWith('127.');
+  }
+
+  void _handleCameraError(Object error, StackTrace stackTrace) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _cameraReady = false;
+      _cameraIssue = switch (error) {
+        MobileScannerException(:final errorDetails, :final errorCode) =>
+          errorDetails?.message ?? errorCode.message,
+        PlatformException(:final message) =>
+          message ?? 'Camera access is needed to scan bills.',
+        _ => 'Camera access is needed to scan bills.',
+      };
+    });
+  }
+
+  Future<void> _runOcr({bool fromUpload = false}) async {
+    if (_runningOcr) {
+      return;
+    }
+    setState(() {
+      _runningOcr = true;
+      _scanMessage = 'Reading bill items...';
+    });
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      if (!mounted) {
+        return;
+      }
+
+      for (final item in _scannedItems) {
+        item.dispose();
+      }
+      _scannedItems = _demoScannedBillItems();
+      setState(() {
+        _runningOcr = false;
+        _scanVersion += 1;
+        _scanMessage =
+            'Some items may need correction. Please review before continuing.';
+      });
+      await _sheetController.animateTo(
+        0.92,
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeOutCubic,
+      );
+    } catch (_) {
+      if (mounted) {
+        _showOcrFailure();
+      }
+    }
+  }
+
+  void _showOcrFailure() {
+    setState(() {
+      _runningOcr = false;
+      _scanMessage =
+          'Couldn’t read the bill clearly. Try again or use Manual Entry.';
+    });
+  }
+
+  Future<void> _toggleFlash() async {
+    try {
+      await _cameraController.toggleTorch();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _flashOn = !_flashOn);
+    } catch (_) {
+      if (mounted) {
+        showSnack(context, 'Flash is not available on this device.');
+      }
+    }
+  }
+
+  Widget _cameraFallback(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      color: const Color(0xFF101814),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.no_photography_outlined,
+                color: scheme.error,
+                size: 40,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _cameraIssue ?? 'Camera access is needed to scan bills.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                alignment: WrapAlignment.center,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () {
+                      setState(() => _cameraIssue = null);
+                      unawaited(_prepareCamera());
+                    },
+                    icon: const Icon(Icons.camera_alt_outlined),
+                    label: const Text('Allow camera'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _sheetController.animateTo(
+                      0.92,
+                      duration: const Duration(milliseconds: 320),
+                      curve: Curves.easeOutCubic,
+                    ),
+                    icon: const Icon(Icons.edit_note_outlined),
+                    label: const Text('Use Manual Entry'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScannerError(
+    BuildContext context,
+    MobileScannerException error,
+  ) {
+    final message =
+        error.errorDetails?.message ?? 'Camera access is needed to scan bills.';
+    return Container(
+      color: const Color(0xFF101814),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        bottom: false,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: _cameraReady
+                  ? MobileScanner(
+                      controller: _cameraController,
+                      fit: BoxFit.cover,
+                      onDetect: (_) {},
+                      onDetectError: _handleCameraError,
+                      errorBuilder: _buildScannerError,
+                      placeholderBuilder: (context) => const ColoredBox(
+                        color: Color(0xFF101814),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    )
+                  : _cameraFallback(context),
+            ),
+            Positioned.fill(child: _BillScanOverlay(accent: accent)),
+            Positioned(
+              top: 12,
+              left: 12,
+              right: 12,
+              child: Row(
+                children: [
+                  IconButton.filledTonal(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Close',
+                  ),
+                  const Spacer(),
+                  IconButton.filledTonal(
+                    onPressed: _cameraReady ? _toggleFlash : null,
+                    icon: Icon(_flashOn ? Icons.flash_on : Icons.flash_off),
+                    tooltip: 'Flash',
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 24,
+              right: 24,
+              top: MediaQuery.sizeOf(context).height * 0.17,
+              child: const Text(
+                'Align the bill inside the frame',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 126,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_scanMessage != null)
+                    _ScanStatusPill(
+                      message: _scanMessage!,
+                      loading: _runningOcr,
+                      failed: _scanMessage!.startsWith('Couldn’t'),
+                      onScanAgain: () => _runOcr(),
+                      onUseManual: () => _sheetController.animateTo(
+                        0.92,
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeOutCubic,
+                      ),
+                    ),
+                  if (_scanMessage != null) const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (_desktopWeb) ...[
+                        FilledButton.icon(
+                          onPressed: _runningOcr
+                              ? null
+                              : () => _runOcr(fromUpload: true),
+                          icon: const Icon(Icons.upload_file_outlined),
+                          label: const Text('Upload bill image'),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      _CaptureButton(
+                        onPressed: _cameraReady && !_runningOcr
+                            ? () => _runOcr()
+                            : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            DraggableScrollableSheet(
+              controller: _sheetController,
+              initialChildSize: 0.16,
+              minChildSize: 0.13,
+              maxChildSize: 0.92,
+              snap: true,
+              snapSizes: const [0.16, 0.92],
+              builder: (context, scrollController) {
+                return _ManualEntrySheet(
+                  key: ValueKey(_scanVersion),
+                  groupId: widget.groupId,
+                  scrollController: scrollController,
+                  scannedItems: _scannedItems,
+                  reviewMessage: _scannedItems.isEmpty
+                      ? null
+                      : 'Review scanned items before saving.',
+                  onSaved: () => Navigator.pop(context),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BillScanOverlay extends StatelessWidget {
+  const _BillScanOverlay({required this.accent});
+
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final frameWidth = math.min(constraints.maxWidth - 48, 430.0);
+        final frameHeight = math.min(constraints.maxHeight * 0.48, 520.0);
+        return IgnorePointer(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _ScanScrimPainter(
+                    frame: Rect.fromCenter(
+                      center: Offset(
+                        constraints.maxWidth / 2,
+                        constraints.maxHeight * 0.43,
+                      ),
+                      width: frameWidth,
+                      height: frameHeight,
+                    ),
+                    radius: 26,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: (constraints.maxWidth - frameWidth) / 2,
+                top: constraints.maxHeight * 0.43 - frameHeight / 2,
+                width: frameWidth,
+                height: frameHeight,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: accent, width: 3),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ScanScrimPainter extends CustomPainter {
+  const _ScanScrimPainter({required this.frame, required this.radius});
+
+  final Rect frame;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final full = Path()..addRect(Offset.zero & size);
+    final cutout = Path()
+      ..addRRect(RRect.fromRectAndRadius(frame, Radius.circular(radius)));
+    final path = Path.combine(PathOperation.difference, full, cutout);
+    canvas.drawPath(
+      path,
+      Paint()..color = Colors.black.withValues(alpha: 0.56),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ScanScrimPainter oldDelegate) {
+    return oldDelegate.frame != frame || oldDelegate.radius != radius;
+  }
+}
+
+class _CaptureButton extends StatelessWidget {
+  const _CaptureButton({required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: 74,
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          padding: EdgeInsets.zero,
+          shape: const CircleBorder(),
+          backgroundColor: Colors.white,
+          foregroundColor: Theme.of(context).colorScheme.primary,
+        ),
+        child: const Icon(Icons.camera_alt, size: 32),
+      ),
+    );
+  }
+}
+
+class _ScanStatusPill extends StatelessWidget {
+  const _ScanStatusPill({
+    required this.message,
+    required this.loading,
+    required this.failed,
+    required this.onScanAgain,
+    required this.onUseManual,
+  });
+
+  final String message;
+  final bool loading;
+  final bool failed;
+  final VoidCallback onScanAgain;
+  final VoidCallback onUseManual;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (loading) ...[
+                const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 10),
+              ],
+              Flexible(
+                child: Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (failed) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton(
+                  onPressed: onScanAgain,
+                  child: const Text('Scan again'),
+                ),
+                FilledButton(
+                  onPressed: onUseManual,
+                  child: const Text('Use Manual Entry'),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+enum _BillLineKind { item, serviceCharge, tax, discount, rounding }
+
+class _ExpenseItemDraft {
+  _ExpenseItemDraft({
+    required String name,
+    required int amountMinor,
+    int quantity = 1,
+    int? unitAmountMinor,
+    this.kind = _BillLineKind.item,
+    this.confidence = 1,
+    Iterable<String>? assignedTo,
+  }) : name = TextEditingController(text: name),
+       quantity = TextEditingController(text: quantity.toString()),
+       unitPrice = TextEditingController(
+         text: ((unitAmountMinor ?? amountMinor) / 100).toStringAsFixed(2),
+       ),
+       amount = TextEditingController(
+         text: (amountMinor / 100).toStringAsFixed(2),
+       ),
+       assignedTo = assignedTo == null
+           ? <String>{}
+           : Set<String>.from(assignedTo);
+
+  final TextEditingController name;
+  final TextEditingController quantity;
+  final TextEditingController unitPrice;
+  final TextEditingController amount;
+  final Set<String> assignedTo;
+  _BillLineKind kind;
+  double confidence;
+
+  int get amountMinor => parseMoneyToMinor(amount.text);
+  int get quantityValue => int.tryParse(quantity.text.trim()) ?? 1;
+  int get unitAmountMinor => parseMoneyToMinor(unitPrice.text);
+
+  void dispose() {
+    name.dispose();
+    quantity.dispose();
+    unitPrice.dispose();
+    amount.dispose();
+  }
+}
+
+List<_ExpenseItemDraft> _demoScannedBillItems() {
+  return <_ExpenseItemDraft>[
+    _ExpenseItemDraft(
+      name: 'Chicken momo',
+      amountMinor: npr(300),
+      confidence: 0.96,
+    ),
+    _ExpenseItemDraft(
+      name: 'Veg chowmein',
+      amountMinor: npr(180),
+      confidence: 0.94,
+    ),
+    _ExpenseItemDraft(
+      name: 'Cold drinks',
+      amountMinor: npr(240),
+      quantity: 3,
+      unitAmountMinor: npr(80),
+      confidence: 0.92,
+    ),
+    _ExpenseItemDraft(
+      name: 'Service charge',
+      amountMinor: npr(72),
+      kind: _BillLineKind.serviceCharge,
+      confidence: 0.86,
+    ),
+    _ExpenseItemDraft(
+      name: 'VAT',
+      amountMinor: npr(93.60),
+      kind: _BillLineKind.tax,
+      confidence: 0.72,
+    ),
+  ];
+}
+
+class _ManualEntrySheet extends StatefulWidget {
+  const _ManualEntrySheet({
+    required this.groupId,
+    required this.scrollController,
+    required this.scannedItems,
+    required this.onSaved,
+    this.reviewMessage,
+    super.key,
+  });
+
+  final String groupId;
+  final ScrollController scrollController;
+  final List<_ExpenseItemDraft> scannedItems;
+  final String? reviewMessage;
+  final VoidCallback onSaved;
+
+  @override
+  State<_ManualEntrySheet> createState() => _ManualEntrySheetState();
+}
+
+class _ManualEntrySheetState extends State<_ManualEntrySheet> {
+  final _title = TextEditingController(text: 'Shared expense');
+  final _amount = TextEditingController(text: '1200.00');
+  final _note = TextEditingController();
+  final _payerRows = <_PayerDraft>[];
+  final _participants = <String>{};
+  final _custom = <String, String>{};
+  final _percentages = <String, String>{};
+  final _shares = <String, String>{};
+  final _items = <_ExpenseItemDraft>[];
+
+  var _splitMode = SplitMode.equal;
+  var _skipItemSplit = true;
+  var _equalPreview = <String, int>{};
+  var _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) {
+      return;
+    }
+    final store = StoreScope.of(context);
+    final members = store.membersForGroup(widget.groupId, activeOnly: true);
+    _participants.addAll(members.map((member) => member.userId));
+    _payerRows.add(
+      _PayerDraft(userId: store.currentUserId, amountText: _amount.text),
+    );
+    if (widget.scannedItems.isNotEmpty) {
+      _items.addAll(widget.scannedItems.map(_cloneDraft));
+      _splitMode = SplitMode.item;
+      _skipItemSplit = false;
+      _syncTotalFromItems();
+    }
+    _refreshEqualPreview();
+    _initialized = true;
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _amount.dispose();
+    _note.dispose();
+    for (final payer in _payerRows) {
+      payer.dispose();
+    }
+    for (final item in _items) {
+      item.dispose();
+    }
+    super.dispose();
+  }
+
+  _ExpenseItemDraft _cloneDraft(_ExpenseItemDraft draft) {
+    return _ExpenseItemDraft(
+      name: draft.name.text,
+      amountMinor: draft.amountMinor,
+      quantity: draft.quantityValue,
+      unitAmountMinor: draft.unitAmountMinor,
+      kind: draft.kind,
+      confidence: draft.confidence,
+      assignedTo: draft.assignedTo,
+    );
+  }
+
+  void _refreshEqualPreview() {
+    final ids = _participants.toList();
+    final amounts = equalShares(parseMoneyToMinor(_amount.text), ids);
+    _equalPreview = {
+      for (var index = 0; index < ids.length; index++)
+        ids[index]: amounts[index],
+    };
+  }
+
+  void _syncSinglePayerToTotal() {
+    if (_payerRows.length == 1) {
+      _payerRows.first.amount.text = _amount.text;
+    }
+  }
+
+  void _syncTotalFromItems() {
+    _amount.text = (_billTotals.finalTotalMinor / 100).toStringAsFixed(2);
+    _syncSinglePayerToTotal();
+  }
+
+  _BillTotals get _billTotals => _BillTotals.fromDrafts(_items);
+
+  List<ParsedReceiptItem> _receiptItems() {
+    return [
+      for (final item in _items)
+        if (item.name.text.trim().isNotEmpty)
+          ParsedReceiptItem(
+            label: item.name.text.trim(),
+            amountMinor: item.amountMinor,
+            quantity: item.quantityValue,
+            unitAmountMinor: item.unitAmountMinor,
+            confidence: item.confidence,
+          ),
+    ];
+  }
+
+  Map<int, List<String>> _itemAssignments(List<String> selectedParticipants) {
+    return {
+      for (var index = 0; index < _items.length; index++)
+        index: _assignmentUsers(_items[index], selectedParticipants),
+    };
+  }
+
+  List<String> _assignmentUsers(
+    _ExpenseItemDraft item,
+    List<String> selectedParticipants,
+  ) {
+    final users = item.assignedTo
+        .where(selectedParticipants.contains)
+        .toList(growable: false);
+    return users.isEmpty ? selectedParticipants : users;
+  }
+
+  void _removeParticipant(String userId) {
+    _participants.remove(userId);
+    _custom.remove(userId);
+    _percentages.remove(userId);
+    _shares.remove(userId);
+    for (final item in _items) {
+      item.assignedTo.remove(userId);
+    }
+  }
+
+  Future<void> _changeSplitMode(SplitMode value) async {
+    if (_splitMode == SplitMode.item && value != SplitMode.item) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Change split mode?'),
+          content: const Text(
+            'Changing split mode may remove item assignments. Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) {
+        return;
+      }
+      for (final item in _items) {
+        item.assignedTo.clear();
+      }
+      _skipItemSplit = true;
+    }
+    setState(() {
+      _splitMode = value;
+      if (value == SplitMode.item) {
+        _skipItemSplit = false;
+        _syncTotalFromItems();
+      }
+      _refreshEqualPreview();
+    });
+  }
+
+  void _addItem() {
+    setState(() {
+      _items.add(_ExpenseItemDraft(name: 'New item', amountMinor: 0));
+      _skipItemSplit = false;
+      _splitMode = SplitMode.item;
+      _syncTotalFromItems();
+      _refreshEqualPreview();
+    });
+  }
+
+  void _save({
+    required int total,
+    required Map<String, int> payerAmounts,
+    required List<String> selectedParticipants,
+  }) {
+    final store = StoreScope.of(context);
+    final effectiveSplitMode = _skipItemSplit && _splitMode == SplitMode.item
+        ? SplitMode.equal
+        : _splitMode;
+    final totals = _billTotals;
+    try {
+      store.addExpense(
+        groupId: widget.groupId,
+        title: _title.text.trim().isEmpty
+            ? 'Shared expense'
+            : _title.text.trim(),
+        totalMinor: total,
+        payerId: payerAmounts.keys.first,
+        payerAmounts: payerAmounts,
+        category: store.groupById(widget.groupId).category.name,
+        splitMode: effectiveSplitMode,
+        participantIds: selectedParticipants,
+        note: _note.text,
+        equalAmounts: effectiveSplitMode == SplitMode.equal
+            ? _equalPreview
+            : null,
+        customAmounts: _custom.map(
+          (key, value) => MapEntry(key, parseMoneyToMinor(value)),
+        ),
+        percentages: _percentages.map(
+          (key, value) => MapEntry(key, double.tryParse(value) ?? 0),
+        ),
+        shareUnits: _shares.map(
+          (key, value) => MapEntry(key, int.tryParse(value) ?? 1),
+        ),
+        receiptItems: effectiveSplitMode == SplitMode.item
+            ? _receiptItems()
+            : <ParsedReceiptItem>[],
+        itemAssignments: effectiveSplitMode == SplitMode.item
+            ? _itemAssignments(selectedParticipants)
+            : null,
+        taxMinor: totals.taxMinor,
+        serviceChargeMinor: totals.serviceChargeMinor,
+        discountMinor: totals.discountMinor.abs(),
+        roundingAdjustmentMinor: totals.roundingAdjustmentMinor,
+      );
+      widget.onSaved();
+    } on ArgumentError catch (error) {
+      showSnack(context, error.message.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final members = store.membersForGroup(widget.groupId, activeOnly: true);
+    final selectedParticipants = _participants.toList();
+    final total = parseMoneyToMinor(_amount.text);
+    final billTotals = _billTotals;
+    final itemModeActive = !_skipItemSplit && _splitMode == SplitMode.item;
+    final payerAmounts = <String, int>{};
+    var hasMissingPayer = false;
+    var hasZeroPayerAmount = false;
+    for (final payer in _payerRows) {
+      final paid = parseMoneyToMinor(payer.amount.text);
+      if (payer.userId == null) {
+        hasMissingPayer = true;
+      }
+      if (paid <= 0) {
+        hasZeroPayerAmount = true;
+      }
+      if (payer.userId != null && paid > 0) {
+        payerAmounts[payer.userId!] = paid;
+      }
+    }
+    final payerTotal = payerAmounts.values.fold<int>(
+      0,
+      (sum, value) => sum + value,
+    );
+    final splitPreview = _manualSplitPreviewFor(
+      total: total,
+      participants: selectedParticipants,
+      splitMode: itemModeActive ? SplitMode.item : _splitMode,
+      equalPreview: _equalPreview,
+      custom: _custom,
+      percentages: _percentages,
+      shares: _shares,
+      itemDrafts: _items,
+    );
+    final splitTotal = splitPreview.values.fold<int>(
+      0,
+      (sum, value) => sum + value,
+    );
+    final payerError = _payerValidationMessage(
+      total: total,
+      payerTotal: payerTotal,
+      hasMissingPayer: hasMissingPayer,
+      hasZeroPayerAmount: hasZeroPayerAmount,
+    );
+    final itemError = itemModeActive
+        ? _itemValidationMessage(
+            total: total,
+            totals: billTotals,
+            items: _items,
+          )
+        : null;
+    final splitError = selectedParticipants.isEmpty
+        ? 'Please select participants.'
+        : itemError ??
+              (splitTotal != total
+                  ? 'Participant split amounts must add up to the total expense.'
+                  : null);
+    final readyToSave =
+        total > 0 &&
+        payerError == null &&
+        splitError == null &&
+        splitPreview.isNotEmpty;
+    final canAddAnotherPayer =
+        _payerRows.length < members.length && payerTotal < total;
+
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      elevation: 16,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+      child: CustomScrollView(
+        controller: widget.scrollController,
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+              child: Column(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.edit_note_outlined,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Manual Entry',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w900),
+                            ),
+                            const Text(
+                              'Enter bill manually or edit scanned items',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 28),
+            sliver: SliverList.list(
+              children: [
+                if (widget.reviewMessage != null) ...[
+                  _ReviewMessage(widget.reviewMessage!),
+                  const SizedBox(height: 12),
+                ],
+                _DialogSection(
+                  title: 'Participants',
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final member in members)
+                        ParticipantSelectorCard(
+                          user: store.userById(member.userId),
+                          selected: _participants.contains(member.userId),
+                          onTap: () {
+                            setState(() {
+                              if (_participants.contains(member.userId)) {
+                                _removeParticipant(member.userId);
+                              } else {
+                                _participants.add(member.userId);
+                              }
+                              _refreshEqualPreview();
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _DialogSection(
+                  title: 'Expense details',
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _title,
+                        decoration: const InputDecoration(labelText: 'Title'),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _amount,
+                        enabled: !itemModeActive,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Total amount',
+                          prefixText: 'NPR ',
+                        ),
+                        onChanged: (_) {
+                          setState(() {
+                            _syncSinglePayerToTotal();
+                            _refreshEqualPreview();
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _note,
+                        decoration: const InputDecoration(labelText: 'Note'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _DialogSection(
+                  title: 'Who paid?',
+                  child: Column(
+                    children: [
+                      for (var index = 0; index < _payerRows.length; index++)
+                        Padding(
+                          padding: EdgeInsets.only(
+                            bottom: index == _payerRows.length - 1 ? 0 : 8,
+                          ),
+                          child: _PayerInputRow(
+                            members: members,
+                            payer: _payerRows[index],
+                            selectedByOtherRows: {
+                              for (
+                                var other = 0;
+                                other < _payerRows.length;
+                                other++
+                              )
+                                if (other != index &&
+                                    _payerRows[other].userId != null)
+                                  _payerRows[other].userId!,
+                            },
+                            canRemove: index > 0,
+                            onChanged: () => setState(() {}),
+                            onRemove: () {
+                              setState(() {
+                                final removed = _payerRows.removeAt(index);
+                                removed.dispose();
+                              });
+                            },
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: canAddAnotherPayer
+                              ? () {
+                                  setState(() {
+                                    final selected = _payerRows
+                                        .map((payer) => payer.userId)
+                                        .whereType<String>()
+                                        .toSet();
+                                    final next = members
+                                        .map((member) => member.userId)
+                                        .firstWhere(
+                                          (id) => !selected.contains(id),
+                                          orElse: () => members.first.userId,
+                                        );
+                                    _payerRows.add(_PayerDraft(userId: next));
+                                  });
+                                }
+                              : null,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add another payer'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _DialogSection(
+                  title: 'Item list',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _skipItemSplit,
+                        title: const Text(
+                          'Skip item split and use total amount',
+                        ),
+                        onChanged: (value) {
+                          setState(() {
+                            _skipItemSplit = value;
+                            _splitMode = value
+                                ? SplitMode.equal
+                                : SplitMode.item;
+                            if (!value) {
+                              _syncTotalFromItems();
+                            }
+                            _refreshEqualPreview();
+                          });
+                        },
+                      ),
+                      if (!_skipItemSplit) ...[
+                        for (var index = 0; index < _items.length; index++)
+                          _ExpenseItemDraftRow(
+                            key: ValueKey(_items[index]),
+                            item: _items[index],
+                            selectedParticipants: selectedParticipants,
+                            onChanged: () {
+                              setState(() {
+                                _syncTotalFromItems();
+                                _refreshEqualPreview();
+                              });
+                            },
+                            onRemove: () {
+                              setState(() {
+                                final removed = _items.removeAt(index);
+                                removed.dispose();
+                                _syncTotalFromItems();
+                                _refreshEqualPreview();
+                              });
+                            },
+                          ),
+                        const SizedBox(height: 8),
+                      ],
+                      OutlinedButton.icon(
+                        onPressed: _addItem,
+                        icon: const Icon(Icons.add),
+                        label: const Text('+ Add item'),
+                      ),
+                      if (!_skipItemSplit) ...[
+                        const SizedBox(height: 12),
+                        _BillTotalsCard(totals: billTotals),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _DialogSection(
+                  title: 'Split mode',
+                  child: DropdownButtonFormField<SplitMode>(
+                    initialValue: _splitMode,
+                    decoration: const InputDecoration(labelText: 'Split mode'),
+                    items: [
+                      for (final item in SplitMode.values)
+                        DropdownMenuItem(
+                          value: item,
+                          child: Text(enumLabel(item)),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        unawaited(_changeSplitMode(value));
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _DialogSection(
+                  title: 'Split preview',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_splitMode == SplitMode.custom)
+                        _AmountGrid(
+                          ids: selectedParticipants,
+                          label: 'Custom amount',
+                          values: _custom,
+                          suffix: 'NPR',
+                          onChanged: () => setState(() {}),
+                        ),
+                      if (_splitMode == SplitMode.percentage)
+                        _AmountGrid(
+                          ids: selectedParticipants,
+                          label: 'Percentage',
+                          values: _percentages,
+                          suffix: '%',
+                          maxValue: 100,
+                          onChanged: () => setState(() {}),
+                        ),
+                      if (_splitMode == SplitMode.shares)
+                        _AmountGrid(
+                          ids: selectedParticipants,
+                          label: 'Share units',
+                          values: _shares,
+                          suffix: 'x',
+                          onChanged: () => setState(() {}),
+                        ),
+                      SplitPreview(
+                        subtitle: _splitMode == SplitMode.equal
+                            ? 'Calculated equal split'
+                            : '${enumLabel(_splitMode)} split',
+                        expenseTotal: total,
+                        payerAmounts: payerAmounts,
+                        participantShares: splitPreview,
+                        participants: selectedParticipants,
+                        showRoundingNote:
+                            _splitMode == SplitMode.equal &&
+                            selectedParticipants.isNotEmpty &&
+                            total % selectedParticipants.length != 0,
+                        payerError: payerError,
+                        splitError: splitError,
+                        ready: readyToSave,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: readyToSave
+                            ? () => _save(
+                                total: total,
+                                payerAmounts: payerAmounts,
+                                selectedParticipants: selectedParticipants,
+                              )
+                            : null,
+                        child: const Text('Save expense'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReviewMessage extends StatelessWidget {
+  const _ReviewMessage(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.fact_check_outlined, color: accent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: accent, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExpenseItemDraftRow extends StatefulWidget {
+  const _ExpenseItemDraftRow({
+    required this.item,
+    required this.selectedParticipants,
+    required this.onChanged,
+    required this.onRemove,
+    super.key,
+  });
+
+  final _ExpenseItemDraft item;
+  final List<String> selectedParticipants;
+  final VoidCallback onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  State<_ExpenseItemDraftRow> createState() => _ExpenseItemDraftRowState();
+}
+
+class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
+  final _nameFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _nameFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final item = widget.item;
+    final lowConfidence = item.confidence < 0.85;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: lowConfidence
+            ? toneColor(context, Tone.warning).withValues(alpha: 0.07)
+            : scheme.surfaceContainerHighest.withValues(alpha: 0.32),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: lowConfidence
+              ? toneColor(context, Tone.warning).withValues(alpha: 0.35)
+              : scheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  focusNode: _nameFocus,
+                  controller: item.name,
+                  decoration: const InputDecoration(labelText: 'Item name'),
+                  onChanged: (_) => widget.onChanged(),
+                ),
+              ),
+              SizedBox(
+                width: 86,
+                child: TextField(
+                  controller: item.quantity,
+                  decoration: const InputDecoration(labelText: 'Qty'),
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => widget.onChanged(),
+                ),
+              ),
+              SizedBox(
+                width: 132,
+                child: TextField(
+                  controller: item.unitPrice,
+                  decoration: const InputDecoration(
+                    labelText: 'Unit price',
+                    prefixText: 'NPR ',
+                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => widget.onChanged(),
+                ),
+              ),
+              SizedBox(
+                width: 132,
+                child: TextField(
+                  controller: item.amount,
+                  decoration: const InputDecoration(
+                    labelText: 'Amount',
+                    prefixText: 'NPR ',
+                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => widget.onChanged(),
+                ),
+              ),
+              IconButton(
+                onPressed: _nameFocus.requestFocus,
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: 'Edit item',
+              ),
+              IconButton(
+                onPressed: widget.onRemove,
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete item',
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              SizedBox(
+                width: 190,
+                child: DropdownButtonFormField<_BillLineKind>(
+                  initialValue: item.kind,
+                  decoration: const InputDecoration(labelText: 'Line type'),
+                  items: [
+                    for (final kind in _BillLineKind.values)
+                      DropdownMenuItem(
+                        value: kind,
+                        child: Text(_billLineKindLabel(kind)),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    item.kind = value ?? item.kind;
+                    widget.onChanged();
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Total ${statementMoney(item.amountMinor)}',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Assign participants',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final id in widget.selectedParticipants)
+                FilterChip(
+                  selected: item.assignedTo.contains(id),
+                  avatar: UserAvatar(user: store.userById(id), small: true),
+                  label: Text(store.nameOf(id)),
+                  onSelected: (selected) {
+                    if (selected) {
+                      item.assignedTo.add(id);
+                    } else {
+                      item.assignedTo.remove(id);
+                    }
+                    widget.onChanged();
+                  },
+                ),
+              if (widget.selectedParticipants.isEmpty)
+                const Text('Select participants before assigning items.'),
+            ],
+          ),
+          if (lowConfidence) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Some items may need correction. Please review before continuing.',
+              style: TextStyle(
+                color: toneColor(context, Tone.warning),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BillTotals {
+  const _BillTotals({
+    required this.subtotalMinor,
+    required this.serviceChargeMinor,
+    required this.taxMinor,
+    required this.discountMinor,
+    required this.roundingAdjustmentMinor,
+  });
+
+  factory _BillTotals.fromDrafts(List<_ExpenseItemDraft> drafts) {
+    var subtotal = 0;
+    var service = 0;
+    var tax = 0;
+    var discount = 0;
+    var rounding = 0;
+    for (final draft in drafts) {
+      final amount = draft.amountMinor;
+      switch (draft.kind) {
+        case _BillLineKind.item:
+          subtotal += amount;
+        case _BillLineKind.serviceCharge:
+          service += amount;
+        case _BillLineKind.tax:
+          tax += amount;
+        case _BillLineKind.discount:
+          discount += amount.isNegative ? amount : -amount;
+        case _BillLineKind.rounding:
+          rounding += amount;
+      }
+    }
+    return _BillTotals(
+      subtotalMinor: subtotal,
+      serviceChargeMinor: service,
+      taxMinor: tax,
+      discountMinor: discount,
+      roundingAdjustmentMinor: rounding,
+    );
+  }
+
+  final int subtotalMinor;
+  final int serviceChargeMinor;
+  final int taxMinor;
+  final int discountMinor;
+  final int roundingAdjustmentMinor;
+
+  int get finalTotalMinor =>
+      subtotalMinor +
+      serviceChargeMinor +
+      taxMinor +
+      discountMinor +
+      roundingAdjustmentMinor;
+}
+
+class _BillTotalsCard extends StatelessWidget {
+  const _BillTotalsCard({required this.totals});
+
+  final _BillTotals totals;
+
+  @override
+  Widget build(BuildContext context) {
+    return PreviewCard(
+      icon: Icons.receipt_long_outlined,
+      title: 'Bill total calculation',
+      child: Column(
+        children: [
+          _BillTotalLine('Items subtotal', totals.subtotalMinor),
+          _BillTotalLine('Service charge', totals.serviceChargeMinor),
+          _BillTotalLine('VAT/Tax', totals.taxMinor),
+          _BillTotalLine('Discount', totals.discountMinor),
+          _BillTotalLine('Rounding adjustment', totals.roundingAdjustmentMinor),
+          const Divider(),
+          _BillTotalLine(
+            'Final total',
+            totals.finalTotalMinor,
+            emphasized: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BillTotalLine extends StatelessWidget {
+  const _BillTotalLine(this.label, this.amountMinor, {this.emphasized = false});
+
+  final String label;
+  final int amountMinor;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: emphasized ? FontWeight.w900 : FontWeight.w700,
+              ),
+            ),
+          ),
+          Text(
+            statementMoney(amountMinor),
+            style: TextStyle(
+              fontWeight: emphasized ? FontWeight.w900 : FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Map<String, int> _manualSplitPreviewFor({
+  required int total,
+  required List<String> participants,
+  required SplitMode splitMode,
+  required Map<String, int> equalPreview,
+  required Map<String, String> custom,
+  required Map<String, String> percentages,
+  required Map<String, String> shares,
+  required List<_ExpenseItemDraft> itemDrafts,
+}) {
+  if (participants.isEmpty) {
+    return <String, int>{};
+  }
+  try {
+    return switch (splitMode) {
+      SplitMode.equal => {
+        for (final id in participants) id: equalPreview[id] ?? 0,
+      },
+      SplitMode.custom => {
+        for (final id in participants) id: parseMoneyToMinor(custom[id] ?? ''),
+      },
+      SplitMode.percentage => _amountMapFromList(
+        participants,
+        percentageShares(total, [
+          for (final id in participants)
+            double.tryParse(percentages[id] ?? '') ?? 0,
+        ]),
+      ),
+      SplitMode.shares => _amountMapFromList(
+        participants,
+        unitShares(total, [
+          for (final id in participants) int.tryParse(shares[id] ?? '') ?? 1,
+        ]),
+      ),
+      SplitMode.item => _manualItemSplitPreview(
+        total,
+        participants,
+        itemDrafts,
+      ),
+    };
+  } on ArgumentError {
+    return <String, int>{};
+  }
+}
+
+Map<String, int> _manualItemSplitPreview(
+  int total,
+  List<String> participants,
+  List<_ExpenseItemDraft> itemDrafts,
+) {
+  final preview = <String, int>{for (final id in participants) id: 0};
+  for (final item in itemDrafts) {
+    final users = item.assignedTo.where(participants.contains).toList();
+    final safeUsers = users.isEmpty ? participants : users;
+    final splits = equalShares(item.amountMinor, safeUsers);
+    for (var index = 0; index < safeUsers.length; index++) {
+      preview[safeUsers[index]] =
+          (preview[safeUsers[index]] ?? 0) + splits[index];
+    }
+  }
+  final current = preview.values.fold<int>(0, (sum, value) => sum + value);
+  final delta = total - current;
+  if (delta != 0 && participants.isNotEmpty) {
+    final adjustments = equalShares(delta.abs(), participants);
+    for (var index = 0; index < participants.length; index++) {
+      preview[participants[index]] =
+          (preview[participants[index]] ?? 0) +
+          (delta.isNegative ? -adjustments[index] : adjustments[index]);
+    }
+  }
+  return preview;
+}
+
+String? _itemValidationMessage({
+  required int total,
+  required _BillTotals totals,
+  required List<_ExpenseItemDraft> items,
+}) {
+  if (items.isEmpty) {
+    return 'Add at least one bill item or skip item split.';
+  }
+  if (items.any((item) => item.name.text.trim().isEmpty)) {
+    return 'Every item needs a name.';
+  }
+  if (items.any((item) => item.amountMinor == 0)) {
+    return 'Every item needs an amount.';
+  }
+  if (totals.finalTotalMinor != total) {
+    return 'Total item amount must equal the final expense total.';
+  }
+  return null;
+}
+
+String _billLineKindLabel(_BillLineKind kind) {
+  return switch (kind) {
+    _BillLineKind.item => 'Item',
+    _BillLineKind.serviceCharge => 'Service charge',
+    _BillLineKind.tax => 'VAT/Tax',
+    _BillLineKind.discount => 'Discount',
+    _BillLineKind.rounding => 'Rounding',
+  };
+}
+
 Future<void> showMyQrDialog(BuildContext context) async {
   final store = StoreScope.of(context);
   final code = store.qrInviteCodeFor(store.currentUser);
@@ -3026,7 +4778,7 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
             hasZeroPayerAmount: hasZeroPayerAmount,
           );
           final splitError = selectedParticipants.isEmpty
-              ? 'Choose at least one participant.'
+              ? 'Please select participants.'
               : splitTotal != total
               ? 'Participant split amounts must add up to the total expense.'
               : null;
@@ -3035,6 +4787,8 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
               payerError == null &&
               splitError == null &&
               splitPreview.isNotEmpty;
+          final canAddAnotherPayer =
+              payerRows.length < members.length && payerTotal < total;
 
           return AlertDialog(
             title: const Text('Add Expense'),
@@ -3051,48 +4805,27 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              for (final id in selectedParticipants)
-                                InputChip(
-                                  avatar: UserAvatar(
-                                    user: store.userById(id),
-                                    small: true,
-                                  ),
-                                  label: Text(store.nameOf(id)),
-                                  onDeleted: () {
-                                    setState(() {
-                                      participants.remove(id);
-                                      custom.remove(id);
-                                      percentages.remove(id);
-                                      shares.remove(id);
-                                      refreshEqualPreview();
-                                    });
-                                  },
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
+                            spacing: 10,
+                            runSpacing: 10,
                             children: [
                               for (final member in members)
-                                FilterChip(
+                                ParticipantSelectorCard(
+                                  user: store.userById(member.userId),
                                   selected: participants.contains(
                                     member.userId,
                                   ),
-                                  avatar: UserAvatar(
-                                    user: store.userById(member.userId),
-                                    small: true,
-                                  ),
-                                  label: Text(store.nameOf(member.userId)),
-                                  onSelected: (checked) {
+                                  onTap: () {
                                     setState(() {
-                                      checked
-                                          ? participants.add(member.userId)
-                                          : participants.remove(member.userId);
+                                      if (participants.contains(
+                                        member.userId,
+                                      )) {
+                                        participants.remove(member.userId);
+                                        custom.remove(member.userId);
+                                        percentages.remove(member.userId);
+                                        shares.remove(member.userId);
+                                      } else {
+                                        participants.add(member.userId);
+                                      }
                                       refreshEqualPreview();
                                     });
                                   },
@@ -3175,9 +4908,8 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                           Align(
                             alignment: Alignment.centerLeft,
                             child: OutlinedButton.icon(
-                              onPressed: payerRows.length >= members.length
-                                  ? null
-                                  : () {
+                              onPressed: canAddAnotherPayer
+                                  ? () {
                                       setState(() {
                                         final selected = payerRows
                                             .map((payer) => payer.userId)
@@ -3194,15 +4926,12 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                                           _PayerDraft(userId: next),
                                         );
                                       });
-                                    },
+                                    }
+                                  : null,
                               icon: const Icon(Icons.add),
                               label: const Text('Add another payer'),
                             ),
                           ),
-                          if (payerError != null) ...[
-                            const SizedBox(height: 8),
-                            _ValidationText(payerError),
-                          ],
                         ],
                       ),
                     ),
@@ -3231,11 +4960,6 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (splitMode == SplitMode.equal)
-                            _AmountPreview(
-                              title: 'Calculated equal split',
-                              amounts: equalPreview,
-                            ),
                           if (splitMode == SplitMode.custom)
                             _AmountGrid(
                               ids: selectedParticipants,
@@ -3250,6 +4974,7 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                               label: 'Percentage',
                               values: percentages,
                               suffix: '%',
+                              maxValue: 100,
                               onChanged: () => setState(() {}),
                             ),
                           if (splitMode == SplitMode.shares)
@@ -3321,24 +5046,24 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                                 ),
                               ),
                           ],
-                          if (splitError != null) ...[
-                            const SizedBox(height: 8),
-                            _ValidationText(splitError),
-                          ],
-                          const SizedBox(height: 8),
-                          _ExpenseSplitPreview(
+                          SplitPreview(
+                            subtitle: splitMode == SplitMode.equal
+                                ? 'Calculated equal split'
+                                : '${enumLabel(splitMode)} split',
+                            expenseTotal: total,
                             payerAmounts: payerAmounts,
                             participantShares: splitPreview,
+                            participants: selectedParticipants,
+                            showRoundingNote:
+                                splitMode == SplitMode.equal &&
+                                selectedParticipants.isNotEmpty &&
+                                total % selectedParticipants.length != 0,
+                            payerError: payerError,
+                            splitError: splitError,
+                            ready: readyToSave,
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    _SaveSummary(
-                      expenseTotal: total,
-                      payerTotal: payerTotal,
-                      splitTotal: splitTotal,
-                      ready: readyToSave,
                     ),
                   ],
                 ),
@@ -3543,8 +5268,627 @@ class _PayerInputRow extends StatelessWidget {
   }
 }
 
-class _ValidationText extends StatelessWidget {
-  const _ValidationText(this.message);
+class ParticipantSelectorCard extends StatelessWidget {
+  const ParticipantSelectorCard({
+    required this.user,
+    required this.selected,
+    required this.onTap,
+    super.key,
+  });
+
+  final AppUser user;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final accent = toneColor(context, Tone.success);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 210, maxWidth: 260),
+      child: Material(
+        color: selected ? accent.withValues(alpha: 0.08) : scheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        elevation: selected ? 1 : 0,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected
+                    ? accent.withValues(alpha: 0.70)
+                    : scheme.outlineVariant,
+                width: selected ? 1.4 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                UserAvatar(user: user, small: true),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    user.displayName,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                      color: selected ? accent : scheme.onSurface,
+                    ),
+                  ),
+                ),
+                if (selected) ...[
+                  const SizedBox(width: 8),
+                  Icon(Icons.check_circle, size: 18, color: accent),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class SplitPreview extends StatelessWidget {
+  const SplitPreview({
+    required this.subtitle,
+    required this.expenseTotal,
+    required this.payerAmounts,
+    required this.participantShares,
+    required this.participants,
+    required this.showRoundingNote,
+    required this.payerError,
+    required this.splitError,
+    required this.ready,
+    super.key,
+  });
+
+  final String subtitle;
+  final int expenseTotal;
+  final Map<String, int> payerAmounts;
+  final Map<String, int> participantShares;
+  final List<String> participants;
+  final bool showRoundingNote;
+  final String? payerError;
+  final String? splitError;
+  final bool ready;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final people = <String>{
+      ...payerAmounts.keys,
+      ...participantShares.keys,
+    }.toList()..sort((a, b) => store.nameOf(a).compareTo(store.nameOf(b)));
+    final payerTotal = payerAmounts.values.fold<int>(
+      0,
+      (sum, amount) => sum + amount,
+    );
+    final splitTotal = participantShares.values.fold<int>(
+      0,
+      (sum, amount) => sum + amount,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          subtitle,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        PreviewCard(
+          icon: Icons.groups_2_outlined,
+          title: 'Participants & shares',
+          trailing: _CountPill(
+            label:
+                '${participants.length} ${participants.length == 1 ? 'participant' : 'participants'}',
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (participantShares.isEmpty)
+                const _PreviewEmptyLine('Please select participants.')
+              else
+                _ResponsivePreviewGrid(
+                  children: [
+                    for (final entry in participantShares.entries)
+                      ParticipantShareRow(
+                        user: store.userById(entry.key),
+                        amountMinor: entry.value,
+                      ),
+                  ],
+                ),
+              if (showRoundingNote) ...[
+                const SizedBox(height: 10),
+                _RoundingNote(
+                  message:
+                      'Rounded by ${statementMoney(1)} to match the total.',
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        PreviewCard(
+          icon: Icons.account_balance_wallet_outlined,
+          title: 'Paid by',
+          trailing: _CountPill(
+            label:
+                '${payerAmounts.length} ${payerAmounts.length == 1 ? 'payer' : 'payers'}',
+          ),
+          child: payerAmounts.isEmpty
+              ? const _PreviewEmptyLine('Please select who paid.')
+              : Column(
+                  children: [
+                    for (final entry in payerAmounts.entries)
+                      PayerRow(
+                        user: store.userById(entry.key),
+                        amountMinor: entry.value,
+                      ),
+                  ],
+                ),
+        ),
+        const SizedBox(height: 12),
+        PreviewCard(
+          icon: Icons.balance_outlined,
+          title: 'Net result',
+          child: people.isEmpty
+              ? const _PreviewEmptyLine(
+                  'Select payers and participants to preview balances.',
+                )
+              : Column(
+                  children: [
+                    for (final id in people)
+                      NetResultRow(
+                        user: store.userById(id),
+                        paidMinor: payerAmounts[id] ?? 0,
+                        shareMinor: participantShares[id] ?? 0,
+                      ),
+                  ],
+                ),
+        ),
+        const SizedBox(height: 12),
+        ValidationSummaryCard(
+          expenseTotal: expenseTotal,
+          payerTotal: payerTotal,
+          splitTotal: splitTotal,
+          payerError: payerError,
+          splitError: splitError,
+          ready: ready,
+        ),
+      ],
+    );
+  }
+}
+
+class PreviewCard extends StatelessWidget {
+  const PreviewCard({
+    required this.icon,
+    required this.title,
+    required this.child,
+    this.trailing,
+    super.key,
+  });
+
+  final IconData icon;
+  final String title;
+  final Widget child;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final accent = toneColor(context, Tone.success);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.16)),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: accent, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                ),
+              ),
+              ?trailing,
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: scheme.outlineVariant),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class ParticipantShareRow extends StatelessWidget {
+  const ParticipantShareRow({
+    required this.user,
+    required this.amountMinor,
+    super.key,
+  });
+
+  final AppUser user;
+  final int amountMinor;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PersonAmountRow(
+      user: user,
+      trailing: MoneyText(statementMoney(amountMinor)),
+    );
+  }
+}
+
+class PayerRow extends StatelessWidget {
+  const PayerRow({required this.user, required this.amountMinor, super.key});
+
+  final AppUser user;
+  final int amountMinor;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PersonAmountRow(
+      user: user,
+      trailing: MoneyText('Paid ${statementMoney(amountMinor)}'),
+    );
+  }
+}
+
+class NetResultRow extends StatelessWidget {
+  const NetResultRow({
+    required this.user,
+    required this.paidMinor,
+    required this.shareMinor,
+    super.key,
+  });
+
+  final AppUser user;
+  final int paidMinor;
+  final int shareMinor;
+
+  @override
+  Widget build(BuildContext context) {
+    final net = paidMinor - shareMinor;
+    final scheme = Theme.of(context).colorScheme;
+    final accent = toneColor(context, Tone.success);
+    final label = net > 0
+        ? 'Gets back ${statementMoney(net)}'
+        : net < 0
+        ? 'Owes ${statementMoney(net.abs())}'
+        : 'Settled';
+    final color = net > 0 ? accent : scheme.onSurfaceVariant;
+    final icon = net > 0
+        ? Icons.call_received_rounded
+        : net < 0
+        ? Icons.call_made_rounded
+        : Icons.check_circle_outline;
+    return _PersonAmountRow(
+      user: user,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: color, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ValidationSummaryCard extends StatelessWidget {
+  const ValidationSummaryCard({
+    required this.expenseTotal,
+    required this.payerTotal,
+    required this.splitTotal,
+    required this.payerError,
+    required this.splitError,
+    required this.ready,
+    super.key,
+  });
+
+  final int expenseTotal;
+  final int payerTotal;
+  final int splitTotal;
+  final String? payerError;
+  final String? splitError;
+  final bool ready;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = ready ? Tone.success : Tone.warning;
+    final color = toneColor(context, tone);
+    final messages = [?payerError, ?splitError];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: ready ? 0.08 : 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: ready ? 0.42 : 0.32)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stacked = constraints.maxWidth < 560;
+              final items = [
+                _SummaryValue(
+                  label: 'Expense total',
+                  value: statementMoney(expenseTotal),
+                ),
+                _SummaryValue(
+                  label: 'Total paid by payers',
+                  value: statementMoney(payerTotal),
+                ),
+                _SummaryValue(
+                  label: 'Total split among participants',
+                  value: statementMoney(splitTotal),
+                ),
+              ];
+              if (stacked) {
+                return Column(
+                  children: [
+                    for (var index = 0; index < items.length; index++) ...[
+                      if (index > 0) const SizedBox(height: 10),
+                      items[index],
+                    ],
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var index = 0; index < items.length; index++) ...[
+                    if (index > 0) const SizedBox(width: 12),
+                    Expanded(child: items[index]),
+                  ],
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(
+                ready ? Icons.check_circle : Icons.error_outline,
+                color: color,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                ready
+                    ? 'Status: Ready to save'
+                    : 'Status: Fix totals before saving',
+                style: TextStyle(color: color, fontWeight: FontWeight.w900),
+              ),
+            ],
+          ),
+          if (messages.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final message in messages)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  message,
+                  style: TextStyle(color: color, fontWeight: FontWeight.w700),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class MoneyText extends StatelessWidget {
+  const MoneyText(this.value, {super.key});
+
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      value,
+      textAlign: TextAlign.right,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(
+        context,
+      ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w900),
+    );
+  }
+}
+
+class _PersonAmountRow extends StatelessWidget {
+  const _PersonAmountRow({required this.user, required this.trailing});
+
+  final AppUser user;
+  final Widget trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          UserAvatar(user: user, small: true),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              user.displayName,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Flexible(child: trailing),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResponsivePreviewGrid extends StatelessWidget {
+  const _ResponsivePreviewGrid({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 560 ? 2 : 1;
+        final spacing = columns == 1 ? 0.0 : 10.0;
+        final itemWidth =
+            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: 0,
+          children: [
+            for (final child in children)
+              SizedBox(
+                width: itemWidth.isFinite ? itemWidth : null,
+                child: child,
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CountPill extends StatelessWidget {
+  const _CountPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = toneColor(context, Tone.success);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: accent.withValues(alpha: 0.20)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: accent, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
+class _SummaryValue extends StatelessWidget {
+  const _SummaryValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoundingNote extends StatelessWidget {
+  const _RoundingNote({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = toneColor(context, Tone.success);
+    return Row(
+      children: [
+        Icon(Icons.info_outline, size: 16, color: accent),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            message,
+            style: TextStyle(color: accent, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PreviewEmptyLine extends StatelessWidget {
+  const _PreviewEmptyLine(this.message);
 
   final String message;
 
@@ -3553,120 +5897,8 @@ class _ValidationText extends StatelessWidget {
     return Text(
       message,
       style: TextStyle(
-        color: Theme.of(context).colorScheme.error,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
         fontWeight: FontWeight.w700,
-      ),
-    );
-  }
-}
-
-class _ExpenseSplitPreview extends StatelessWidget {
-  const _ExpenseSplitPreview({
-    required this.payerAmounts,
-    required this.participantShares,
-  });
-
-  final Map<String, int> payerAmounts;
-  final Map<String, int> participantShares;
-
-  @override
-  Widget build(BuildContext context) {
-    final store = StoreScope.of(context);
-    final people = <String>{...payerAmounts.keys, ...participantShares.keys};
-    if (people.isEmpty) {
-      return const EmptyState(
-        icon: Icons.receipt_long_outlined,
-        title: 'No preview yet',
-        body: 'Select participants and payer amounts to preview balances.',
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final entry in payerAmounts.entries)
-              Chip(
-                avatar: UserAvatar(
-                  user: store.userById(entry.key),
-                  small: true,
-                ),
-                label: Text(
-                  '${store.nameOf(entry.key)} paid ${statementMoney(entry.value)}',
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final entry in participantShares.entries)
-              Chip(
-                avatar: UserAvatar(
-                  user: store.userById(entry.key),
-                  small: true,
-                ),
-                label: Text(
-                  '${store.nameOf(entry.key)} share ${statementMoney(entry.value)}',
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        for (final id in people)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              _netPreviewLine(store, id, payerAmounts, participantShares),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _SaveSummary extends StatelessWidget {
-  const _SaveSummary({
-    required this.expenseTotal,
-    required this.payerTotal,
-    required this.splitTotal,
-    required this.ready,
-  });
-
-  final int expenseTotal;
-  final int payerTotal;
-  final int splitTotal;
-  final bool ready;
-
-  @override
-  Widget build(BuildContext context) {
-    final tone = ready ? Tone.success : Tone.warning;
-    final color = toneColor(context, tone);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        border: Border.all(color: color.withValues(alpha: 0.24)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Expense total: ${statementMoney(expenseTotal)}'),
-          Text('Total paid by payers: ${statementMoney(payerTotal)}'),
-          Text('Total split among participants: ${statementMoney(splitTotal)}'),
-          Text(
-            ready
-                ? 'Status: Ready to save'
-                : 'Status: Fix totals before saving',
-            style: TextStyle(color: color, fontWeight: FontWeight.w800),
-          ),
-        ],
       ),
     );
   }
@@ -3777,37 +6009,13 @@ String? _payerValidationMessage({
   return null;
 }
 
-String _netPreviewLine(
-  AppStore store,
-  String userId,
-  Map<String, int> payerAmounts,
-  Map<String, int> participantShares,
-) {
-  final paid = payerAmounts[userId] ?? 0;
-  final share = participantShares[userId] ?? 0;
-  final net = paid - share;
-  final name = store.nameOf(userId);
-  if (paid > 0 && share > 0 && net > 0) {
-    return '$name paid ${statementMoney(paid)} and owes ${statementMoney(share)}, so they get back ${statementMoney(net)}.';
-  }
-  if (paid > 0 && share > 0 && net < 0) {
-    return '$name paid ${statementMoney(paid)} and owes ${statementMoney(share)}, so they still owe ${statementMoney(net.abs())}.';
-  }
-  if (paid > 0 && share == 0) {
-    return '$name paid ${statementMoney(paid)} and did not participate, so they get back ${statementMoney(paid)}.';
-  }
-  if (paid == 0 && share > 0) {
-    return '$name participated and owes ${statementMoney(share)}.';
-  }
-  return '$name is balanced for this expense.';
-}
-
 class _AmountGrid extends StatelessWidget {
   const _AmountGrid({
     required this.ids,
     required this.label,
     required this.values,
     required this.suffix,
+    this.maxValue,
     this.onChanged,
   });
 
@@ -3815,6 +6023,7 @@ class _AmountGrid extends StatelessWidget {
   final String label;
   final Map<String, String> values;
   final String suffix;
+  final num? maxValue;
   final VoidCallback? onChanged;
 
   @override
@@ -3832,6 +6041,9 @@ class _AmountGrid extends StatelessWidget {
                 suffixText: suffix,
               ),
               keyboardType: TextInputType.number,
+              inputFormatters: [
+                if (maxValue != null) _MaxNumberInputFormatter(maxValue!),
+              ],
               onChanged: (value) {
                 values[id] = value;
                 onChanged?.call();
@@ -3843,41 +6055,25 @@ class _AmountGrid extends StatelessWidget {
   }
 }
 
-class _AmountPreview extends StatelessWidget {
-  const _AmountPreview({required this.title, required this.amounts});
+class _MaxNumberInputFormatter extends TextInputFormatter {
+  const _MaxNumberInputFormatter(this.maxValue);
 
-  final String title;
-  final Map<String, int> amounts;
+  final num maxValue;
 
   @override
-  Widget build(BuildContext context) {
-    final store = StoreScope.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final entry in amounts.entries)
-                Chip(
-                  avatar: UserAvatar(
-                    user: store.userById(entry.key),
-                    small: true,
-                  ),
-                  label: Text(
-                    '${store.nameOf(entry.key)}: ${money(entry.value)}',
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final raw = newValue.text.trim();
+    if (raw.isEmpty) {
+      return newValue;
+    }
+    final value = num.tryParse(raw);
+    if (value == null || value > maxValue) {
+      return oldValue;
+    }
+    return newValue;
   }
 }
 

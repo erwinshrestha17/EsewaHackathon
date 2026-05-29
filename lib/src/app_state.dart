@@ -609,6 +609,7 @@ class AppStore extends ChangeNotifier {
     int serviceChargeMinor = 0,
     int discountMinor = 0,
     int tipMinor = 0,
+    int roundingAdjustmentMinor = 0,
   }) {
     final participants = participantIds.toSet().toList();
     if (participants.isEmpty) {
@@ -706,8 +707,8 @@ class AppStore extends ChangeNotifier {
               id: itemId,
               expenseId: expenseId,
               label: parsedItem.label,
-              quantity: 1,
-              unitAmountMinor: parsedItem.amountMinor,
+              quantity: parsedItem.quantity,
+              unitAmountMinor: parsedItem.unitAmountMinor,
               totalAmountMinor: parsedItem.amountMinor,
               ocrConfidence: parsedItem.confidence,
               sortOrder: itemIndex,
@@ -769,6 +770,7 @@ class AppStore extends ChangeNotifier {
         billServiceChargeMinor: serviceChargeMinor,
         billDiscountMinor: discountMinor,
         billTipMinor: tipMinor,
+        billRoundingAdjustmentMinor: roundingAdjustmentMinor,
         payers: payers,
         shares: shares,
         items: items,

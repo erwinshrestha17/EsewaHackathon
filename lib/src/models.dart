@@ -811,10 +811,14 @@ class ParsedReceiptItem {
   ParsedReceiptItem({
     required this.label,
     required this.amountMinor,
+    this.quantity = 1,
+    int? unitAmountMinor,
     this.confidence = 0.94,
-  });
+  }) : unitAmountMinor = unitAmountMinor ?? amountMinor;
 
   final String label;
   final int amountMinor;
+  final int quantity;
+  final int unitAmountMinor;
   final double confidence;
 }
