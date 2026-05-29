@@ -211,6 +211,8 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Open create'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Create Expense Group'), findsWidgets);
+    expect(find.text('Dhukuti Group'), findsNothing);
     final memberChips = tester.widgetList<FilterChip>(find.byType(FilterChip));
     expect(memberChips, isNotEmpty);
     expect(memberChips.every((chip) => !chip.selected), isTrue);
@@ -220,6 +222,41 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('dhukuti create flow uses dhukuti-specific setup', (
+    tester,
+  ) async {
+    final store = AppStore();
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: FilledButton(
+                  onPressed: () => showCreateDhukutiGroupDialog(context),
+                  child: const Text('Open dhukuti create'),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Open dhukuti create'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create Dhukuti Group'), findsWidgets);
+    expect(find.text('Contribution amount'), findsOneWidget);
+    expect(find.text('Gross pot per cycle'), findsOneWidget);
+    expect(find.text('Default split: Equal'), findsNothing);
+    final memberChips = tester.widgetList<FilterChip>(find.byType(FilterChip));
+    expect(memberChips, isNotEmpty);
+    expect(memberChips.every((chip) => !chip.selected), isTrue);
   });
 
   testWidgets('Groups screen separates expense and Dhukuti groups', (

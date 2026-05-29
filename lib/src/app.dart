@@ -921,9 +921,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
               Expanded(
                 child: DigitalDhukutiScreen(
                   store: store,
-                  onCreate: (context) => showCreateGroupDialog(
+                  onCreate: (context) => showCreateDhukutiGroupDialog(
                     context,
-                    initialKind: GroupKind.dhukuti,
                     onCreated: (kind) => setState(() => _tab = kind),
                   ),
                 ),
@@ -4623,8 +4622,8 @@ class _ManualEntrySheet extends StatefulWidget {
     super.key,
   });
 
-  static const minExtent = 0.13;
-  static const collapsedExtent = 0.16;
+  static const minExtent = 0.16;
+  static const collapsedExtent = 0.22;
   static const expandedExtent = 0.92;
 
   final String groupId;
@@ -5147,8 +5146,12 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
     final canAddAnotherPayer =
         _payerRows.length < members.length && payerTotal < total;
 
+    final group = store.groupById(widget.groupId);
+    final participantsLabel =
+        '${selectedParticipants.length} ${selectedParticipants.length == 1 ? 'person' : 'people'}';
+
     return Material(
-      color: Theme.of(context).colorScheme.surface,
+      color: Theme.of(context).colorScheme.surfaceContainerLowest,
       elevation: 16,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
       child: CustomScrollView(
@@ -5161,48 +5164,14 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
               onVerticalDragUpdate: _dragSheet,
               onVerticalDragEnd: (details) => unawaited(_settleSheet(details)),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.outlineVariant,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.edit_note_outlined,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Manual Entry',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w900),
-                              ),
-                              const Text(
-                                'Enter bill manually or edit scanned items',
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.keyboard_arrow_up_rounded,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
+                child: _ManualSheetHeader(
+                  groupName: group.name,
+                  totalMinor: total,
+                  payerTotalMinor: payerTotal,
+                  participantsLabel: participantsLabel,
+                  itemModeActive: itemModeActive,
+                  readyToSave: readyToSave,
                 ),
               ),
             ),
@@ -5215,33 +5184,18 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                   _ReviewMessage(widget.reviewMessage!),
                   const SizedBox(height: 12),
                 ],
-                _DialogSection(
-                  title: 'Participants',
-                  child: Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (final member in members)
-                        ParticipantSelectorCard(
-                          user: store.userById(member.userId),
-                          selected: _participants.contains(member.userId),
-                          onTap: () {
-                            setState(() {
-                              if (_participants.contains(member.userId)) {
-                                _removeParticipant(member.userId);
-                              } else {
-                                _participants.add(member.userId);
-                              }
-                              _refreshEqualPreview();
-                            });
-                          },
-                        ),
-                    ],
-                  ),
+                _ManualProgressStrip(
+                  detailsReady: total > 0,
+                  payersReady: payerError == null,
+                  splitReady: splitError == null && splitPreview.isNotEmpty,
                 ),
-                const SizedBox(height: 12),
-                _DialogSection(
+                const SizedBox(height: 14),
+                _ManualFormSection(
                   title: 'Expense details',
+                  icon: Icons.receipt_long_outlined,
+                  subtitle: itemModeActive
+                      ? 'Total follows the item list'
+                      : 'Bill title and final paid amount',
                   child: Column(
                     children: [
                       TextField(
@@ -5272,9 +5226,43 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                _DialogSection(
+                const SizedBox(height: 14),
+                _ManualFormSection(
+                  title: 'Participants',
+                  icon: Icons.group_outlined,
+                  subtitle: 'Choose who is part of this bill',
+                  trailing: _CountPill(label: participantsLabel),
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final member in members)
+                        ParticipantSelectorCard(
+                          user: store.userById(member.userId),
+                          selected: _participants.contains(member.userId),
+                          onTap: () {
+                            setState(() {
+                              if (_participants.contains(member.userId)) {
+                                _removeParticipant(member.userId);
+                              } else {
+                                _participants.add(member.userId);
+                              }
+                              _refreshEqualPreview();
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _ManualFormSection(
                   title: 'Who paid?',
+                  icon: Icons.account_balance_wallet_outlined,
+                  subtitle: 'Single or multiple payers',
+                  trailing: _CountPill(
+                    label:
+                        '${_payerRows.length} ${_payerRows.length == 1 ? 'payer' : 'payers'}',
+                  ),
                   child: Column(
                     children: [
                       for (var index = 0; index < _payerRows.length; index++)
@@ -5333,9 +5321,17 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                _DialogSection(
+                const SizedBox(height: 14),
+                _ManualFormSection(
                   title: 'Item list',
+                  icon: Icons.list_alt_outlined,
+                  subtitle: _skipItemSplit
+                      ? 'Use one total amount'
+                      : 'Assign items, VAT, service and rounding',
+                  trailing: _CountPill(
+                    label:
+                        '${_billItemDrafts().length} ${_billItemDrafts().length == 1 ? 'item' : 'items'}',
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -5406,9 +5402,11 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                _DialogSection(
+                const SizedBox(height: 14),
+                _ManualFormSection(
                   title: 'Split mode',
+                  icon: Icons.call_split_outlined,
+                  subtitle: 'Equal, custom, percentage, shares or items',
                   child: DropdownButtonFormField<SplitMode>(
                     initialValue: _splitMode,
                     decoration: const InputDecoration(labelText: 'Split mode'),
@@ -5426,57 +5424,61 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                     },
                   ),
                 ),
-                const SizedBox(height: 12),
-                _DialogSection(
+                const SizedBox(height: 14),
+                _ManualSectionHeader(
+                  icon: Icons.verified_outlined,
                   title: 'Split preview',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_splitMode == SplitMode.custom)
-                        _AmountGrid(
-                          ids: selectedParticipants,
-                          label: 'Custom amount',
-                          values: _custom,
-                          suffix: 'NPR',
-                          onChanged: () => setState(() {}),
-                        ),
-                      if (_splitMode == SplitMode.percentage)
-                        _AmountGrid(
-                          ids: selectedParticipants,
-                          label: 'Percentage',
-                          values: _percentages,
-                          suffix: '%',
-                          maxValue: 100,
-                          onChanged: () => setState(() {}),
-                        ),
-                      if (_splitMode == SplitMode.shares)
-                        _AmountGrid(
-                          ids: selectedParticipants,
-                          label: 'Share units',
-                          values: _shares,
-                          suffix: 'x',
-                          onChanged: () => setState(() {}),
-                        ),
-                      SplitPreview(
-                        subtitle: _splitMode == SplitMode.equal
-                            ? 'Calculated equal split'
-                            : '${enumLabel(_splitMode)} split',
-                        expenseTotal: total,
-                        payerAmounts: payerAmounts,
-                        participantShares: splitPreview,
-                        participants: selectedParticipants,
-                        showRoundingNote:
-                            _splitMode == SplitMode.equal &&
-                            selectedParticipants.isNotEmpty &&
-                            total % selectedParticipants.length != 0,
-                        payerError: payerError,
-                        splitError: splitError,
-                        ready: readyToSave,
-                      ),
-                    ],
-                  ),
+                  subtitle: 'Review before saving',
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
+                if (_splitMode == SplitMode.custom) ...[
+                  _AmountGrid(
+                    ids: selectedParticipants,
+                    label: 'Custom amount',
+                    values: _custom,
+                    suffix: 'NPR',
+                    onChanged: () => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (_splitMode == SplitMode.percentage) ...[
+                  _AmountGrid(
+                    ids: selectedParticipants,
+                    label: 'Percentage',
+                    values: _percentages,
+                    suffix: '%',
+                    maxValue: 100,
+                    onChanged: () => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (_splitMode == SplitMode.shares) ...[
+                  _AmountGrid(
+                    ids: selectedParticipants,
+                    label: 'Share units',
+                    values: _shares,
+                    suffix: 'x',
+                    onChanged: () => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                SplitPreview(
+                  subtitle: _splitMode == SplitMode.equal
+                      ? 'Calculated equal split'
+                      : '${enumLabel(_splitMode)} split',
+                  expenseTotal: total,
+                  payerAmounts: payerAmounts,
+                  participantShares: splitPreview,
+                  participants: selectedParticipants,
+                  showRoundingNote:
+                      _splitMode == SplitMode.equal &&
+                      selectedParticipants.isNotEmpty &&
+                      total % selectedParticipants.length != 0,
+                  payerError: payerError,
+                  splitError: splitError,
+                  ready: readyToSave,
+                ),
+                const SizedBox(height: 18),
                 Row(
                   children: [
                     Expanded(
@@ -5540,6 +5542,377 @@ class _ReviewMessage extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ManualSheetHeader extends StatelessWidget {
+  const _ManualSheetHeader({
+    required this.groupName,
+    required this.totalMinor,
+    required this.payerTotalMinor,
+    required this.participantsLabel,
+    required this.itemModeActive,
+    required this.readyToSave,
+  });
+
+  final String groupName;
+  final int totalMinor;
+  final int payerTotalMinor;
+  final String participantsLabel;
+  final bool itemModeActive;
+  final bool readyToSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final accent = toneColor(context, Tone.success);
+    final statusColor = readyToSave ? accent : toneColor(context, Tone.warning);
+    return Column(
+      children: [
+        Container(
+          width: 44,
+          height: 5,
+          decoration: BoxDecoration(
+            color: scheme.outlineVariant,
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(Icons.edit_note_outlined, color: accent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Manual Entry',
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: statusColor.withValues(alpha: 0.28),
+                          ),
+                        ),
+                        child: Text(
+                          readyToSave ? 'Ready' : 'Draft',
+                          style: TextStyle(
+                            color: statusColor,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '$groupName • ${itemModeActive ? 'Item split' : 'Total split'}',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.keyboard_arrow_up_rounded,
+              color: scheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 560;
+            final chips = [
+              _ManualHeaderMetric(
+                icon: Icons.payments_outlined,
+                label: 'Total',
+                value: statementMoney(totalMinor),
+              ),
+              _ManualHeaderMetric(
+                icon: Icons.account_balance_wallet_outlined,
+                label: 'Paid',
+                value: statementMoney(payerTotalMinor),
+              ),
+              _ManualHeaderMetric(
+                icon: Icons.people_alt_outlined,
+                label: 'Split',
+                value: participantsLabel,
+              ),
+            ];
+            if (compact) {
+              return Wrap(spacing: 8, runSpacing: 8, children: chips);
+            }
+            return Row(
+              children: [
+                for (var index = 0; index < chips.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 8),
+                  Expanded(child: chips[index]),
+                ],
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _ManualHeaderMetric extends StatelessWidget {
+  const _ManualHeaderMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      constraints: const BoxConstraints(minWidth: 144),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: scheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  value,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ManualProgressStrip extends StatelessWidget {
+  const _ManualProgressStrip({
+    required this.detailsReady,
+    required this.payersReady,
+    required this.splitReady,
+  });
+
+  final bool detailsReady;
+  final bool payersReady;
+  final bool splitReady;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _ManualStepPill(label: 'Details', active: detailsReady),
+          _ManualStepPill(label: 'Payers', active: payersReady),
+          _ManualStepPill(label: 'Split', active: splitReady),
+        ],
+      ),
+    );
+  }
+}
+
+class _ManualStepPill extends StatelessWidget {
+  const _ManualStepPill({required this.label, required this.active});
+
+  final String label;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active
+        ? toneColor(context, Tone.success)
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: active ? 0.10 : 0.06),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: color.withValues(alpha: active ? 0.28 : 0.18),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            active ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 16,
+            color: color,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(color: color, fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ManualFormSection extends StatelessWidget {
+  const _ManualFormSection({
+    required this.title,
+    required this.icon,
+    required this.child,
+    this.subtitle,
+    this.trailing,
+  });
+
+  final String title;
+  final IconData icon;
+  final String? subtitle;
+  final Widget child;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ManualSectionHeader(
+              icon: icon,
+              title: title,
+              subtitle: subtitle,
+              trailing: trailing,
+            ),
+            const SizedBox(height: 14),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ManualSectionHeader extends StatelessWidget {
+  const _ManualSectionHeader({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: scheme.primary.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(icon, color: scheme.primary, size: 20),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle!,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 10), trailing!],
+      ],
     );
   }
 }
@@ -6097,14 +6470,11 @@ Future<void> showMyQrDialog(BuildContext context) async {
 
 Future<void> showCreateGroupDialog(
   BuildContext context, {
-  GroupKind initialKind = GroupKind.expense,
   ValueChanged<GroupKind>? onCreated,
 }) async {
-  final rootContext = context;
   final store = StoreScope.of(context);
   final name = TextEditingController(text: 'Office Bhoj');
   var category = GroupCategory.bhoj;
-  var dhukutiGroup = initialKind == GroupKind.dhukuti;
   final selected = <String>{};
   await showDialog<void>(
     context: context,
@@ -6113,29 +6483,16 @@ Future<void> showCreateGroupDialog(
         builder: (context, setState) {
           final connections = store.activeConnectionUsers();
           return AlertDialog(
-            title: const Text('Create Group'),
+            title: const Text('Create Expense Group'),
             content: SizedBox(
               width: 520,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(
-                          value: false,
-                          icon: Icon(Icons.receipt_long_outlined),
-                          label: Text('Expense Group'),
-                        ),
-                        ButtonSegment(
-                          value: true,
-                          icon: Icon(Icons.account_balance_wallet_outlined),
-                          label: Text('Dhukuti Group'),
-                        ),
-                      ],
-                      selected: {dhukutiGroup},
-                      onSelectionChanged: (value) =>
-                          setState(() => dhukutiGroup = value.first),
+                    const Text(
+                      'Use this for meals, trips, rent, shopping, and other shared expenses.',
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -6166,6 +6523,7 @@ Future<void> showCreateGroupDialog(
                         Chip(label: Text('Currency: NPR')),
                         Chip(label: Text('Default split: Equal')),
                         Chip(label: Text('Reminder: Every 2 days')),
+                        Chip(label: Text('eSewa settlement')),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -6217,32 +6575,21 @@ Future<void> showCreateGroupDialog(
                 onPressed: () {
                   final groupId = store.createGroup(
                     name: name.text.trim().isEmpty
-                        ? 'New Group'
+                        ? 'New Expense Group'
                         : name.text.trim(),
                     category: category,
                     memberIds: selected.toList(),
-                    kind: dhukutiGroup ? GroupKind.dhukuti : GroupKind.expense,
+                    kind: GroupKind.expense,
                   );
                   Navigator.pop(dialogContext);
-                  if (dhukutiGroup) {
-                    onCreated?.call(GroupKind.dhukuti);
-                    store.selectedDhukutiPoolId = null;
-                    unawaited(
-                      showCreateDhukutiDialog(
-                        rootContext,
-                        initialGroupId: groupId,
-                      ).then((_) => onCreated?.call(GroupKind.dhukuti)),
-                    );
-                  } else {
-                    store.selectedGroupId = groupId;
-                    onCreated?.call(GroupKind.expense);
-                    showSnack(
-                      rootContext,
-                      '${store.groupById(groupId).name} created.',
-                    );
-                  }
+                  store.selectedGroupId = groupId;
+                  onCreated?.call(GroupKind.expense);
+                  showSnack(
+                    context,
+                    '${store.groupById(groupId).name} created.',
+                  );
                 },
-                child: Text(dhukutiGroup ? 'Start Setup' : 'Create'),
+                child: const Text('Create Expense Group'),
               ),
             ],
           );
@@ -6251,6 +6598,231 @@ Future<void> showCreateGroupDialog(
     },
   );
   name.dispose();
+}
+
+Future<void> showCreateDhukutiGroupDialog(
+  BuildContext context, {
+  ValueChanged<GroupKind>? onCreated,
+}) async {
+  final store = StoreScope.of(context);
+  final name = TextEditingController(text: 'Family Dhukuti');
+  final contribution = TextEditingController(text: '5000');
+  final serviceFee = TextEditingController(text: '50');
+  var frequency = 'monthly';
+  final selected = <String>{};
+  var agreementAccepted = false;
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          final connections = store.activeConnectionUsers();
+          final amount = parseMoneyToMinor(contribution.text);
+          final fee = parseMoneyToMinor(serviceFee.text);
+          final memberCount = selected.length + 1;
+          final grossPot = amount * memberCount;
+          final netPayout = grossPot - fee;
+          final canCreate =
+              agreementAccepted && selected.isNotEmpty && amount > 0;
+          return AlertDialog(
+            title: const Text('Create Dhukuti Group'),
+            content: SizedBox(
+              width: 580,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Use this for rotating savings commitments with contribution cycles and payout order.',
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: name,
+                      decoration: const InputDecoration(
+                        labelText: 'Dhukuti group name',
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: contribution,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Contribution amount',
+                        prefixText: 'NPR ',
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: frequency,
+                      decoration: const InputDecoration(labelText: 'Frequency'),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'monthly',
+                          child: Text('Monthly'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'weekly',
+                          child: Text('Weekly'),
+                        ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => frequency = value ?? frequency),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: serviceFee,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Service fee per payout',
+                        prefixText: 'NPR ',
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Members',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'You are included automatically. Select members who must accept the Dhukuti schedule.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final user in connections)
+                          FilterChip(
+                            selected: selected.contains(user.id),
+                            avatar: UserAvatar(user: user, small: true),
+                            label: Text(user.displayName),
+                            onSelected: (checked) {
+                              setState(() {
+                                checked
+                                    ? selected.add(user.id)
+                                    : selected.remove(user.id);
+                              });
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        children: [
+                          _DialogReviewRow(
+                            label: 'Members',
+                            value: '$memberCount',
+                          ),
+                          _DialogReviewRow(
+                            label: 'Gross pot per cycle',
+                            value: money(grossPot),
+                          ),
+                          _DialogReviewRow(
+                            label: 'Service fee',
+                            value: money(fee),
+                          ),
+                          _DialogReviewRow(
+                            label: 'Net payout',
+                            value: money(netPayout),
+                          ),
+                          _DialogReviewRow(
+                            label: 'Cycles',
+                            value: '$memberCount',
+                          ),
+                        ],
+                      ),
+                    ),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: agreementAccepted,
+                      title: const Text(
+                        'I understand the contribution and payout schedule.',
+                      ),
+                      onChanged: (value) =>
+                          setState(() => agreementAccepted = value ?? false),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: canCreate
+                    ? () {
+                        final groupName = name.text.trim().isEmpty
+                            ? 'New Dhukuti Group'
+                            : name.text.trim();
+                        final groupId = store.createGroup(
+                          name: groupName,
+                          category: GroupCategory.custom,
+                          memberIds: selected.toList(),
+                          kind: GroupKind.dhukuti,
+                          template: 'Dhukuti',
+                        );
+                        final poolId = store.createDhukutiPool(
+                          groupId: groupId,
+                          name: groupName,
+                          contributionAmountMinor: amount,
+                          frequency: frequency,
+                          startDate: DateTime.now(),
+                          memberIds: selected.toList(),
+                        );
+                        store
+                          ..selectedDhukutiPoolId = poolId
+                          ..selectedGroupId = null;
+                        Navigator.pop(dialogContext);
+                        onCreated?.call(GroupKind.dhukuti);
+                        showSnack(context, '$groupName Dhukuti created.');
+                      }
+                    : null,
+                child: const Text('Create Dhukuti Group'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+  name.dispose();
+  contribution.dispose();
+  serviceFee.dispose();
+}
+
+class _DialogReviewRow extends StatelessWidget {
+  const _DialogReviewRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
+  }
 }
 
 Future<void> showAddMemberDialog(BuildContext context, String groupId) async {

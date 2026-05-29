@@ -60,7 +60,7 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
                   action: FilledButton.icon(
                     onPressed: () => _openCreate(context),
                     icon: const Icon(Icons.add),
-                    label: const Text('Create Dhukuti Pool'),
+                    label: const Text('Create Dhukuti Group'),
                   ),
                 ),
               )
@@ -162,7 +162,7 @@ class _DhukutiPoolList extends StatelessWidget {
           action: FilledButton.icon(
             onPressed: onCreate,
             icon: const Icon(Icons.add),
-            label: const Text('Create Dhukuti Pool'),
+            label: const Text('Create Dhukuti Group'),
           ),
         ),
         DhukutiSection(
@@ -182,7 +182,7 @@ class _DhukutiPoolList extends StatelessWidget {
                   action: FilledButton.icon(
                     onPressed: onCreate,
                     icon: const Icon(Icons.add),
-                    label: const Text('Create Dhukuti Pool'),
+                    label: const Text('Create Dhukuti Group'),
                   ),
                   secondaryAction: OutlinedButton.icon(
                     onPressed: onLearn,
