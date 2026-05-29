@@ -1273,8 +1273,19 @@ class AppStore extends ChangeNotifier {
     return pool.id;
   }
 
-  void contributeToGiftPool(String giftPoolId, int amountMinor) {
+  String contributeToGiftPool(String giftPoolId, int amountMinor) {
     final pool = giftPools.firstWhere((item) => item.id == giftPoolId);
+    final remaining = pool.targetAmountMinor - giftPoolTotal(giftPoolId);
+    if (amountMinor <= 0) {
+      return 'Enter a contribution amount greater than zero.';
+    }
+    // A pool can never collect more than its target.
+    if (remaining <= 0) {
+      return 'This gift pool has already reached its target.';
+    }
+    if (amountMinor > remaining) {
+      return 'Contribution cannot exceed the ${money(remaining)} remaining.';
+    }
     final contribution = GiftPoolContribution(
       id: _id('gift-pool-contribution'),
       giftPoolId: giftPoolId,
@@ -1311,6 +1322,7 @@ class AppStore extends ChangeNotifier {
           '${nameOf(currentUserId)} added ${money(amountMinor)} to ${pool.title}.',
     );
     notifyListeners();
+    return 'Added ${money(amountMinor)} to ${pool.title}.';
   }
 
   int giftPoolTotal(String giftPoolId) {

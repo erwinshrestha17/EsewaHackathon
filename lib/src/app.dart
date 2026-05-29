@@ -1281,7 +1281,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
             labelText: 'Add a message…',
             helperText: 'Visible only to you and the recipient.',
             suffixIcon: IconButton(
-              tooltip: 'Stickers & GIFs',
+              tooltip: 'Stickers',
               icon: const Icon(Icons.emoji_emotions_outlined),
               onPressed: _openStickerPicker,
             ),
@@ -1479,8 +1479,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
     );
   }
 
-  // Inserts text (an emoji sticker or a GIF shortcode) into the message at the
-  // current cursor position, falling back to appending at the end.
+  // Inserts an emoji sticker into the message at the cursor (or appends it).
   void _insertIntoMessage(String insert) {
     final text = _message.text;
     final selection = _message.selection;
@@ -1499,82 +1498,41 @@ class _GiftsScreenState extends State<GiftsScreen> {
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {
-        return DefaultTabController(
-          length: 2,
-          child: SizedBox(
-            height: 400,
-            child: Column(
-              children: [
-                const TabBar(
-                  tabs: [
-                    Tab(text: 'Stickers'),
-                    Tab(text: 'GIFs'),
+        return SizedBox(
+          height: 360,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'Stickers',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+              ),
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: 8,
+                  padding: const EdgeInsets.all(12),
+                  children: [
+                    for (final emoji in giftStickerEmojis)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => _insertIntoMessage(emoji),
+                        child: Center(
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 26),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-                Expanded(
-                  child: TabBarView(
-                    children: [_buildStickerGrid(), _buildGifGrid()],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
-    );
-  }
-
-  Widget _buildStickerGrid() {
-    return GridView.count(
-      crossAxisCount: 8,
-      padding: const EdgeInsets.all(12),
-      children: [
-        for (final emoji in giftStickerEmojis)
-          InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => _insertIntoMessage(emoji),
-            child: Center(
-              child: Text(emoji, style: const TextStyle(fontSize: 26)),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildGifGrid() {
-    return GridView.count(
-      crossAxisCount: 4,
-      padding: const EdgeInsets.all(12),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      children: [
-        for (final sticker in giftGifStickers)
-          InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => _insertIntoMessage(' :${sticker.id}: '),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AnimatedSticker(sticker: sticker, size: 34),
-                  const SizedBox(height: 6),
-                  Text(
-                    sticker.label,
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
     );
   }
 }
@@ -1805,9 +1763,8 @@ class GiftCardVisual extends StatelessWidget {
                   ),
                   if (message.trim().isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    GiftMessageText(
-                      message: message.trim(),
-                      stickerSize: big ? 26 : 20,
+                    Text(
+                      '“${message.trim()}”',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.95),
                         fontSize: 13,
@@ -1895,164 +1852,6 @@ const giftStickerEmojis = <String>[
   '❤️', '🧡', '💛', '💚', '💙', '💜', '💖', '💝',
   '👍', '👏', '🙌', '🤝', '💪', '🔥', '🎈', '💫',
 ];
-
-/// Animation styles used to bring a [GifSticker] to life without bundled
-/// binary GIF assets — they are rendered live with Flutter animations.
-enum StickerMotion { pulse, bounce, float, flicker, spin }
-
-/// An in-app "GIF": a named animated sticker referenced from a gift message by
-/// the shortcode `:id:` (e.g. `:fireworks:`).
-class GifSticker {
-  const GifSticker(this.id, this.emoji, this.label, this.motion);
-
-  final String id;
-  final String emoji;
-  final String label;
-  final StickerMotion motion;
-}
-
-const giftGifStickers = <GifSticker>[
-  GifSticker('celebrate', '🎉', 'Celebrate', StickerMotion.pulse),
-  GifSticker('fireworks', '🎆', 'Fireworks', StickerMotion.bounce),
-  GifSticker('hearts', '💖', 'Hearts', StickerMotion.float),
-  GifSticker('diya', '🪔', 'Diya', StickerMotion.flicker),
-  GifSticker('balloon', '🎈', 'Balloons', StickerMotion.float),
-  GifSticker('dance', '💃', 'Dance', StickerMotion.bounce),
-  GifSticker('clap', '👏', 'Clap', StickerMotion.bounce),
-  GifSticker('sparkle', '✨', 'Sparkle', StickerMotion.spin),
-];
-
-GifSticker? gifStickerById(String id) {
-  for (final sticker in giftGifStickers) {
-    if (sticker.id == id) return sticker;
-  }
-  return null;
-}
-
-/// Renders the looping animation for a single [GifSticker].
-class AnimatedSticker extends StatefulWidget {
-  const AnimatedSticker({required this.sticker, this.size = 22, super.key});
-
-  final GifSticker sticker;
-  final double size;
-
-  @override
-  State<AnimatedSticker> createState() => _AnimatedStickerState();
-}
-
-class _AnimatedStickerState extends State<AnimatedSticker>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
-  )..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final glyph = Text(
-      widget.sticker.emoji,
-      style: TextStyle(fontSize: widget.size),
-    );
-    return AnimatedBuilder(
-      animation: _controller,
-      child: glyph,
-      builder: (context, child) {
-        final t = _controller.value;
-        switch (widget.sticker.motion) {
-          case StickerMotion.pulse:
-            return Transform.scale(
-              scale: 0.82 + 0.36 * Curves.easeInOut.transform(t),
-              child: child,
-            );
-          case StickerMotion.bounce:
-            return Transform.translate(
-              offset: Offset(0, -8 * math.sin(t * math.pi)),
-              child: child,
-            );
-          case StickerMotion.float:
-            return Opacity(
-              opacity: (0.7 + 0.3 * (1 - (t - 0.5).abs() * 2)).clamp(0.0, 1.0),
-              child: Transform.translate(
-                offset: Offset(0, -6 * math.sin(t * math.pi * 2)),
-                child: child,
-              ),
-            );
-          case StickerMotion.flicker:
-            final op = (0.6 + 0.4 * (0.5 + 0.5 * math.sin(t * math.pi * 4)))
-                .clamp(0.0, 1.0);
-            return Opacity(
-              opacity: op,
-              child: Transform.scale(scale: 0.95 + 0.1 * op, child: child),
-            );
-          case StickerMotion.spin:
-            return Transform.rotate(angle: t * 2 * math.pi, child: child);
-        }
-      },
-    );
-  }
-}
-
-/// Renders a gift message, replacing any `:id:` GIF shortcodes with live
-/// [AnimatedSticker]s while leaving emoji and plain text intact.
-class GiftMessageText extends StatelessWidget {
-  const GiftMessageText({
-    required this.message,
-    required this.style,
-    this.stickerSize = 22,
-    this.quoted = true,
-    super.key,
-  });
-
-  final String message;
-  final TextStyle style;
-  final double stickerSize;
-  final bool quoted;
-
-  static final _shortcode = RegExp(r':([a-z]+):');
-
-  @override
-  Widget build(BuildContext context) {
-    final hasGif = giftGifStickers.any(
-      (sticker) => message.contains(':${sticker.id}:'),
-    );
-    if (!hasGif) {
-      return Text(quoted ? '“$message”' : message, style: style);
-    }
-
-    final pieces = <Widget>[];
-    if (quoted) pieces.add(Text('“', style: style));
-    var index = 0;
-    for (final match in _shortcode.allMatches(message)) {
-      final sticker = gifStickerById(match.group(1)!);
-      if (sticker == null) continue;
-      if (match.start > index) {
-        pieces.add(Text(message.substring(index, match.start), style: style));
-      }
-      pieces.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 1),
-          child: AnimatedSticker(sticker: sticker, size: stickerSize),
-        ),
-      );
-      index = match.end;
-    }
-    if (index < message.length) {
-      pieces.add(Text(message.substring(index), style: style));
-    }
-    if (quoted) pieces.add(Text('”', style: style));
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      runSpacing: 2,
-      children: pieces,
-    );
-  }
-}
 
 /// A ledger entry: the themed gift card plus sender/recipient actions.
 class GiftEnvelopeCard extends StatelessWidget {
@@ -5603,6 +5402,9 @@ Future<void> showContributeToGiftPoolDialog(
           final raised = store.giftPoolTotal(pool.id);
           final remaining = pool.targetAmountMinor - raised;
           final amountMinor = parseMoneyToMinor(amount.text);
+          final exceedsRemaining = amountMinor > remaining;
+          final canContribute =
+              remaining > 0 && amountMinor > 0 && !exceedsRemaining;
           return AlertDialog(
             title: const Text('Contribute to gift pool'),
             content: SizedBox(
@@ -5631,12 +5433,16 @@ Future<void> showContributeToGiftPoolDialog(
                   TextField(
                     controller: amount,
                     autofocus: true,
+                    enabled: remaining > 0,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Amount',
                       prefixText: 'NPR ',
+                      errorText: exceedsRemaining
+                          ? 'Cannot exceed the ${money(remaining)} remaining.'
+                          : null,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -5645,11 +5451,12 @@ Future<void> showContributeToGiftPoolDialog(
                     runSpacing: 8,
                     children: [
                       for (final preset in const [251, 500, 1100])
-                        ActionChip(
-                          label: Text('Rs $preset'),
-                          onPressed: () =>
-                              setState(() => amount.text = preset.toString()),
-                        ),
+                        if (npr(preset) <= remaining)
+                          ActionChip(
+                            label: Text('Rs $preset'),
+                            onPressed: () =>
+                                setState(() => amount.text = preset.toString()),
+                          ),
                       if (remaining > 0)
                         ActionChip(
                           label: Text('Remaining ${money(remaining)}'),
@@ -5668,19 +5475,16 @@ Future<void> showContributeToGiftPoolDialog(
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: amountMinor > 0
+                onPressed: canContribute
                     ? () {
-                        store.contributeToGiftPool(pool.id, amountMinor);
+                        final result = store.contributeToGiftPool(
+                          pool.id,
+                          amountMinor,
+                        );
                         Navigator.pop(dialogContext);
                         messenger
                           ..hideCurrentSnackBar()
-                          ..showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Added ${money(amountMinor)} to ${pool.title}.',
-                              ),
-                            ),
-                          );
+                          ..showSnackBar(SnackBar(content: Text(result)));
                       }
                     : null,
                 child: const Text('Contribute'),
