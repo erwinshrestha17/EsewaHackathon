@@ -1053,10 +1053,19 @@ class GiftsScreen extends StatefulWidget {
 }
 
 class _GiftsScreenState extends State<GiftsScreen> {
-  final _amount = TextEditingController(text: '1000');
-  final _message = TextEditingController(text: 'Sangai gift for you.');
-  var _template = 'Dashain';
+  final _amount = TextEditingController(text: '500');
+  final _message = TextEditingController(text: 'Dashain ko shubhakamana! 🌺');
+  GiftTheme _theme = giftThemes.first;
   String? _recipientId;
+
+  // Compose vs. celebration ("done") stage, mirroring the send flow.
+  bool _sent = false;
+  late GiftTheme _sentTheme;
+  int _sentAmountMinor = 0;
+  String _sentToName = '';
+  String _sentMessage = '';
+
+  static const _quickAmounts = <int>[251, 500, 1100];
 
   @override
   void dispose() {
@@ -1069,7 +1078,12 @@ class _GiftsScreenState extends State<GiftsScreen> {
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final connections = store.activeConnectionUsers();
-    _recipientId ??= connections.isEmpty ? null : connections.first.id;
+    // Reset the recipient when it is unset or no longer a valid connection
+    // (e.g. after switching the active user) so a stale id never lingers.
+    if (_recipientId == null ||
+        !connections.any((user) => user.id == _recipientId)) {
+      _recipientId = connections.isEmpty ? null : connections.first.id;
+    }
     final visibleGifts =
         store.gifts
             .where(
@@ -1085,87 +1099,28 @@ class _GiftsScreenState extends State<GiftsScreen> {
         ScreenHeader(
           title: 'Sangai Gifts',
           subtitle:
-              'Send themed money envelopes to active connections and run P1 group gift pools.',
+              'Send a themed money envelope to a connection, or run a group gift pool.',
           icon: Icons.card_giftcard,
         ),
+        if (connections.isEmpty)
+          const SectionPanel(
+            title: 'Send a gift',
+            child: EmptyState(
+              icon: Icons.person_add_alt,
+              title: 'No connections yet',
+              body:
+                  'Gifts can only be sent to active, accepted connections. Add one from the Connections tab first.',
+            ),
+          ),
         ResponsiveWrap(
           children: [
-            SectionPanel(
-              title: 'Send Gift Card',
-              child: Column(
-                children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: _recipientId,
-                    decoration: const InputDecoration(labelText: 'Recipient'),
-                    items: [
-                      for (final user in connections)
-                        DropdownMenuItem(
-                          value: user.id,
-                          child: Text(user.displayName),
-                        ),
-                    ],
-                    onChanged: (value) => setState(() => _recipientId = value),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: _template,
-                    decoration: const InputDecoration(labelText: 'Template'),
-                    items: [
-                      for (final template in const [
-                        'Dashain',
-                        'Tihar',
-                        'Birthday',
-                        'Wedding',
-                        'Thank you',
-                        'Custom',
-                      ])
-                        DropdownMenuItem(
-                          value: template,
-                          child: Text(template),
-                        ),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => _template = value ?? _template),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _amount,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Amount',
-                      prefixText: 'NPR ',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _message,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Private message',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton.icon(
-                      onPressed: _recipientId == null
-                          ? null
-                          : () {
-                              final message = store.sendGift(
-                                recipientId: _recipientId!,
-                                template: _template,
-                                amountMinor: parseMoneyToMinor(_amount.text),
-                                message: _message.text,
-                              );
-                              showSnack(context, message);
-                            },
-                      icon: const Icon(Icons.send),
-                      label: const Text('Send via eSewa'),
-                    ),
-                  ),
-                ],
+            if (connections.isNotEmpty)
+              SectionPanel(
+                title: _sent ? 'Gift sent' : 'Send a gift',
+                child: _sent
+                    ? _buildCelebration(context)
+                    : _buildCompose(context, store, connections),
               ),
-            ),
             SectionPanel(
               title: 'Gift Pools',
               action: OutlinedButton.icon(
@@ -1229,42 +1184,28 @@ class _GiftsScreenState extends State<GiftsScreen> {
               : Column(
                   children: [
                     for (final gift in visibleGifts)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: CircleAvatar(
-                          child: Icon(
-                            gift.template == 'Tihar'
-                                ? Icons.light_mode_outlined
-                                : Icons.card_giftcard,
-                          ),
-                        ),
-                        title: Text(
-                          '${gift.template} • ${store.nameOf(gift.senderId)} to ${store.nameOf(gift.recipientId)}',
-                        ),
-                        subtitle: Text(gift.message),
-                        trailing: Wrap(
-                          spacing: 8,
-                          children: [
-                            BalancePill(amountMinor: gift.amountMinor),
-                            StatusPill(
-                              label: enumLabel(gift.status),
-                              tone: gift.status == GiftStatus.opened
-                                  ? Tone.success
-                                  : Tone.neutral,
-                            ),
-                            if (gift.recipientId == store.currentUserId &&
-                                gift.status == GiftStatus.sent)
-                              FilledButton(
-                                onPressed: () => store.openGift(gift.id),
-                                child: const Text('Open'),
-                              ),
-                            if (gift.senderId == store.currentUserId &&
-                                gift.status == GiftStatus.sent)
-                              OutlinedButton(
-                                onPressed: () => store.refundGift(gift.id),
-                                child: const Text('Refund'),
-                              ),
-                          ],
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: GiftEnvelopeCard(
+                          gift: gift,
+                          isSender: gift.senderId == store.currentUserId,
+                          isRecipient: gift.recipientId == store.currentUserId,
+                          senderName: store.nameOf(gift.senderId),
+                          recipientName: store.nameOf(gift.recipientId),
+                          onOpen: () {
+                            if (store.openGift(gift.id)) {
+                              showGiftOpenedCelebration(
+                                context,
+                                gift,
+                                fromName: store.nameOf(gift.senderId),
+                                toName: store.nameOf(gift.recipientId),
+                              );
+                            }
+                          },
+                          onCancel: () =>
+                              showSnack(context, store.cancelGift(gift.id)),
+                          onRefund: () =>
+                              showSnack(context, store.refundGift(gift.id)),
                         ),
                       ),
                   ],
@@ -1273,6 +1214,712 @@ class _GiftsScreenState extends State<GiftsScreen> {
       ],
     );
   }
+
+  Widget _buildCompose(
+    BuildContext context,
+    AppStore store,
+    List<AppUser> connections,
+  ) {
+    final amountMinor = parseMoneyToMinor(_amount.text);
+    final valid = amountMinor > 0 && _recipientId != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Live preview of the envelope the recipient will receive.
+        GiftCardVisual(
+          theme: _theme,
+          amountMinor: amountMinor,
+          fromName: store.nameOf(store.currentUserId).split(' ').first,
+          toName: _recipientId == null
+              ? '…'
+              : store.nameOf(_recipientId!).split(' ').first,
+          message: _message.text,
+        ),
+        const _GiftEyebrow('Choose a theme'),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final theme in giftThemes) _themeButton(context, theme),
+            ],
+          ),
+        ),
+        const _GiftEyebrow('To'),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final user in connections) _recipientButton(context, user),
+            ],
+          ),
+        ),
+        const _GiftEyebrow('Amount'),
+        Row(
+          children: [
+            for (final amount in _quickAmounts)
+              Expanded(child: _amountButton(context, amount)),
+          ],
+        ),
+        const SizedBox(height: 11),
+        TextField(
+          controller: _amount,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            labelText: 'Custom amount',
+            prefixText: 'NPR ',
+          ),
+        ),
+        const SizedBox(height: 11),
+        TextField(
+          controller: _message,
+          maxLines: 2,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            labelText: 'Add a message…',
+            helperText: 'Visible only to you and the recipient.',
+          ),
+        ),
+        const SizedBox(height: 18),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: valid ? () => _send(context, store, amountMinor) : null,
+            icon: const Icon(Icons.card_giftcard),
+            label: Text('Send ${money(amountMinor)} via eSewa'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _send(BuildContext context, AppStore store, int amountMinor) {
+    final toName = store.nameOf(_recipientId!);
+    final message = store.sendGift(
+      recipientId: _recipientId!,
+      template: _theme.label,
+      amountMinor: amountMinor,
+      message: _message.text,
+    );
+    if (message.startsWith('Gift sent')) {
+      setState(() {
+        _sent = true;
+        _sentTheme = _theme;
+        _sentAmountMinor = amountMinor;
+        _sentToName = toName;
+        _sentMessage = _message.text;
+      });
+    } else {
+      showSnack(context, message);
+    }
+  }
+
+  Widget _buildCelebration(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GiftCardVisual(
+          theme: _sentTheme,
+          amountMinor: _sentAmountMinor,
+          fromName: 'You',
+          toName: _sentToName.split(' ').first,
+          message: _sentMessage,
+          big: true,
+        ),
+        const SizedBox(height: 22),
+        Text(
+          'Gift sent! 🎉',
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${money(_sentAmountMinor)} to $_sentToName',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 24),
+        FilledButton(
+          onPressed: () => setState(() => _sent = false),
+          child: const Text('Send another'),
+        ),
+      ],
+    );
+  }
+
+  Widget _themeButton(BuildContext context, GiftTheme theme) {
+    final selected = _theme.id == theme.id;
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(right: 9, bottom: 4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(15),
+        onTap: () => setState(() => _theme = theme),
+        child: Container(
+          width: 78,
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 7),
+          decoration: BoxDecoration(
+            color: selected ? scheme.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: selected ? theme.from : scheme.outlineVariant,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: theme.gradient,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Text(theme.emoji, style: const TextStyle(fontSize: 18)),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                theme.label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _recipientButton(BuildContext context, AppUser user) {
+    final selected = _recipientId == user.id;
+    final scheme = Theme.of(context).colorScheme;
+    final green = scheme.primary;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8, bottom: 4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => setState(() => _recipientId = user.id),
+        child: Container(
+          width: 66,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 7),
+          decoration: BoxDecoration(
+            color: selected
+                ? green.withValues(alpha: 0.10)
+                : scheme.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? green : scheme.outlineVariant,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              UserAvatar(user: user),
+              const SizedBox(height: 6),
+              Text(
+                user.displayName.split(' ').first,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? green : scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _amountButton(BuildContext context, int amount) {
+    final selected = _amount.text == amount.toString();
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(13),
+        onTap: () => setState(() => _amount.text = amount.toString()),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? scheme.primary : scheme.surface,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(
+              color: selected ? scheme.primary : scheme.outlineVariant,
+            ),
+          ),
+          child: Text(
+            'Rs $amount',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: selected ? scheme.onPrimary : scheme.onSurface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A small uppercase section label used between gift compose sections.
+class _GiftEyebrow extends StatelessWidget {
+  const _GiftEyebrow(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 18, 2, 9),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.4,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// Festival- and occasion-aware visual treatment for a gift card.
+class GiftTheme {
+  const GiftTheme({
+    required this.id,
+    required this.label,
+    required this.emoji,
+    required this.icon,
+    required this.from,
+    required this.to,
+  });
+
+  final String id;
+  final String label;
+  final String emoji;
+  final IconData icon;
+  final Color from;
+  final Color to;
+
+  Color get color => from;
+
+  LinearGradient get gradient => LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [from, to],
+  );
+}
+
+/// Selectable gift themes. Gradients use the app's festival palette so they sit
+/// alongside the green primary brand without clashing.
+const giftThemes = <GiftTheme>[
+  GiftTheme(
+    id: 'dashain',
+    label: 'Dashain Tika',
+    emoji: '🌺',
+    icon: Icons.celebration,
+    from: Color(0xFFF2A12E),
+    to: Color(0xFFCE3F30),
+  ),
+  GiftTheme(
+    id: 'tihar',
+    label: 'Tihar Deusi',
+    emoji: '🪔',
+    icon: Icons.light_mode,
+    from: Color(0xFFFFB627),
+    to: Color(0xFFD98324),
+  ),
+  GiftTheme(
+    id: 'birthday',
+    label: 'Birthday',
+    emoji: '🎂',
+    icon: Icons.cake,
+    from: Color(0xFF7A4FB6),
+    to: Color(0xFFCE3F30),
+  ),
+  GiftTheme(
+    id: 'wedding',
+    label: 'Wedding',
+    emoji: '💍',
+    icon: Icons.favorite,
+    from: Color(0xFF27B069),
+    to: Color(0xFF15784A),
+  ),
+  GiftTheme(
+    id: 'thanks',
+    label: 'Thank You',
+    emoji: '🙏',
+    icon: Icons.volunteer_activism,
+    from: Color(0xFF2A7DB6),
+    to: Color(0xFF15784A),
+  ),
+];
+
+const _defaultGiftTheme = GiftTheme(
+  id: 'gift',
+  label: 'Gift',
+  emoji: '🎁',
+  icon: Icons.card_giftcard,
+  from: Color(0xFF1B9355),
+  to: Color(0xFF15784A),
+);
+
+GiftTheme giftThemeFor(String template) {
+  final key = template.trim().toLowerCase();
+  for (final theme in giftThemes) {
+    final word = theme.id == 'thanks' ? 'thank' : theme.id;
+    if (key.contains(word)) {
+      return theme;
+    }
+  }
+  return _defaultGiftTheme;
+}
+
+Tone toneForGiftStatus(GiftStatus status) {
+  return switch (status) {
+    GiftStatus.opened => Tone.success,
+    GiftStatus.sent => Tone.info,
+    GiftStatus.pending => Tone.warning,
+    GiftStatus.refunded || GiftStatus.cancelled => Tone.neutral,
+    GiftStatus.failed ||
+    GiftStatus.failedReview ||
+    GiftStatus.expired => Tone.danger,
+  };
+}
+
+/// The themed gradient gift card with decorative mandalas, used as the live
+/// preview, the celebration card, and the colourful face of each ledger entry.
+class GiftCardVisual extends StatelessWidget {
+  const GiftCardVisual({
+    required this.theme,
+    required this.amountMinor,
+    required this.fromName,
+    required this.toName,
+    required this.message,
+    this.big = false,
+    this.faded = false,
+    super.key,
+  });
+
+  final GiftTheme theme;
+  final int amountMinor;
+  final String fromName;
+  final String toName;
+  final String message;
+  final bool big;
+  final bool faded;
+
+  @override
+  Widget build(BuildContext context) {
+    final card = ClipRRect(
+      borderRadius: BorderRadius.circular(big ? 26 : 22),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: theme.gradient,
+          boxShadow: [
+            BoxShadow(
+              color: theme.from.withValues(alpha: 0.35),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              right: -26,
+              top: -26,
+              child: SizedBox.square(
+                dimension: big ? 150 : 120,
+                child: const CustomPaint(
+                  painter: GiftMandalaPainter(opacity: 0.45),
+                ),
+              ),
+            ),
+            Positioned(
+              left: -30,
+              bottom: -40,
+              child: const SizedBox.square(
+                dimension: 110,
+                child: CustomPaint(
+                  painter: GiftMandalaPainter(opacity: 0.25),
+                ),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.all(big ? 24 : 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          theme.label.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.3,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        theme.emoji,
+                        style: TextStyle(fontSize: big ? 30 : 24),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: big ? 14 : 10),
+                  Text(
+                    money(amountMinor),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: big ? 40 : 32,
+                      fontWeight: FontWeight.w800,
+                      height: 1,
+                    ),
+                  ),
+                  if (message.trim().isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      '“${message.trim()}”',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('From $fromName', style: _footerStyle),
+                      Text('To $toName', style: _footerStyle),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return faded ? Opacity(opacity: 0.55, child: card) : card;
+  }
+
+  static const _footerStyle = TextStyle(
+    color: Colors.white,
+    fontSize: 11.5,
+    fontWeight: FontWeight.w700,
+  );
+}
+
+/// Paints the concentric petal mandala that decorates the gift card corners.
+class GiftMandalaPainter extends CustomPainter {
+  const GiftMandalaPainter({this.opacity = 0.45});
+
+  final double opacity;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.013
+      ..color = Colors.white.withValues(alpha: 0.55 * opacity);
+
+    final petal = Rect.fromCenter(
+      center: Offset.zero,
+      width: size.width * 0.18,
+      height: size.height * 0.68,
+    );
+    for (var i = 0; i < 12; i++) {
+      canvas
+        ..save()
+        ..translate(center.dx, center.dy)
+        ..rotate(i * math.pi / 6);
+      canvas.drawOval(petal, stroke);
+      canvas.restore();
+    }
+    canvas.drawCircle(center, size.width * 0.44, stroke);
+    canvas.drawCircle(
+      center,
+      size.width * 0.13,
+      Paint()..color = Colors.white.withValues(alpha: 0.25 * opacity),
+    );
+    canvas.drawCircle(
+      center,
+      size.width * 0.05,
+      Paint()..color = Colors.white.withValues(alpha: opacity),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant GiftMandalaPainter oldDelegate) =>
+      oldDelegate.opacity != opacity;
+}
+
+/// A ledger entry: the themed gift card plus sender/recipient actions.
+class GiftEnvelopeCard extends StatelessWidget {
+  const GiftEnvelopeCard({
+    required this.gift,
+    required this.isSender,
+    required this.isRecipient,
+    required this.senderName,
+    required this.recipientName,
+    required this.onOpen,
+    required this.onCancel,
+    required this.onRefund,
+    super.key,
+  });
+
+  final GiftCard gift;
+  final bool isSender;
+  final bool isRecipient;
+  final String senderName;
+  final String recipientName;
+  final VoidCallback onOpen;
+  final VoidCallback onCancel;
+  final VoidCallback onRefund;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = giftThemeFor(gift.template);
+    final reversed =
+        gift.status == GiftStatus.refunded ||
+        gift.status == GiftStatus.cancelled;
+    final canOpen = isRecipient && gift.status == GiftStatus.sent;
+    final canCancel = isSender && gift.status == GiftStatus.sent;
+    final canRefund = isSender && gift.status == GiftStatus.opened;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GiftCardVisual(
+          theme: theme,
+          amountMinor: gift.amountMinor,
+          fromName: senderName.split(' ').first,
+          toName: recipientName.split(' ').first,
+          message: gift.message,
+          faded: reversed,
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            StatusPill(
+              label: enumLabel(gift.status),
+              tone: toneForGiftStatus(gift.status),
+            ),
+            const Spacer(),
+            if (canOpen)
+              FilledButton.icon(
+                onPressed: onOpen,
+                icon: const Icon(Icons.drafts_outlined, size: 18),
+                label: const Text('Open'),
+              ),
+            if (canCancel)
+              OutlinedButton(onPressed: onCancel, child: const Text('Cancel')),
+            if (canRefund)
+              OutlinedButton(onPressed: onRefund, child: const Text('Refund')),
+          ],
+        ),
+        if (reversed) ...[
+          const SizedBox(height: 6),
+          Text(
+            gift.status == GiftStatus.cancelled
+                ? 'Cancelled before opening • eSewa payment reversed.'
+                : 'Refunded • eSewa payment reversed.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+Future<void> showGiftOpenedCelebration(
+  BuildContext context,
+  GiftCard gift, {
+  required String fromName,
+  required String toName,
+}) async {
+  final theme = giftThemeFor(gift.template);
+  await showDialog<void>(
+    context: context,
+    builder: (context) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GiftCardVisual(
+              theme: theme,
+              amountMinor: gift.amountMinor,
+              fromName: fromName.split(' ').first,
+              toName: toName.split(' ').first,
+              message: gift.message,
+              big: true,
+            ),
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'You received ${money(gift.amountMinor)} 🎉',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: theme.from,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Thanks!'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class DhukutiScreen extends StatefulWidget {
