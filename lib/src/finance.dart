@@ -85,15 +85,64 @@ List<int> distributeByWeights(int totalMinor, List<int> weights) {
   return raw.map((share) => share.value).toList(growable: false);
 }
 
-List<int> equalShares(int totalMinor, List<String> userIds) {
+String? roundingRecipientFor({
+  required List<String> userIds,
+  String? payerId,
+  Map<String, int>? payerAmounts,
+}) {
+  if (userIds.isEmpty) {
+    return null;
+  }
+  if (payerAmounts != null && payerAmounts.isNotEmpty) {
+    final eligible =
+        payerAmounts.entries
+            .where((entry) => userIds.contains(entry.key) && entry.value > 0)
+            .toList()
+          ..sort((a, b) {
+            final byAmount = b.value.compareTo(a.value);
+            if (byAmount != 0) {
+              return byAmount;
+            }
+            return userIds.indexOf(a.key).compareTo(userIds.indexOf(b.key));
+          });
+    if (eligible.isNotEmpty) {
+      return eligible.first.key;
+    }
+  }
+  if (payerId != null && userIds.contains(payerId)) {
+    return payerId;
+  }
+  return userIds.first;
+}
+
+List<int> equalShares(
+  int totalMinor,
+  List<String> userIds, {
+  String? payerId,
+  Map<String, int>? payerAmounts,
+  String? remainderUserId,
+}) {
   if (userIds.isEmpty) {
     return <int>[];
   }
   final base = totalMinor ~/ userIds.length;
   var remainder = totalMinor - (base * userIds.length);
   final shares = List<int>.filled(userIds.length, base);
-  final indices = List<int>.generate(userIds.length, (index) => index)
-    ..shuffle();
+  final preferredUserId =
+      remainderUserId ??
+      roundingRecipientFor(
+        userIds: userIds,
+        payerId: payerId,
+        payerAmounts: payerAmounts,
+      );
+  final preferredIndex = preferredUserId == null
+      ? 0
+      : userIds.indexOf(preferredUserId);
+  final indices = <int>[
+    if (preferredIndex >= 0) preferredIndex,
+    for (var index = 0; index < userIds.length; index++)
+      if (index != preferredIndex) index,
+  ];
   var cursor = 0;
   while (remainder > 0) {
     shares[indices[cursor % indices.length]] += 1;

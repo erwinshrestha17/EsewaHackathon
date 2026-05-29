@@ -31,19 +31,19 @@ class SettingsScreen extends StatelessWidget {
         final state = controller.state;
         final profile = authController.state.activeUser ?? UserProfile.demo();
         return Scaffold(
-          appBar: AppBar(title: const Text('Settings')),
+          appBar: AppBar(title: const Text('Profile')),
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: [
               Text(
-                'Settings',
+                'Profile',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
-                'Manage your profile, privacy, payments, and Sangai preferences.',
+                'Manage your profile, social finance, payments, and Sajha Kharcha preferences.',
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 16),
@@ -94,6 +94,25 @@ class SettingsScreen extends StatelessWidget {
               SettingsSection(
                 title: 'Groups & Expenses',
                 children: [
+                  SettingsTile(
+                    icon: Icons.call_split_outlined,
+                    title: 'Default Split',
+                    value: state.defaultSplitMode.label,
+                    onTap: () => _chooseDefaultSplitMode(context),
+                  ),
+                  SettingsTile(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'Tax Allocation',
+                    subtitle: 'Used for VAT, service charge, and tips.',
+                    value: state.taxAllocationMode.label,
+                    onTap: () => _chooseTaxAllocationMode(context),
+                  ),
+                  SettingsTile(
+                    icon: Icons.document_scanner_outlined,
+                    title: 'OCR Review',
+                    value: state.ocrReviewPreference.label,
+                    onTap: () => _chooseOcrReviewPreference(context),
+                  ),
                   SettingsSwitchTile(
                     icon: Icons.calculate_outlined,
                     title: 'Show Rounding Note',
@@ -119,6 +138,12 @@ class SettingsScreen extends StatelessWidget {
                     title: 'Settlement Nudges',
                     value: state.settlementNudges,
                     onChanged: controller.setSettlementNudges,
+                  ),
+                  SettingsTile(
+                    icon: Icons.alarm_outlined,
+                    title: 'Default Reminder',
+                    value: state.reminderFrequency.label,
+                    onTap: () => _chooseReminderFrequency(context),
                   ),
                   SettingsTile(
                     icon: Icons.account_balance_wallet_outlined,
@@ -189,6 +214,18 @@ class SettingsScreen extends StatelessWidget {
                     value: state.language.label,
                     onTap: () => _chooseLanguage(context),
                   ),
+                  SettingsTile(
+                    icon: Icons.payments_outlined,
+                    title: 'Amount Format',
+                    value: state.amountFormatMode.label,
+                    onTap: () => _chooseAmountFormat(context),
+                  ),
+                  SettingsTile(
+                    icon: Icons.calendar_month_outlined,
+                    title: 'Date Format',
+                    value: state.dateFormatMode.label,
+                    onTap: () => _chooseDateFormat(context),
+                  ),
                 ],
               ),
               const SizedBox(height: 20),
@@ -197,14 +234,14 @@ class SettingsScreen extends StatelessWidget {
                 children: [
                   SettingsTile(
                     icon: Icons.help_outline,
-                    title: 'How Sangai Works',
+                    title: 'How Sajha Kharcha Works',
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => const _InfoScreen(
-                          title: 'How Sangai Works',
+                          title: 'How Sajha Kharcha Works',
                           icon: Icons.help_outline,
                           body:
-                              'Sangai helps you connect with trusted people, create groups, split expenses, settle dues, send gifts, and track Digital Dhukuti ledgers.',
+                              'Sajha Kharcha helps trusted people create groups, scan receipts, split expenses, settle dues, send gifts, and track transparent Dhukuti ledgers.',
                         ),
                       ),
                     ),
@@ -226,7 +263,8 @@ class SettingsScreen extends StatelessWidget {
                   const SettingsTile(
                     icon: Icons.info_outline,
                     title: 'Version 1.0',
-                    subtitle: 'Sangai v1.0\nTeam Cache Flow · Challenge 10',
+                    subtitle:
+                        'Sajha Kharcha by eSewa v1.0\nTeam Cache Flow · Challenge 10',
                     showChevron: false,
                   ),
                 ],
@@ -263,7 +301,7 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Log out of Sangai?'),
+          title: const Text('Log out of Sajha Kharcha?'),
           content: const Text(
             'You will need to log in again to access your groups, gifts, and Dhukuti details on this device.',
           ),
@@ -322,6 +360,96 @@ class SettingsScreen extends StatelessWidget {
     );
     if (value != null) {
       controller.setThemeMode(value);
+    }
+  }
+
+  Future<void> _chooseDefaultSplitMode(BuildContext context) async {
+    final value = await showSettingsChoiceBottomSheet<DefaultSplitMode>(
+      context: context,
+      title: 'Default Split',
+      selectedValue: controller.state.defaultSplitMode,
+      options: [
+        for (final mode in DefaultSplitMode.values)
+          SettingsChoiceOption(value: mode, label: mode.label),
+      ],
+    );
+    if (value != null) {
+      controller.setDefaultSplitMode(value);
+    }
+  }
+
+  Future<void> _chooseTaxAllocationMode(BuildContext context) async {
+    final value = await showSettingsChoiceBottomSheet<TaxAllocationMode>(
+      context: context,
+      title: 'Tax Allocation',
+      selectedValue: controller.state.taxAllocationMode,
+      options: [
+        for (final mode in TaxAllocationMode.values)
+          SettingsChoiceOption(value: mode, label: mode.label),
+      ],
+    );
+    if (value != null) {
+      controller.setTaxAllocationMode(value);
+    }
+  }
+
+  Future<void> _chooseOcrReviewPreference(BuildContext context) async {
+    final value = await showSettingsChoiceBottomSheet<OcrReviewPreference>(
+      context: context,
+      title: 'OCR Review',
+      selectedValue: controller.state.ocrReviewPreference,
+      options: [
+        for (final preference in OcrReviewPreference.values)
+          SettingsChoiceOption(value: preference, label: preference.label),
+      ],
+    );
+    if (value != null) {
+      controller.setOcrReviewPreference(value);
+    }
+  }
+
+  Future<void> _chooseReminderFrequency(BuildContext context) async {
+    final value = await showSettingsChoiceBottomSheet<ReminderFrequency>(
+      context: context,
+      title: 'Default Reminder',
+      selectedValue: controller.state.reminderFrequency,
+      options: [
+        for (final frequency in ReminderFrequency.values)
+          SettingsChoiceOption(value: frequency, label: frequency.label),
+      ],
+    );
+    if (value != null) {
+      controller.setReminderFrequency(value);
+    }
+  }
+
+  Future<void> _chooseAmountFormat(BuildContext context) async {
+    final value = await showSettingsChoiceBottomSheet<AmountFormatMode>(
+      context: context,
+      title: 'Amount Format',
+      selectedValue: controller.state.amountFormatMode,
+      options: [
+        for (final mode in AmountFormatMode.values)
+          SettingsChoiceOption(value: mode, label: mode.label),
+      ],
+    );
+    if (value != null) {
+      controller.setAmountFormatMode(value);
+    }
+  }
+
+  Future<void> _chooseDateFormat(BuildContext context) async {
+    final value = await showSettingsChoiceBottomSheet<DateFormatMode>(
+      context: context,
+      title: 'Date Format',
+      selectedValue: controller.state.dateFormatMode,
+      options: [
+        for (final mode in DateFormatMode.values)
+          SettingsChoiceOption(value: mode, label: mode.label),
+      ],
+    );
+    if (value != null) {
+      controller.setDateFormatMode(value);
     }
   }
 

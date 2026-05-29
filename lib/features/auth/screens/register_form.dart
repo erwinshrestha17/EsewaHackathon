@@ -18,7 +18,10 @@ class _RegisterFormState extends State<RegisterForm> {
   final _district = TextEditingController();
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
+  final _pin = TextEditingController();
   var _submitting = false;
+  var _contactsAllowed = true;
+  var _biometricEnabled = true;
 
   @override
   void dispose() {
@@ -28,6 +31,7 @@ class _RegisterFormState extends State<RegisterForm> {
     _district.dispose();
     _password.dispose();
     _confirmPassword.dispose();
+    _pin.dispose();
     super.dispose();
   }
 
@@ -87,10 +91,42 @@ class _RegisterFormState extends State<RegisterForm> {
             obscureText: true,
             validator: _confirmPasswordValidator,
           ),
+          const SizedBox(height: 12),
+          AuthTextField(
+            controller: _pin,
+            label: 'Create 4-digit PIN',
+            icon: Icons.pin_outlined,
+            keyboardType: TextInputType.number,
+            validator: _pinValidator,
+          ),
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _biometricEnabled,
+            title: const Text('Enable biometric login'),
+            subtitle: const Text('Use device unlock after PIN setup.'),
+            onChanged: (value) =>
+                setState(() => _biometricEnabled = value ?? true),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _contactsAllowed,
+            title: const Text('Find friends faster'),
+            subtitle: const Text(
+              'We only use contacts to help you find people you already know.',
+            ),
+            onChanged: (value) =>
+                setState(() => _contactsAllowed = value ?? false),
+          ),
+          const SizedBox(height: 6),
+          const Chip(
+            avatar: Icon(Icons.verified_user_outlined, size: 18),
+            label: Text('KYC badge available when linked to eSewa'),
+          ),
           const SizedBox(height: 18),
           FilledButton(
             onPressed: _submitting ? null : _createAccount,
-            child: Text(_submitting ? 'Creating...' : 'Create Account'),
+            child: Text(_submitting ? 'Creating...' : 'Continue with eSewa'),
           ),
         ],
       ),
@@ -107,6 +143,16 @@ class _RegisterFormState extends State<RegisterForm> {
       return requiredMessage;
     }
     return value == _password.text ? null : 'Passwords must match';
+  }
+
+  String? _pinValidator(String? value) {
+    final requiredMessage = _required(value);
+    if (requiredMessage != null) {
+      return requiredMessage;
+    }
+    return RegExp(r'^\d{4}$').hasMatch(value!.trim())
+        ? null
+        : 'Enter a 4-digit PIN';
   }
 
   Future<void> _createAccount() async {

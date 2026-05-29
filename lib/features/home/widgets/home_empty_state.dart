@@ -34,7 +34,7 @@ class HomeEmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Create a group, connect with friends, or send your first Sangai gift.',
+            'Create a group, connect with friends, or send your first Sajha Kharcha gift.',
             textAlign: TextAlign.center,
             style: TextStyle(color: scheme.onSurfaceVariant),
           ),
@@ -50,7 +50,7 @@ class HomeEmptyState extends StatelessWidget {
               ),
               OutlinedButton(
                 onPressed: onConnectFriend,
-                child: const Text('Connect Friend'),
+                child: const Text('Friends'),
               ),
             ],
           ),

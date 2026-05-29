@@ -46,7 +46,7 @@ class HomeHeader extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   const Text(
-                    'Sangai',
+                    'Sajha Kharcha',
                     style: TextStyle(fontWeight: FontWeight.w900),
                   ),
                 ],
@@ -60,7 +60,7 @@ class HomeHeader extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                'Here’s your Sangai summary',
+                'Here’s your shared balance summary',
                 style: TextStyle(
                   color: scheme.onSurfaceVariant,
                   fontWeight: FontWeight.w600,

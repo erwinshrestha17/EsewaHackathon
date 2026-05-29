@@ -16,15 +16,17 @@ class DhukutiCreateScreen extends StatefulWidget {
 class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
   final _poolName = TextEditingController(text: 'New Digital Dhukuti');
   final _amount = TextEditingController(text: '3000');
+  final _serviceFee = TextEditingController(text: '50');
   var _frequency = 'Monthly';
   var _payoutOrder = 'Manual order';
   String? _groupId;
   final _selectedMembers = <String>{};
+  var _agreementAccepted = false;
 
   @override
   void initState() {
     super.initState();
-    final groups = widget.store.visibleGroups;
+    final groups = widget.store.visibleDhukutiGroups;
     _groupId = groups.isEmpty ? null : groups.first.id;
     _selectedMembers.addAll(
       widget.store.activeConnectionUsers().take(4).map((user) => user.id),
@@ -35,17 +37,20 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
   void dispose() {
     _poolName.dispose();
     _amount.dispose();
+    _serviceFee.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
-    final groups = store.visibleGroups;
+    final groups = store.visibleDhukutiGroups;
     final connections = store.activeConnectionUsers();
     final memberCount = _selectedMembers.length + 1;
     final amount = parseMoneyToMinor(_amount.text);
+    final serviceFee = parseMoneyToMinor(_serviceFee.text);
     final expected = amount * memberCount;
+    final netPayout = expected - serviceFee;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create Dhukuti Pool')),
@@ -98,6 +103,16 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                   ],
                   onChanged: (value) =>
                       setState(() => _frequency = value ?? _frequency),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _serviceFee,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Service fee per payout',
+                    prefixText: 'NPR ',
+                  ),
+                  onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 12),
                 InputDatePickerFormField(
@@ -163,13 +178,27 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
               children: [
                 _ReviewRow(label: 'Contribution amount', value: money(amount)),
                 _ReviewRow(label: 'Number of members', value: '$memberCount'),
+                _ReviewRow(label: 'Gross pot', value: money(expected)),
+                _ReviewRow(label: 'Service fee', value: money(serviceFee)),
                 _ReviewRow(
-                  label: 'Expected payout per cycle',
-                  value: money(expected),
+                  label: 'Net payout per cycle',
+                  value: money(netPayout),
                 ),
                 _ReviewRow(label: 'Total cycles', value: '$memberCount'),
                 const _ReviewRow(label: 'Start date', value: 'Jun 15, 2026'),
                 _ReviewRow(label: 'Payout order', value: _payoutOrder),
+                const _ReviewRow(
+                  label: 'Late contribution rule',
+                  value: 'Marked at risk after due date',
+                ),
+                const _ReviewRow(
+                  label: 'Exit rule',
+                  value: 'Member review after contribution or payout',
+                ),
+                _ReviewRow(
+                  label: 'Admin',
+                  value: store.currentUser.displayName,
+                ),
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -185,10 +214,26 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                   ),
                 ),
                 const SizedBox(height: 14),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _agreementAccepted,
+                  title: const Text(
+                    'I understand the contribution and payout schedule.',
+                  ),
+                  onChanged: (value) =>
+                      setState(() => _agreementAccepted = value ?? false),
+                ),
+                const SizedBox(height: 8),
                 FilledButton.icon(
-                  onPressed: () => _showPhase2Message(context),
-                  icon: const Icon(Icons.lock_clock_outlined),
-                  label: const Text('Create Dhukuti Pool'),
+                  onPressed:
+                      _agreementAccepted &&
+                          _groupId != null &&
+                          amount > 0 &&
+                          memberCount > 1
+                      ? () => _createPool(context)
+                      : null,
+                  icon: const Icon(Icons.send_outlined),
+                  label: const Text('Send Invites'),
                 ),
               ],
             ),
@@ -198,39 +243,23 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
     );
   }
 
-  Future<void> _showPhase2Message(BuildContext context) {
-    return showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Coming Soon / Phase 2',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Pool creation is not connected yet. Existing pools show the transparent schedule and ledger flow.',
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Got it'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+  void _createPool(BuildContext context) {
+    final id = widget.store.createDhukutiPool(
+      groupId: _groupId!,
+      name: _poolName.text.trim().isEmpty
+          ? 'New Digital Dhukuti'
+          : _poolName.text.trim(),
+      contributionAmountMinor: parseMoneyToMinor(_amount.text),
+      frequency: _frequency,
+      startDate: DateTime(2026, 6, 15),
+      memberIds: _selectedMembers.toList(),
     );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${widget.store.poolById(id).name} invites sent.'),
+      ),
+    );
+    Navigator.pop(context);
   }
 }
 

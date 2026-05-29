@@ -72,7 +72,9 @@ class AppStore extends ChangeNotifier {
       users[index] = updated;
     }
     currentUserId = profile.id;
-    selectedGroupId = visibleGroups.isEmpty ? null : visibleGroups.first.id;
+    selectedGroupId = visibleExpenseGroups.isEmpty
+        ? null
+        : visibleExpenseGroups.first.id;
     selectedDhukutiPoolId = visibleDhukutiPools.isEmpty
         ? null
         : visibleDhukutiPools.first.id;
@@ -104,7 +106,9 @@ class AppStore extends ChangeNotifier {
 
   void switchUser(String userId) {
     currentUserId = userId;
-    selectedGroupId = visibleGroups.isEmpty ? null : visibleGroups.first.id;
+    selectedGroupId = visibleExpenseGroups.isEmpty
+        ? null
+        : visibleExpenseGroups.first.id;
     selectedDhukutiPoolId = visibleDhukutiPools.isEmpty
         ? null
         : visibleDhukutiPools.first.id;
@@ -124,6 +128,18 @@ class AppStore extends ChangeNotifier {
         .where((group) => ids.contains(group.id) && !group.isDisbanded)
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  List<Group> get visibleExpenseGroups {
+    return visibleGroups
+        .where((group) => group.kind == GroupKind.expense)
+        .toList();
+  }
+
+  List<Group> get visibleDhukutiGroups {
+    return visibleGroups
+        .where((group) => group.kind == GroupKind.dhukuti)
+        .toList();
   }
 
   List<DhukutiPool> get visibleDhukutiPools {
@@ -236,7 +252,7 @@ class AppStore extends ChangeNotifier {
       _notify(
         targetUserId,
         'connection',
-        'New Sangai request',
+        'New Sajha Kharcha request',
         '${nameOf(currentUserId)} wants to connect.',
       );
       notifyListeners();
@@ -267,7 +283,7 @@ class AppStore extends ChangeNotifier {
     _notify(
       targetUserId,
       'connection',
-      'New Sangai request',
+      'New Sajha Kharcha request',
       '${nameOf(currentUserId)} wants to connect.',
     );
     notifyListeners();
@@ -417,6 +433,7 @@ class AppStore extends ChangeNotifier {
     required GroupCategory category,
     required List<String> memberIds,
     String template = 'Custom',
+    GroupKind kind = GroupKind.expense,
   }) {
     final allMembers = <String>{
       currentUserId,
@@ -430,6 +447,7 @@ class AppStore extends ChangeNotifier {
       name: name,
       category: category,
       template: template,
+      kind: kind,
       createdBy: currentUserId,
       createdAt: _now,
     );
@@ -448,7 +466,9 @@ class AppStore extends ChangeNotifier {
         ),
       );
     }
-    selectedGroupId = group.id;
+    if (kind == GroupKind.expense) {
+      selectedGroupId = group.id;
+    }
     _activity(
       actorId: currentUserId,
       groupId: group.id,
@@ -638,24 +658,78 @@ class AppStore extends ChangeNotifier {
   }
 
   String? leaveGroup(String groupId) {
-    final group = groupByIdOrNull(groupId);
-    if (group == null || group.isDisbanded) {
-      return 'Group is no longer available.';
-    }
-    final member = memberForGroup(groupId, currentUserId);
-    if (member == null || member.status != MemberStatus.active) {
-      return 'You are not an active member of this group.';
-    }
-    if (member.role == MemberRole.admin &&
-        activeAdminsForGroup(groupId).length <= 1) {
-      return 'Assign another admin or disband the group before leaving.';
+    final decision = groupLeaveDecision(groupId);
+    if (!decision.canLeaveNow) {
+      return decision.message;
     }
     removeGroupMember(groupId, currentUserId);
     if (selectedGroupId == groupId) {
-      selectedGroupId = visibleGroups.isEmpty ? null : visibleGroups.first.id;
+      selectedGroupId = visibleExpenseGroups.isEmpty
+          ? null
+          : visibleExpenseGroups.first.id;
     }
     notifyListeners();
     return null;
+  }
+
+  GroupLeaveDecision groupLeaveDecision(String groupId) {
+    final group = groupByIdOrNull(groupId);
+    if (group == null || group.isDisbanded) {
+      return const GroupLeaveDecision(
+        type: GroupLeaveDecisionType.unavailable,
+        title: 'Group unavailable',
+        message: 'Group is no longer available.',
+      );
+    }
+    final member = memberForGroup(groupId, currentUserId);
+    if (member == null || member.status != MemberStatus.active) {
+      return const GroupLeaveDecision(
+        type: GroupLeaveDecisionType.unavailable,
+        title: 'Not an active member',
+        message: 'You are not an active member of this group.',
+      );
+    }
+    if (member.role == MemberRole.admin &&
+        activeAdminsForGroup(groupId).length <= 1) {
+      return GroupLeaveDecision(
+        type: GroupLeaveDecisionType.needsNewAdmin,
+        title: 'Choose a new admin first',
+        message:
+            'Assign another admin or disband ${group.name} before leaving.',
+        primaryAction: 'Choose New Admin',
+        secondaryAction: 'Disband Group',
+      );
+    }
+    final balance = balanceForUserInGroup(groupId, currentUserId);
+    if (balance < 0) {
+      return GroupLeaveDecision(
+        type: GroupLeaveDecisionType.owesMoney,
+        title: 'Settle before leaving',
+        message:
+            'You still owe ${money(balance.abs())} in ${group.name}. Please settle your balance before leaving.',
+        amountMinor: balance.abs(),
+        primaryAction: 'Pay ${money(balance.abs())} & Leave',
+        secondaryAction: 'View Balance Details',
+      );
+    }
+    if (balance > 0) {
+      return GroupLeaveDecision(
+        type: GroupLeaveDecisionType.receivableActive,
+        title: 'You are still owed ${money(balance)}',
+        message:
+            'You can leave ${group.name} now. Your pending receivables remain visible, and members can still pay you.',
+        amountMinor: balance,
+        primaryAction: 'Leave & Keep Receivables Active',
+        secondaryAction: 'Send Reminder First',
+      );
+    }
+    return GroupLeaveDecision(
+      type: GroupLeaveDecisionType.zeroBalance,
+      title: 'Leave ${group.name}?',
+      message:
+          'You have no pending balance. Past records will remain visible to group members.',
+      primaryAction: 'Leave Group',
+    );
   }
 
   String? disbandGroup(String groupId) {
@@ -690,7 +764,9 @@ class AppStore extends ChangeNotifier {
       body: '${group.name} was disbanded by ${nameOf(currentUserId)}.',
     );
     if (selectedGroupId == groupId) {
-      selectedGroupId = visibleGroups.isEmpty ? null : visibleGroups.first.id;
+      selectedGroupId = visibleExpenseGroups.isEmpty
+          ? null
+          : visibleExpenseGroups.first.id;
     }
     notifyListeners();
     return null;
@@ -738,6 +814,8 @@ class AppStore extends ChangeNotifier {
     Map<String, int>? shareUnits,
     List<ParsedReceiptItem>? receiptItems,
     Map<int, List<String>>? itemAssignments,
+    Map<int, ItemSplitInput>? itemSplitInputs,
+    bool equalBillAdjustmentAllocation = false,
     int taxMinor = 0,
     int serviceChargeMinor = 0,
     int discountMinor = 0,
@@ -786,7 +864,12 @@ class AppStore extends ChangeNotifier {
     switch (splitMode) {
       case SplitMode.equal:
         final amounts = equalAmounts == null
-            ? equalShares(finalTotal, participants)
+            ? equalShares(
+                finalTotal,
+                participants,
+                payerId: payerId,
+                payerAmounts: paidBy,
+              )
             : participants.map((id) => equalAmounts[id] ?? 0).toList();
         validateCustomShares(finalTotal, amounts);
         for (var i = 0; i < participants.length; i++) {
@@ -817,11 +900,26 @@ class AppStore extends ChangeNotifier {
         var itemIndex = 0;
         for (final parsedItem in parsed) {
           final itemId = _id('item');
-          final assignedUsers = itemAssignments?[itemIndex] ?? participants;
+          final itemSplitInput = itemSplitInputs?[itemIndex];
+          final assignedUsers =
+              itemSplitInput?.userIds ??
+              itemAssignments?[itemIndex] ??
+              participants;
           final safeUsers = assignedUsers.isEmpty
               ? participants
               : assignedUsers;
-          final itemSplits = equalShares(parsedItem.amountMinor, safeUsers);
+          final units = itemSplitInput?.shareUnits;
+          final itemSplits = units == null
+              ? equalShares(
+                  parsedItem.amountMinor,
+                  safeUsers,
+                  payerId: payerId,
+                  payerAmounts: paidBy,
+                )
+              : unitShares(
+                  parsedItem.amountMinor,
+                  safeUsers.map((id) => units[id] ?? 1).toList(),
+                );
           final assignments = <ExpenseItemAssignment>[];
           for (var i = 0; i < safeUsers.length; i++) {
             shareAmounts[safeUsers[i]] =
@@ -832,6 +930,7 @@ class AppStore extends ChangeNotifier {
                 expenseItemId: itemId,
                 userId: safeUsers[i],
                 assignedAmountMinor: itemSplits[i],
+                splitUnits: units?[safeUsers[i]] ?? 1,
               ),
             );
           }
@@ -854,10 +953,14 @@ class AppStore extends ChangeNotifier {
             finalTotal -
             shareAmounts.values.fold<int>(0, (sum, value) => sum + value);
         if (delta != 0) {
-          final weights = participants
-              .map((id) => maxInt(shareAmounts[id]?.abs() ?? 0, 1))
-              .toList();
-          final adjustmentsForDelta = distributeByWeights(delta.abs(), weights);
+          final adjustmentsForDelta = equalBillAdjustmentAllocation
+              ? equalShares(delta.abs(), participants)
+              : distributeByWeights(
+                  delta.abs(),
+                  participants
+                      .map((id) => maxInt(shareAmounts[id]?.abs() ?? 0, 1))
+                      .toList(),
+                );
           for (var i = 0; i < participants.length; i++) {
             final signed = delta.isNegative
                 ? -adjustmentsForDelta[i]
@@ -1056,7 +1159,7 @@ class AppStore extends ChangeNotifier {
 
   int get totalOwedByCurrentUser {
     var total = 0;
-    for (final group in visibleGroups) {
+    for (final group in visibleExpenseGroups) {
       final balance = balanceForUserInGroup(group.id, currentUserId);
       if (balance < 0) {
         total += balance.abs();
@@ -1067,7 +1170,7 @@ class AppStore extends ChangeNotifier {
 
   int get totalOwedToCurrentUser {
     var total = 0;
-    for (final group in visibleGroups) {
+    for (final group in visibleExpenseGroups) {
       final balance = balanceForUserInGroup(group.id, currentUserId);
       if (balance > 0) {
         total += balance;
@@ -1203,13 +1306,25 @@ class AppStore extends ChangeNotifier {
 
   int settleAllForCurrentUserAcrossGroups() {
     var count = 0;
-    for (final group in visibleGroups) {
+    for (final group in visibleExpenseGroups) {
       for (final suggestion in suggestionsForGroup(group.id)) {
         if (suggestion.payerId == currentUserId) {
           final settlement = createOrReuseSettlement(suggestion);
           confirmSettlement(settlement.id);
           count += 1;
         }
+      }
+    }
+    return count;
+  }
+
+  int settleCurrentUserInGroup(String groupId) {
+    var count = 0;
+    for (final suggestion in suggestionsForGroup(groupId)) {
+      if (suggestion.payerId == currentUserId) {
+        final settlement = createOrReuseSettlement(suggestion);
+        confirmSettlement(settlement.id);
+        count += 1;
       }
     }
     return count;
@@ -1548,6 +1663,49 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  int payRemainingDhukutiExitContributions(String poolId) {
+    final contributions = remainingDhukutiExitContributions(poolId);
+    var total = 0;
+    for (final contribution in contributions) {
+      final existing = payments.any(
+        (payment) =>
+            payment.actorId == currentUserId &&
+            payment.operationType == contribution.operationType &&
+            payment.entityId == contribution.id &&
+            payment.status == PaymentStatus.paid,
+      );
+      if (existing) {
+        continue;
+      }
+      final payment = _payment(
+        actorId: currentUserId,
+        entityId: contribution.id,
+        entityType: 'dhukuti_contribution',
+        operationType: contribution.operationType,
+        amountMinor: contribution.amountMinor,
+        status: PaymentStatus.paid,
+      );
+      contribution
+        ..status = ContributionStatus.paid
+        ..paymentTransactionId = payment.id
+        ..paidAt = _now;
+      total += contribution.amountMinor;
+      _activity(
+        actorId: currentUserId,
+        groupId: poolById(contribution.poolId).groupId,
+        eventType: 'dhukuti_exit_contribution_paid',
+        entityType: 'dhukuti_contribution',
+        entityId: contribution.id,
+        title: 'Dhukuti exit contribution paid',
+        body:
+            '${nameOf(currentUserId)} prepaid ${money(contribution.amountMinor)} for cycle ${contribution.cycleNumber} before exit review.',
+      );
+    }
+    _refreshDhukutiCycles(poolId);
+    notifyListeners();
+    return total;
+  }
+
   String confirmDhukutiPayoutReview(String cycleId) {
     final cycle = dhukutiCycles.firstWhere((item) => item.id == cycleId);
     final payout = dhukutiPayouts.firstWhere((item) => item.cycleId == cycleId);
@@ -1583,6 +1741,16 @@ class AppStore extends ChangeNotifier {
   }
 
   void requestEmergencyExit(String poolId, String reason) {
+    final decision = dhukutiExitDecision(poolId);
+    if (decision.type == DhukutiExitDecisionType.unavailable) {
+      _notify(currentUserId, 'dhukuti_exit', decision.title, decision.message);
+      notifyListeners();
+      return;
+    }
+    if (decision.canLeaveNow) {
+      leaveDhukutiBeforeStart(poolId);
+      return;
+    }
     emergencyExitRequests.add(
       EmergencyExitRequest(
         id: _id('exit'),
@@ -1602,6 +1770,190 @@ class AppStore extends ChangeNotifier {
       body: '${nameOf(currentUserId)} requested organizer review.',
     );
     notifyListeners();
+  }
+
+  String? leaveDhukutiBeforeStart(String poolId) {
+    final decision = dhukutiExitDecision(poolId);
+    if (!decision.canLeaveNow) {
+      return decision.message;
+    }
+    final member = dhukutiMembers.firstWhere(
+      (item) => item.poolId == poolId && item.userId == currentUserId,
+    );
+    member.status = DhukutiMemberStatus.exited;
+    _activity(
+      actorId: currentUserId,
+      groupId: poolById(poolId).groupId,
+      eventType: 'dhukuti_left_before_start',
+      entityType: 'dhukuti_member',
+      entityId: member.id,
+      title: 'Dhukuti member left',
+      body:
+          '${nameOf(currentUserId)} left before the Dhukuti started. The schedule needs member review.',
+    );
+    _regenerateDhukutiSchedule(poolId);
+    notifyListeners();
+    return null;
+  }
+
+  DhukutiExitDecision dhukutiExitDecision(String poolId) {
+    final pool = dhukutiPools
+        .where((item) => item.id == poolId)
+        .cast<DhukutiPool?>()
+        .firstOrNull;
+    if (pool == null || pool.status == DhukutiPoolStatus.cancelled) {
+      return const DhukutiExitDecision(
+        type: DhukutiExitDecisionType.unavailable,
+        title: 'Dhukuti unavailable',
+        message: 'This Dhukuti pool is no longer available.',
+      );
+    }
+    final member = dhukutiMembers
+        .where((item) => item.poolId == poolId && item.userId == currentUserId)
+        .cast<DhukutiMember?>()
+        .firstOrNull;
+    if (member == null || member.status == DhukutiMemberStatus.exited) {
+      return const DhukutiExitDecision(
+        type: DhukutiExitDecisionType.unavailable,
+        title: 'No active participation',
+        message: 'You are not an active participant in this Dhukuti.',
+      );
+    }
+    final members = membersForPool(poolId);
+    final contributions =
+        dhukutiContributions
+            .where(
+              (item) => item.poolId == poolId && item.userId == currentUserId,
+            )
+            .toList()
+          ..sort((a, b) => a.cycleNumber.compareTo(b.cycleNumber));
+    final payouts = dhukutiPayouts
+        .where(
+          (item) => item.poolId == poolId && item.recipientId == currentUserId,
+        )
+        .toList();
+    final hasPaidAnyContribution = contributions.any(
+      (item) => item.status == ContributionStatus.paid,
+    );
+    final hasReceivedPayout = payouts.any(
+      (item) => item.status == PayoutStatus.paid,
+    );
+    final hasPendingInvite = members.any(
+      (item) => item.status == DhukutiMemberStatus.invited,
+    );
+    if (pool.status == DhukutiPoolStatus.draft ||
+        (hasPendingInvite && !hasPaidAnyContribution && !hasReceivedPayout)) {
+      return DhukutiExitDecision(
+        type: DhukutiExitDecisionType.canLeaveBeforeStart,
+        title: 'Leave before Dhukuti starts?',
+        message:
+            'You can leave before all members accept. Contribution amount and payout schedule will be recalculated.',
+        primaryAction: 'Leave Dhukuti',
+      );
+    }
+    final remainingExitContributions = remainingDhukutiExitContributions(
+      poolId,
+      userId: currentUserId,
+    );
+    final remainingExitTotal = remainingExitContributions.fold<int>(
+      0,
+      (sum, item) => sum + item.amountMinor,
+    );
+    if (remainingExitTotal > 0) {
+      final currentCycle = currentDhukutiCycleNumber(poolId);
+      final cycleText = remainingExitContributions.length == 1
+          ? 'Cycle ${remainingExitContributions.first.cycleNumber}'
+          : 'Cycles $currentCycle-${remainingExitContributions.last.cycleNumber}';
+      return DhukutiExitDecision(
+        type: DhukutiExitDecisionType.pendingContribution,
+        title: 'Remaining contributions required',
+        message:
+            'You are in Cycle $currentCycle. To leave this Dhukuti, you must first pay ${money(remainingExitTotal)} for your remaining contribution obligations ($cycleText).',
+        amountMinor: remainingExitTotal,
+        primaryAction: 'Pay Remaining Contributions',
+        secondaryAction: 'View Agreement',
+      );
+    }
+    if (hasReceivedPayout) {
+      return DhukutiExitDecision(
+        type: DhukutiExitDecisionType.receivedPayout,
+        title: 'Payout already received',
+        message:
+            'You already received the community pot. Your remaining cycle contributions are paid, so the exit still needs admin and member approval.',
+        amountMinor: 0,
+        primaryAction: 'Request Exit Approval',
+        secondaryAction: 'Request Exit Approval',
+      );
+    }
+    final paid = contributions
+        .where((item) => item.status == ContributionStatus.paid)
+        .fold<int>(0, (sum, item) => sum + item.amountMinor);
+    return DhukutiExitDecision(
+      type: DhukutiExitDecisionType.requiresApproval,
+      title: 'Contributions already paid',
+      message:
+          'You can request exit, but members must approve the updated payout order, pot amount, service fee, and refund treatment.',
+      amountMinor: paid,
+      primaryAction: 'Request Exit',
+      secondaryAction: 'View Agreement',
+    );
+  }
+
+  int currentDhukutiCycleNumber(String poolId) {
+    final active =
+        dhukutiCycles
+            .where(
+              (item) =>
+                  item.poolId == poolId &&
+                  (item.status == DhukutiCycleStatus.open ||
+                      item.status == DhukutiCycleStatus.atRisk ||
+                      item.status == DhukutiCycleStatus.readyForPayout),
+            )
+            .toList()
+          ..sort((a, b) => a.cycleNumber.compareTo(b.cycleNumber));
+    if (active.isNotEmpty) {
+      return active.first.cycleNumber;
+    }
+    final upcoming =
+        dhukutiCycles
+            .where(
+              (item) =>
+                  item.poolId == poolId &&
+                  item.status == DhukutiCycleStatus.upcoming,
+            )
+            .toList()
+          ..sort((a, b) => a.cycleNumber.compareTo(b.cycleNumber));
+    if (upcoming.isNotEmpty) {
+      return upcoming.first.cycleNumber;
+    }
+    final cycles = dhukutiCycles
+        .where((item) => item.poolId == poolId)
+        .map((item) => item.cycleNumber)
+        .toList();
+    if (cycles.isEmpty) {
+      return 1;
+    }
+    cycles.sort();
+    return cycles.last;
+  }
+
+  List<DhukutiContribution> remainingDhukutiExitContributions(
+    String poolId, {
+    String? userId,
+  }) {
+    final actorId = userId ?? currentUserId;
+    final currentCycle = currentDhukutiCycleNumber(poolId);
+    return dhukutiContributions
+        .where(
+          (item) =>
+              item.poolId == poolId &&
+              item.userId == actorId &&
+              item.cycleNumber >= currentCycle &&
+              item.status != ContributionStatus.paid &&
+              item.status != ContributionStatus.cancelled,
+        )
+        .toList()
+      ..sort((a, b) => a.cycleNumber.compareTo(b.cycleNumber));
   }
 
   void approveEmergencyExit(String requestId) {
@@ -1845,7 +2197,13 @@ class AppStore extends ChangeNotifier {
 
   void _generateDhukutiSchedule(String poolId) {
     final pool = poolById(poolId);
-    final activeMembers = membersForPool(poolId);
+    final activeMembers = membersForPool(poolId)
+        .where(
+          (member) =>
+              member.status == DhukutiMemberStatus.active ||
+              member.status == DhukutiMemberStatus.invited,
+        )
+        .toList();
     final memberIds = activeMembers.map((member) => member.userId).toList();
     for (var i = 0; i < memberIds.length; i++) {
       final cycleId = _id('dhukuti-cycle');
@@ -1902,6 +2260,13 @@ class AppStore extends ChangeNotifier {
         ),
       );
     }
+  }
+
+  void _regenerateDhukutiSchedule(String poolId) {
+    dhukutiCycles.removeWhere((item) => item.poolId == poolId);
+    dhukutiContributions.removeWhere((item) => item.poolId == poolId);
+    dhukutiPayouts.removeWhere((item) => item.poolId == poolId);
+    _generateDhukutiSchedule(poolId);
   }
 
   void _refreshDhukutiCycles(String poolId) {
@@ -2094,6 +2459,7 @@ class AppStore extends ChangeNotifier {
       name: 'Shrestha Family',
       category: GroupCategory.festival,
       template: 'Family Dhukuti',
+      kind: GroupKind.dhukuti,
       createdBy: 'u-sita',
       createdAt: DateTime(2026, 5, 14),
     );

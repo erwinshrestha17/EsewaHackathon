@@ -509,10 +509,185 @@ class _OverviewTab extends StatelessWidget {
                     }
                   },
           ),
+          const SizedBox(height: 12),
+          _DhukutiExitCard(
+            store: store,
+            pool: pool,
+            contribution: myContribution,
+            onChanged: onPaid,
+          ),
         ],
       ),
     );
   }
+}
+
+class _DhukutiExitCard extends StatelessWidget {
+  const _DhukutiExitCard({
+    required this.store,
+    required this.pool,
+    required this.contribution,
+    required this.onChanged,
+  });
+
+  final AppStore store;
+  final DhukutiPool pool;
+  final DhukutiContribution? contribution;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final decision = store.dhukutiExitDecision(pool.id);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.exit_to_app_outlined, color: dhukutiFestival),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  decision.title,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(decision.message),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (decision.secondaryAction != null)
+                OutlinedButton(
+                  onPressed: () => _showDhukutiExitDialog(context, store, pool),
+                  child: Text(decision.secondaryAction!),
+                ),
+              FilledButton(
+                onPressed: decision.type == DhukutiExitDecisionType.unavailable
+                    ? null
+                    : () async {
+                        if (decision.type ==
+                            DhukutiExitDecisionType.pendingContribution) {
+                          final paidAmount = store
+                              .payRemainingDhukutiExitContributions(pool.id);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  paidAmount == 0
+                                      ? 'No remaining contribution is open.'
+                                      : 'Paid ${money(paidAmount)} toward remaining Dhukuti obligations.',
+                                ),
+                              ),
+                            );
+                          }
+                          onChanged();
+                          return;
+                        }
+                        if (decision.type ==
+                                DhukutiExitDecisionType.receivedPayout &&
+                            decision.amountMinor > 0 &&
+                            contribution != null) {
+                          final paid = await showDhukutiPaymentBottomSheet(
+                            context: context,
+                            store: store,
+                            pool: pool,
+                            contribution: contribution!,
+                          );
+                          if (paid) {
+                            onChanged();
+                          }
+                          return;
+                        }
+                        if (decision.canLeaveNow) {
+                          final error = store.leaveDhukutiBeforeStart(pool.id);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  error ?? 'You left ${pool.name}.',
+                                ),
+                              ),
+                            );
+                          }
+                          onChanged();
+                          return;
+                        }
+                        await _showDhukutiExitDialog(context, store, pool);
+                        onChanged();
+                      },
+                child: Text(decision.primaryAction ?? 'Request Exit'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _showDhukutiExitDialog(
+  BuildContext context,
+  AppStore store,
+  DhukutiPool pool,
+) async {
+  final decision = store.dhukutiExitDecision(pool.id);
+  final reason = TextEditingController(
+    text: decision.type == DhukutiExitDecisionType.pendingContribution
+        ? 'Requesting admin review before remaining contributions are fully paid'
+        : decision.type == DhukutiExitDecisionType.receivedPayout
+        ? 'Requesting exit approval after payout'
+        : 'Need to exit before receiving payout',
+  );
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(decision.title),
+      content: SizedBox(
+        width: 460,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(decision.message),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reason,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Reason for admin and member review',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: decision.canRequestApproval
+              ? () {
+                  store.requestEmergencyExit(pool.id, reason.text);
+                  Navigator.pop(dialogContext);
+                }
+              : null,
+          child: const Text('Request Review'),
+        ),
+      ],
+    ),
+  );
+  reason.dispose();
 }
 
 class _NextActionCard extends StatelessWidget {

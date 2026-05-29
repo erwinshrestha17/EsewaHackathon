@@ -22,7 +22,7 @@ class NotificationSettingsScreen extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             children: [
               Text(
-                'Choose which Sangai events appear in the prototype notification center.',
+                'Choose which Sajha Kharcha events appear in the prototype notification center.',
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 12),

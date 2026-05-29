@@ -52,23 +52,24 @@ class AuthController extends ChangeNotifier {
     required String identifier,
     required String password,
   }) async {
-    final trimmedIdentifier = identifier.trim();
-    if (trimmedIdentifier.isEmpty || password.isEmpty) {
-      throw const AuthValidationException('Enter your ID and password.');
+    final mobile = _normalizeNepalMobile(identifier);
+    if (mobile == null || password.isEmpty) {
+      throw const AuthValidationException('Enter a valid Nepal mobile number.');
     }
 
     final existing = _state.activeUser;
     final profile =
         existing ??
-        UserProfile.demo().copyWith(
-          phone: trimmedIdentifier.contains('@')
-              ? '98XXXXXXXX'
-              : trimmedIdentifier,
-          esewaId: trimmedIdentifier.contains('@')
-              ? trimmedIdentifier
-              : 'demo@esewa',
-        );
+        UserProfile.demo().copyWith(phone: mobile, esewaId: 'demo@esewa');
     await _saveLoggedInProfile(profile);
+  }
+
+  String? _normalizeNepalMobile(String value) {
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    final mobile = digits.length == 13 && digits.startsWith('977')
+        ? digits.substring(3)
+        : digits;
+    return RegExp(r'^9[678]\d{8}$').hasMatch(mobile) ? mobile : null;
   }
 
   Future<void> register({

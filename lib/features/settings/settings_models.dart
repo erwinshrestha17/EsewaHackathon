@@ -2,6 +2,16 @@ enum ConnectionRequestPreference { everyone, contactsOnly, qrInviteOnly }
 
 enum DefaultSplitMode { equal, exactAmount, percentage, shares }
 
+enum TaxAllocationMode { proportionalByItem, equalAmongIncluded }
+
+enum AmountFormatMode { rs, nepaliRupee }
+
+enum DateFormatMode { ad, bs }
+
+enum ReminderFrequency { none, daily, everyTwoDays, weekly }
+
+enum OcrReviewPreference { alwaysReview, reviewLowConfidence, autoAccept }
+
 enum ActivityTimelineLimit { latest5, latest10, latest20 }
 
 enum AppThemeMode { system, light, dark }
@@ -33,6 +43,11 @@ class SettingsState {
     required this.avatarInitials,
     required this.connectionRequestPreference,
     required this.defaultSplitMode,
+    required this.taxAllocationMode,
+    required this.amountFormatMode,
+    required this.dateFormatMode,
+    required this.reminderFrequency,
+    required this.ocrReviewPreference,
     required this.activityTimelineLimit,
     required this.showRoundingNote,
     required this.confirmBeforePayment,
@@ -54,6 +69,11 @@ class SettingsState {
       avatarInitials: 'ES',
       connectionRequestPreference: ConnectionRequestPreference.everyone,
       defaultSplitMode: DefaultSplitMode.equal,
+      taxAllocationMode: TaxAllocationMode.proportionalByItem,
+      amountFormatMode: AmountFormatMode.rs,
+      dateFormatMode: DateFormatMode.ad,
+      reminderFrequency: ReminderFrequency.everyTwoDays,
+      ocrReviewPreference: OcrReviewPreference.alwaysReview,
       activityTimelineLimit: ActivityTimelineLimit.latest5,
       showRoundingNote: true,
       confirmBeforePayment: true,
@@ -77,6 +97,11 @@ class SettingsState {
   final String avatarInitials;
   final ConnectionRequestPreference connectionRequestPreference;
   final DefaultSplitMode defaultSplitMode;
+  final TaxAllocationMode taxAllocationMode;
+  final AmountFormatMode amountFormatMode;
+  final DateFormatMode dateFormatMode;
+  final ReminderFrequency reminderFrequency;
+  final OcrReviewPreference ocrReviewPreference;
   final ActivityTimelineLimit activityTimelineLimit;
   final bool showRoundingNote;
   final bool confirmBeforePayment;
@@ -96,6 +121,11 @@ class SettingsState {
     String? avatarInitials,
     ConnectionRequestPreference? connectionRequestPreference,
     DefaultSplitMode? defaultSplitMode,
+    TaxAllocationMode? taxAllocationMode,
+    AmountFormatMode? amountFormatMode,
+    DateFormatMode? dateFormatMode,
+    ReminderFrequency? reminderFrequency,
+    OcrReviewPreference? ocrReviewPreference,
     ActivityTimelineLimit? activityTimelineLimit,
     bool? showRoundingNote,
     bool? confirmBeforePayment,
@@ -116,6 +146,11 @@ class SettingsState {
       connectionRequestPreference:
           connectionRequestPreference ?? this.connectionRequestPreference,
       defaultSplitMode: defaultSplitMode ?? this.defaultSplitMode,
+      taxAllocationMode: taxAllocationMode ?? this.taxAllocationMode,
+      amountFormatMode: amountFormatMode ?? this.amountFormatMode,
+      dateFormatMode: dateFormatMode ?? this.dateFormatMode,
+      reminderFrequency: reminderFrequency ?? this.reminderFrequency,
+      ocrReviewPreference: ocrReviewPreference ?? this.ocrReviewPreference,
       activityTimelineLimit:
           activityTimelineLimit ?? this.activityTimelineLimit,
       showRoundingNote: showRoundingNote ?? this.showRoundingNote,
@@ -149,6 +184,54 @@ extension DefaultSplitModeLabel on DefaultSplitMode {
       DefaultSplitMode.exactAmount => 'Exact Amount',
       DefaultSplitMode.percentage => 'Percentage',
       DefaultSplitMode.shares => 'Shares',
+    };
+  }
+}
+
+extension TaxAllocationModeLabel on TaxAllocationMode {
+  String get label {
+    return switch (this) {
+      TaxAllocationMode.proportionalByItem => 'Proportional by item',
+      TaxAllocationMode.equalAmongIncluded => 'Equal among included',
+    };
+  }
+}
+
+extension AmountFormatModeLabel on AmountFormatMode {
+  String get label {
+    return switch (this) {
+      AmountFormatMode.rs => 'Rs',
+      AmountFormatMode.nepaliRupee => 'रु',
+    };
+  }
+}
+
+extension DateFormatModeLabel on DateFormatMode {
+  String get label {
+    return switch (this) {
+      DateFormatMode.ad => 'AD',
+      DateFormatMode.bs => 'BS',
+    };
+  }
+}
+
+extension ReminderFrequencyLabel on ReminderFrequency {
+  String get label {
+    return switch (this) {
+      ReminderFrequency.none => 'None',
+      ReminderFrequency.daily => 'Daily',
+      ReminderFrequency.everyTwoDays => 'Every 2 days',
+      ReminderFrequency.weekly => 'Weekly',
+    };
+  }
+}
+
+extension OcrReviewPreferenceLabel on OcrReviewPreference {
+  String get label {
+    return switch (this) {
+      OcrReviewPreference.alwaysReview => 'Always review',
+      OcrReviewPreference.reviewLowConfidence => 'Low confidence only',
+      OcrReviewPreference.autoAccept => 'Auto-accept trusted receipts',
     };
   }
 }
@@ -209,6 +292,19 @@ extension NotificationPreferenceLabel on NotificationPreference {
       NotificationPreference.dhukutiContributionDue =>
         'Dhukuti contribution due',
       NotificationPreference.dhukutiCycleAtRisk => 'Dhukuti cycle at risk',
+    };
+  }
+
+  String get category {
+    return switch (this) {
+      NotificationPreference.settlementReminders ||
+      NotificationPreference.paymentStatusUpdates => 'Payments',
+      NotificationPreference.groupInvitations ||
+      NotificationPreference.expenseAdded => 'Groups',
+      NotificationPreference.dhukutiContributionDue ||
+      NotificationPreference.dhukutiCycleAtRisk => 'Dhukuti',
+      NotificationPreference.connectionRequests => 'Requests',
+      NotificationPreference.giftReceived => 'Groups',
     };
   }
 }

@@ -6,6 +6,17 @@ enum MemberRole { admin, member, treasurer }
 
 enum MemberStatus { active, removed }
 
+enum GroupKind { expense, dhukuti }
+
+enum GroupLeaveDecisionType {
+  canLeave,
+  owesMoney,
+  receivableActive,
+  zeroBalance,
+  needsNewAdmin,
+  unavailable,
+}
+
 enum GroupCategory {
   festival,
   trek,
@@ -73,6 +84,14 @@ enum DhukutiCycleStatus {
 enum PayoutStatus { pending, paid, failed, failedReview, expired, cancelled }
 
 enum AdjustmentType { correction, reversal, refund, manual }
+
+enum DhukutiExitDecisionType {
+  canLeaveBeforeStart,
+  pendingContribution,
+  receivedPayout,
+  requiresApproval,
+  unavailable,
+}
 
 class AppUser {
   AppUser({
@@ -219,6 +238,7 @@ class Group {
     required this.name,
     required this.category,
     required this.template,
+    this.kind = GroupKind.expense,
     required this.createdBy,
     required this.createdAt,
     this.latestSettlementLockAt,
@@ -230,6 +250,7 @@ class Group {
   String name;
   GroupCategory category;
   String template;
+  GroupKind kind;
   final String createdBy;
   final DateTime createdAt;
   DateTime? latestSettlementLockAt;
@@ -257,6 +278,60 @@ class GroupMember {
   MemberStatus status;
   final DateTime joinedAt;
   DateTime? removedAt;
+}
+
+class GroupLeaveDecision {
+  const GroupLeaveDecision({
+    required this.type,
+    required this.title,
+    required this.message,
+    this.amountMinor = 0,
+    this.primaryAction,
+    this.secondaryAction,
+  });
+
+  final GroupLeaveDecisionType type;
+  final String title;
+  final String message;
+  final int amountMinor;
+  final String? primaryAction;
+  final String? secondaryAction;
+
+  bool get canLeaveNow =>
+      type == GroupLeaveDecisionType.receivableActive ||
+      type == GroupLeaveDecisionType.zeroBalance ||
+      type == GroupLeaveDecisionType.canLeave;
+}
+
+class DhukutiExitDecision {
+  const DhukutiExitDecision({
+    required this.type,
+    required this.title,
+    required this.message,
+    this.amountMinor = 0,
+    this.primaryAction,
+    this.secondaryAction,
+  });
+
+  final DhukutiExitDecisionType type;
+  final String title;
+  final String message;
+  final int amountMinor;
+  final String? primaryAction;
+  final String? secondaryAction;
+
+  bool get canLeaveNow => type == DhukutiExitDecisionType.canLeaveBeforeStart;
+
+  bool get canRequestApproval =>
+      type == DhukutiExitDecisionType.requiresApproval ||
+      type == DhukutiExitDecisionType.receivedPayout;
+}
+
+class ItemSplitInput {
+  const ItemSplitInput({required this.userIds, this.shareUnits});
+
+  final List<String> userIds;
+  final Map<String, int>? shareUnits;
 }
 
 class ExpenseShare {

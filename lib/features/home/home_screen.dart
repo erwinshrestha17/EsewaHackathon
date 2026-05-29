@@ -118,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         onPay: () => unawaited(
                           _payDhukutiDue(data.upcomingDhukutiDues.first),
                         ),
-                        onViewLedger: () => widget.onNavigate(4),
+                        onViewLedger: () => widget.onNavigate(2),
                       ),
                     ],
                     const SizedBox(height: 18),
@@ -130,8 +130,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 18),
                     RecentActivityList(
                       items: data.recentActivities,
-                      onViewAll: () => widget.onNavigate(5),
-                      onItemTap: (_) => widget.onNavigate(5),
+                      onViewAll: () => widget.onNavigate(3),
+                      onItemTap: (_) => widget.onNavigate(3),
                     ),
                     const SizedBox(height: 18),
                     FestivalModeCard(onExplore: widget.onExploreTemplates),
@@ -163,13 +163,13 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'settle':
         widget.onSettle();
       case 'send_gift':
-        widget.onNavigate(3);
+        widget.onNavigate(2);
       case 'dhukuti':
-        widget.onNavigate(4);
+        widget.onNavigate(2);
       case 'scan_bill':
         widget.onScanBill();
       case 'connect_friend':
-        widget.onNavigate(2);
+        widget.onNavigate(4);
       default:
         widget.onNavigate(0);
     }

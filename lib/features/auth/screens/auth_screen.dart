@@ -44,7 +44,7 @@ class AuthScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 18),
                     Text(
-                      'Sangai',
+                      'Sajha Kharcha',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.displaySmall?.copyWith(
                         color: colorScheme.primary,
@@ -53,7 +53,7 @@ class AuthScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Shared finance, made simple.',
+                      'Scan. Split. Settle. Together.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: colorScheme.onSurfaceVariant,
@@ -76,7 +76,7 @@ class AuthScreen extends StatelessWidget {
                               child: const TabBar(
                                 tabs: [
                                   Tab(text: 'Login'),
-                                  Tab(text: 'Register'),
+                                  Tab(text: 'Sign up'),
                                 ],
                               ),
                             ),
@@ -96,7 +96,7 @@ class AuthScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Prototype login. No real eSewa authentication is performed.',
+                      'Prototype eSewa authentication. OTP, PIN, and biometric checks are simulated.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,

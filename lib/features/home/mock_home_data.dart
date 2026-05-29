@@ -125,6 +125,12 @@ HomeDashboardData mockHomeDashboardData() {
     ],
     suggestedActions: const [
       HomeQuickAction(
+        id: 'scan_bill',
+        label: 'Scan Receipt',
+        helper: 'OCR or manual',
+        icon: Icons.document_scanner_outlined,
+      ),
+      HomeQuickAction(
         id: 'add_expense',
         label: 'Add Expense',
         helper: 'Split with a group',
@@ -149,14 +155,8 @@ HomeDashboardData mockHomeDashboardData() {
         icon: Icons.account_balance_wallet_outlined,
       ),
       HomeQuickAction(
-        id: 'scan_bill',
-        label: 'Scan Bill',
-        helper: 'OCR or manual',
-        icon: Icons.document_scanner_outlined,
-      ),
-      HomeQuickAction(
         id: 'connect_friend',
-        label: 'Connect Friend',
+        label: 'Friends',
         helper: 'Trusted contacts',
         icon: Icons.qr_code_2_outlined,
       ),

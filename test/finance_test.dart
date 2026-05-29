@@ -12,6 +12,16 @@ void main() {
     expect(shares.where((share) => share == 3333).length, 2);
   });
 
+  test('equal split assigns rounding remainder to included payer', () {
+    final shares = equalShares(npr(100), const [
+      'u-sita',
+      'u-arjun',
+      'u-maya',
+    ], payerId: 'u-arjun');
+
+    expect(shares, [3333, 3334, 3333]);
+  });
+
   test('custom shares must match total', () {
     expect(
       () => validateCustomShares(npr(100), [npr(40), npr(59)]),
@@ -56,6 +66,36 @@ void main() {
       throwsArgumentError,
     );
   });
+
+  test(
+    'multiple payer equal split gives rounding to largest included payer',
+    () {
+      final store = AppStore();
+      final groupId = store.createGroup(
+        name: 'Rounding payer test',
+        category: GroupCategory.custom,
+        memberIds: const ['u-arjun', 'u-maya'],
+      );
+
+      final expenseId = store.addExpense(
+        groupId: groupId,
+        title: 'Rs 100 split',
+        totalMinor: npr(100),
+        payerId: 'u-sita',
+        payerAmounts: {'u-sita': npr(40), 'u-arjun': npr(60)},
+        category: 'custom',
+        splitMode: SplitMode.equal,
+        participantIds: const ['u-sita', 'u-arjun', 'u-maya'],
+      );
+      final expense = store.expenses.firstWhere((item) => item.id == expenseId);
+      final shares = {
+        for (final share in expense.shares) share.userId: share.amountMinor,
+      };
+
+      expect(shares['u-arjun'], 3334);
+      expect(shares.values.fold<int>(0, (sum, item) => sum + item), npr(100));
+    },
+  );
 
   test(
     're-adding a removed member creates a new period only for future use',
@@ -125,6 +165,59 @@ void main() {
     expect(store.groupById(groupId).isDisbanded, isFalse);
   });
 
+  test('members who owe money are blocked from leaving until settled', () {
+    final store = AppStore();
+    final groupId = store.createGroup(
+      name: 'Leave balance test',
+      category: GroupCategory.custom,
+      memberIds: const ['u-arjun'],
+    );
+    store.addExpense(
+      groupId: groupId,
+      title: 'Lunch',
+      totalMinor: npr(200),
+      payerId: 'u-sita',
+      category: 'custom',
+      splitMode: SplitMode.equal,
+      participantIds: const ['u-sita', 'u-arjun'],
+    );
+
+    store.switchUser('u-arjun');
+    final decision = store.groupLeaveDecision(groupId);
+    expect(decision.type, GroupLeaveDecisionType.owesMoney);
+    expect(store.leaveGroup(groupId), contains('settle'));
+    expect(store.isActiveGroupMember(groupId, 'u-arjun'), isTrue);
+
+    expect(store.settleCurrentUserInGroup(groupId), 1);
+    expect(store.leaveGroup(groupId), isNull);
+    expect(store.isActiveGroupMember(groupId, 'u-arjun'), isFalse);
+  });
+
+  test('members who are owed can leave with receivables active', () {
+    final store = AppStore();
+    final groupId = store.createGroup(
+      name: 'Receivable leave test',
+      category: GroupCategory.custom,
+      memberIds: const ['u-arjun'],
+    );
+    store.addExpense(
+      groupId: groupId,
+      title: 'Lunch',
+      totalMinor: npr(200),
+      payerId: 'u-arjun',
+      category: 'custom',
+      splitMode: SplitMode.equal,
+      participantIds: const ['u-sita', 'u-arjun'],
+    );
+
+    store.switchUser('u-arjun');
+    final decision = store.groupLeaveDecision(groupId);
+    expect(decision.type, GroupLeaveDecisionType.receivableActive);
+    expect(store.leaveGroup(groupId), isNull);
+    expect(store.isActiveGroupMember(groupId, 'u-arjun'), isFalse);
+    expect(store.suggestionsForGroup(groupId), isNotEmpty);
+  });
+
   test('admins can disband groups and deactivate all members', () {
     final store = AppStore();
     final groupId = store.createGroup(
@@ -181,6 +274,177 @@ void main() {
     expect(
       expense.shares.fold<int>(0, (sum, item) => sum + item.amountMinor),
       npr(300),
+    );
+  });
+
+  test('item receipt expenses support item-level share units', () {
+    final store = AppStore();
+    final expenseId = store.addExpense(
+      groupId: 'g-dashain',
+      title: 'Momo shares',
+      totalMinor: npr(300),
+      payerId: 'u-sita',
+      category: 'festival',
+      splitMode: SplitMode.item,
+      participantIds: const ['u-sita', 'u-arjun', 'u-maya'],
+      receiptItems: [
+        ParsedReceiptItem(label: 'Chicken Momo', amountMinor: npr(300)),
+      ],
+      itemSplitInputs: const {
+        0: ItemSplitInput(
+          userIds: ['u-sita', 'u-arjun', 'u-maya'],
+          shareUnits: {'u-sita': 2, 'u-arjun': 1, 'u-maya': 1},
+        ),
+      },
+    );
+
+    final expense = store.expenses.firstWhere((item) => item.id == expenseId);
+    final shares = {
+      for (final share in expense.shares) share.userId: share.amountMinor,
+    };
+
+    expect(shares['u-sita'], npr(150));
+    expect(shares['u-arjun'], npr(75));
+    expect(shares['u-maya'], npr(75));
+    expect(expense.items.single.assignments.first.splitUnits, 2);
+  });
+
+  test('item receipt bill adjustments can be allocated equally', () {
+    final store = AppStore();
+    final expenseId = store.addExpense(
+      groupId: 'g-dashain',
+      title: 'Momo with VAT',
+      totalMinor: npr(303),
+      payerId: 'u-sita',
+      category: 'festival',
+      splitMode: SplitMode.item,
+      participantIds: const ['u-sita', 'u-arjun', 'u-maya'],
+      receiptItems: [
+        ParsedReceiptItem(label: 'Chicken Momo', amountMinor: npr(300)),
+      ],
+      itemAssignments: const {
+        0: ['u-sita', 'u-arjun', 'u-maya'],
+      },
+      taxMinor: npr(3),
+      equalBillAdjustmentAllocation: true,
+    );
+
+    final expense = store.expenses.firstWhere((item) => item.id == expenseId);
+    final shares = {
+      for (final share in expense.shares) share.userId: share.amountMinor,
+    };
+
+    expect(shares.values.toSet(), {npr(101)});
+    expect(expense.billTaxMinor, npr(3));
+  });
+
+  test('Dhukuti exit decisions distinguish before-start and obligations', () {
+    final store = AppStore();
+    final groupId = store.createGroup(
+      name: 'Family Dhukuti group',
+      category: GroupCategory.custom,
+      memberIds: const ['u-arjun', 'u-maya'],
+    );
+    final poolId = store.createDhukutiPool(
+      groupId: groupId,
+      name: 'Family Dhukuti',
+      contributionAmountMinor: npr(5000),
+      frequency: 'monthly',
+      startDate: DateTime(2026, 6, 1),
+      memberIds: const ['u-arjun', 'u-maya'],
+    );
+
+    expect(
+      store.dhukutiExitDecision(poolId).type,
+      DhukutiExitDecisionType.canLeaveBeforeStart,
+    );
+
+    store.switchUser('u-arjun');
+    store.acceptDhukuti(poolId);
+    store.switchUser('u-maya');
+    store.acceptDhukuti(poolId);
+    store.switchUser('u-sita');
+
+    expect(
+      store.dhukutiExitDecision(poolId).type,
+      DhukutiExitDecisionType.pendingContribution,
+    );
+
+    final contribution = store.dhukutiContributions.firstWhere(
+      (item) => item.poolId == poolId && item.userId == 'u-sita',
+    );
+    store.payDhukutiContribution(contribution.id);
+    final remainingDecision = store.dhukutiExitDecision(poolId);
+    expect(remainingDecision.type, DhukutiExitDecisionType.pendingContribution);
+    expect(remainingDecision.amountMinor, npr(10000));
+    expect(store.payRemainingDhukutiExitContributions(poolId), npr(10000));
+    expect(
+      store.dhukutiExitDecision(poolId).type,
+      DhukutiExitDecisionType.requiresApproval,
+    );
+  });
+
+  test('mid-cycle Dhukuti exit requires all remaining cycle payments', () {
+    final store = AppStore();
+    final groupId = store.createGroup(
+      name: 'Six member Dhukuti group',
+      category: GroupCategory.custom,
+      memberIds: const ['u-arjun', 'u-maya', 'u-nabin', 'u-laxmi', 'u-rina'],
+      kind: GroupKind.dhukuti,
+    );
+    final poolId = store.createDhukutiPool(
+      groupId: groupId,
+      name: 'Six Month Dhukuti',
+      contributionAmountMinor: npr(5000),
+      frequency: 'monthly',
+      startDate: DateTime(2026, 6, 1),
+      memberIds: const ['u-arjun', 'u-maya', 'u-nabin', 'u-laxmi', 'u-rina'],
+    );
+
+    for (final userId in const [
+      'u-arjun',
+      'u-maya',
+      'u-nabin',
+      'u-laxmi',
+      'u-rina',
+    ]) {
+      store.switchUser(userId);
+      store.acceptDhukuti(poolId);
+    }
+    store.switchUser('u-sita');
+
+    for (final cycle in store.dhukutiCycles.where(
+      (item) => item.poolId == poolId,
+    )) {
+      cycle.status = switch (cycle.cycleNumber) {
+        1 || 2 => DhukutiCycleStatus.paidOut,
+        3 => DhukutiCycleStatus.open,
+        _ => DhukutiCycleStatus.upcoming,
+      };
+    }
+    for (final contribution in store.dhukutiContributions.where(
+      (item) =>
+          item.poolId == poolId &&
+          item.userId == 'u-sita' &&
+          item.cycleNumber < 3,
+    )) {
+      contribution.status = ContributionStatus.paid;
+    }
+
+    final decision = store.dhukutiExitDecision(poolId);
+    expect(decision.type, DhukutiExitDecisionType.pendingContribution);
+    expect(decision.amountMinor, npr(20000));
+    expect(decision.message, contains('Cycle 3'));
+    expect(decision.message, contains('Cycles 3-6'));
+
+    expect(store.payRemainingDhukutiExitContributions(poolId), npr(20000));
+    expect(
+      store.remainingDhukutiExitContributions(poolId, userId: 'u-sita').length,
+      0,
+    );
+    expect(
+      store.dhukutiExitDecision(poolId).type,
+      DhukutiExitDecisionType.requiresApproval,
     );
   });
 

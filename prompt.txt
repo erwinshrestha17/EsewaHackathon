@@ -1,0 +1,904 @@
+Updated edge-case handling
+1. Leaving a group or Dhukuti when money is pending
+Normal expense group
+When a user taps Leave Group, the app first checks their net balance.
+Case A: User owes money
+Example: “You owe Ritika Rs 850.”
+The user cannot leave immediately.
+The app shows a bottom sheet:
+Settle before leaving
+“You still owe Rs 850 in Pokhara Trip. Please settle your balance before leaving.”
+Actions:
+Pay Rs 850 & Leave
+View Balance Details
+Cancel
+After successful eSewa payment, the user can leave. Their old transactions remain visible as Former Member for transparency.
+Case B: Others owe the user money
+Example: “Ritika and Suman owe you Rs 1,200.”
+The user can leave, but the receivable remains active.
+The app shows:
+You are still owed Rs 1,200
+“You can leave the group now. Your pending receivables will remain visible, and members can still pay you.”
+Actions:
+Leave & Keep Receivables Active
+Send Reminder First
+Cancel
+After leaving:
+User is removed from future expenses.
+Their past expenses remain visible.
+People who owe them still see payment prompts.
+The user can still receive settlement payments.
+Case C: User has zero balance
+The user can leave immediately.
+Message:
+Leave Pokhara Trip?
+“You have no pending balance. Past records will remain visible to group members.”
+Actions:
+Leave Group
+Cancel
+Case D: Group admin wants to leave
+If the user is admin, they must first assign a new admin.
+Flow:
+Choose New Admin → Confirm Transfer → Leave Group
+The group cannot be left without an active admin.
+
+Dhukuti group
+Dhukuti is stricter than a normal expense group because it is a rotating savings commitment.
+Case A: Dhukuti has not started
+A member can leave or decline before all members accept.
+Result:
+Member is removed.
+Contribution amount or payout schedule is recalculated.
+Remaining members must review the updated schedule.
+Case B: Current contribution is unpaid
+The member cannot leave until the current due contribution is resolved.
+Message:
+Contribution pending
+“You have Rs 5,000 due for Cycle 3. Please contribute or ask the admin to cancel your participation before leaving.”
+Actions:
+Pay Contribution
+Request Admin Review
+Cancel
+Case C: User already received Dhukuti payout
+The user cannot leave casually because they have already received the community pot.
+Message:
+Payout already received
+“You received Rs 25,000 in Cycle 2. To leave, you must complete your remaining contributions or settle them in advance.”
+Actions:
+Pay Remaining Contributions
+Request Exit Approval
+View Agreement
+This prevents a user from taking the payout and leaving without completing future contributions.
+Case D: User has contributed but not yet received payout
+The user can request exit, but it requires approval.
+Flow:
+Request Exit → Admin Review → Members Reconfirm Schedule
+The app shows:
+Contributions already paid
+Whether refund is applicable according to group agreement
+Updated payout order
+Updated pot amount
+Updated service fee
+Dhukuti exit is not instant because changing one member affects everyone’s payout schedule.
+
+2. Uneven split: one item shared by only some members
+This is handled through item-level splitting.
+Example: 6 people are in the group, but only 3 people shared one plate of momo.
+Receipt item:
+Chicken Momo — Rs 300
+The user taps the item and sees:
+Who shared Chicken Momo?
+Member chips:
+Aayush
+Ritika
+Suman
+Bikash
+Anjali
+Nabin
+User selects only:
+Aayush
+Ritika
+Suman
+The item is split only among those 3 people:
+Aayush: Rs 100
+Ritika: Rs 100
+Suman: Rs 100
+Others: Rs 0 for that item
+If the split is not equal, the user can choose Split by Shares.
+Example:
+Chicken Momo — Rs 300
+Aayush: 2 shares
+Ritika: 1 share
+Suman: 1 share
+Result:
+Aayush: Rs 150
+Ritika: Rs 75
+Suman: Rs 75
+The item row shows small avatar bubbles so everyone can quickly see who was assigned to that item.
+Service charge, VAT, and tips are allocated proportionally based on each person’s item total by default. The user can change this to equal allocation if needed.
+
+3. Equal split rounding: Rs 100 split among 3 people
+The app should never show:
+Rs 33.33 + Rs 33.33 + Rs 33.33 = Rs 99.99
+That creates a missing paisa and breaks trust.
+So the app uses this rule:
+Always preserve the exact total.
+For Rs 100 split among 3 people:
+Person 1: Rs 33.34
+Person 2: Rs 33.33
+Person 3: Rs 33.33
+Total: Rs 100.00
+Who gets Rs 33.34?
+Default rule:
+The extra Rs 0.01 goes to the payer’s own share if the payer is included in the split.
+Example:
+Aayush paid Rs 100 for Aayush, Ritika, and Suman.
+Split result:
+Aayush: Rs 33.34
+Ritika owes Aayush: Rs 33.33
+Suman owes Aayush: Rs 33.33
+Why this works:
+The payer absorbs the tiny rounding difference.
+Other members are not randomly charged extra.
+The total remains mathematically correct.
+If the payer is not part of the split, the extra Rs 0.01 goes to the first selected member by group order.
+If there are multiple payers, the extra Rs 0.01 goes to the payer who paid the largest amount.
+The confirmation screen shows:
+Rounding adjustment: +Rs 0.01 applied to Aayush
+Users can tap this row and manually move the rounding adjustment to another member if they want.
+
+4. Multiple people paid for one group expense
+The app supports multiple payers inside Add Expense.
+Example:
+Total bill: Rs 6,000 Members: 6 Split: Equal Each person’s share: Rs 1,000
+Paid by:
+Rajan paid Rs 4,000
+Ritika paid Rs 2,000
+Calculation:
+
+The app then creates optimized settlement lines:
+Suman → Rajan: Rs 1,000
+Anjali → Rajan: Rs 1,000
+Nabin → Rajan: Rs 1,000
+Bikash → Ritika: Rs 1,000
+The formula is simple:
+Net balance = Amount paid − Personal share
+Positive balance means the person should receive money. Negative balance means the person owes money.
+The app pairs people who owe with people who should receive, then creates the smallest clear settlement list.
+
+Updated Product Concept: Sajha Kharcha by eSewa
+Product idea
+Sajha Kharcha is a Nepal-focused group expense and community savings feature inspired by the trust and payment behavior of eSewa.
+It helps users:
+Connect with friends and family
+Create shared expense groups
+Scan receipts using OCR
+Split bills equally, by item, by custom amount, or by shares
+Track who owes whom
+Send settlement reminders
+Pay directly through eSewa
+Send gift cards with money
+Run transparent Dhukuti/community savings groups
+Use the app in English or Nepali
+The product promise is:
+Scan. Split. Settle. Together.
+
+Core design direction
+The UI should feel modern, warm, social, and financial.
+It should not look like an old banking form. It should feel like a clean social wallet for Nepal.
+Visual style
+Use a modern green fintech theme:
+Deep green gradient headers
+White glass-like cards
+Soft mint backgrounds
+Large balance numbers
+Rounded cards
+Avatar-based social context
+Clear payment status chips
+Friendly Nepali illustrations
+Minimal but confident financial language
+Key colors
+
+Bottom navigation
+Home
+Groups
+Scan/Add
+Activity
+Profile
+The center action is visually prominent because scanning and adding expenses are the main behaviors.
+
+Core ledger model
+Every financial action creates a transparent record.
+Sajha Kharcha tracks:
+Expense amount
+Who paid
+Who participated
+Split method
+Item assignments
+Tax/service charge allocation
+Rounding adjustment
+Payment status
+Settlement transaction ID
+Dhukuti contribution status
+Dhukuti payout status
+Service fee, if any
+Nothing important disappears. If someone leaves a group, their past records remain visible.
+
+1. Onboarding
+Screen 1: Welcome
+Title:
+Sajha Kharcha
+Subtitle:
+Split expenses. Stay friends.
+Visual:
+Friends sharing food at a restaurant in Nepal.
+CTA:
+Get Started
+Secondary:
+I already have an account
+Top-right:
+English | नेपाली
+Screen 2: Scan and split
+Title:
+Scan. Auto-detect. Split.
+Subtitle:
+“Scan a receipt and let Sajha Kharcha detect items, totals, VAT, and service charge.”
+Visual:
+Phone scanning a restaurant receipt.
+Screen 3: For every shared moment
+Title:
+For meals, trips, rent, gifts, and Dhukuti
+Cards:
+Expenses
+Trips
+Gifts
+Dhukuti
+CTA:
+Continue with eSewa
+
+2. Signup and Login
+Login screen
+Fields:
+Mobile number / eSewa ID
+Continue button
+Actions:
+Continue
+Login with QR
+Need help?
+OTP screen
+6-digit OTP input
+Resend timer
+Verify button
+Security screen
+Create 4-digit PIN
+Enable biometric login
+KYC badge if available
+Contact permission screen
+Title:
+Find friends faster
+Subtitle:
+“We only use your contacts to help you find people you already know.”
+Actions:
+Allow Contacts
+Skip
+
+3. Home Dashboard
+The home screen should answer four questions immediately:
+How much money do I have?
+Do I owe anyone?
+Is anyone owing me?
+What needs action today?
+Header
+Namaste greeting
+Wallet balance
+Hide/show balance icon
+Notification bell
+QR shortcut
+Main balance card
+Example:
+Wallet Balance Rs 12,450.00
+Secondary:
+Your shared balance You are owed Rs 2,450
+Or:
+You owe Rs 850
+Or:
+All settled
+Quick actions
+Scan Receipt
+Add Expense
+Settle
+Send Gift
+Friends
+Dhukuti
+Action cards
+Pending settlement
+“You owe Ritika Rs 850 for Pokhara Trip.”
+CTA:
+Pay Now
+Dhukuti reminder
+“Family Dhukuti contribution due in 2 days.”
+CTA:
+Contribute
+Active groups
+Pokhara Trip
+Office Lunch
+Room Rent
+Each card shows:
+Group name
+Member avatars
+Balance status
+Last activity
+
+4. Friends and Connection Requests
+Users can only add connected users to financial groups. This protects privacy and prevents random payment requests.
+Friends screen
+Tabs:
+Friends
+Requests
+Sent
+QR
+Search:
+“Search by name, mobile number, or eSewa ID”
+Friend row
+Avatar
+Name
+Masked phone number
+Verified badge
+Mutual groups
+More menu
+Actions:
+Send request
+Accept
+Decline
+Remove connection
+Block/report
+Connection request detail
+Title:
+Ritika wants to connect
+Copy:
+“Connected users can add each other to groups, split expenses, and send settlement requests.”
+Actions:
+Accept
+Decline
+Remove connection rule
+Removing a connection does not delete history.
+Message:
+“You will no longer be able to add each other to new groups. Past group records and pending settlements will remain visible.”
+
+5. Create Group
+Group type screen
+Options:
+Expense Group “Meals, trips, rent, events, shopping”
+Dhukuti Group “Rotating savings with transparent contribution cycles”
+Expense group setup
+Fields:
+Group name
+Group type
+Cover image/icon
+Default split method
+Settlement reminder frequency
+Currency: NPR
+Add members
+Add members
+Only connected users can be directly added.
+Non-connected users show:
+Send connection request first
+Group created success
+Message:
+Pokhara Trip created
+Actions:
+Add First Expense
+View Group
+Leave group rule
+The group settings include Leave Group, but tapping it opens the balance check flow described above.
+
+6. Add Expense
+Add expense screen
+Fields:
+Group
+Amount
+Paid by
+Date
+Category
+Note
+Attach receipt
+Split method
+Members included
+Split methods
+Equal
+Items
+Custom
+Shares
+Paid by
+Default:
+You paid
+Secondary option:
+More than one person paid?
+When tapped, the user can add multiple payers:
+Rajan paid Rs 4,000
+Ritika paid Rs 2,000
+The total paid must match the expense total before saving.
+Member inclusion
+Each member row shows:
+Avatar
+Name
+Included toggle
+Share preview
+Example:
+Total: Rs 4,800 Members: 4 Equal split:
+You: Rs 1,200
+Ritika: Rs 1,200
+Suman: Rs 1,200
+Bikash: Rs 1,200
+CTA:
+Review Split
+
+7. OCR Receipt Scan and Review
+Camera screen
+Title:
+Scan Receipt
+Elements:
+Receipt frame
+Flash
+Gallery upload
+Manual entry
+Capture button
+Instruction:
+“Place the full receipt inside the frame.”
+Processing screen
+Steps:
+Receipt captured
+Merchant detected
+Items extracted
+Tax/service charge checked
+Ready to review
+Receipt review screen
+Top card:
+Merchant
+Date
+Receipt total
+Confidence badge
+Thumbnail
+Item rows:
+Item name
+Quantity
+Amount
+Assign button
+Edit button
+Example:
+Chicken Momo — Rs 300 — Assign
+Pork Belly — Rs 1,200 — Assign
+Coke — Rs 250 — Assign
+Assign item bottom sheet
+Title:
+Who shared Chicken Momo?
+Actions:
+Select one person
+Select multiple people
+Split equally
+Split by shares
+Custom amount
+The item row then shows assigned member avatars.
+Tax and service charge
+Default:
+Allocate proportionally by item total
+Alternative:
+Split equally among included members
+The calculation details clearly show the selected method.
+
+8. Expense Split Confirmation
+This is the financial trust screen.
+Header
+Merchant or expense title:
+Korean BBQ
+Total:
+Rs 6,456.66
+Paid by:
+Aayush
+Or multiple payers:
+Paid by Aayush Rs 4,000, Ritika Rs 2,456.66
+Split summary
+Rows show:
+Ritika owes Aayush Rs 1,614.16
+Suman owes Aayush Rs 1,614.16
+Bikash owes Aayush Rs 1,614.16
+If there are multiple payers, rows show optimized settlement lines.
+Calculation details
+Expandable section:
+Item subtotal
+VAT
+Service charge
+Discount
+Tip
+Rounding adjustment
+Split method
+Number of people
+Total to be received
+Rounding example
+If total is Rs 100 among 3:
+Aayush: Rs 33.34
+Ritika: Rs 33.33
+Suman: Rs 33.33
+Shown note:
+“Rounding +Rs 0.01 applied to Aayush.”
+Actions
+Primary:
+Save & Request Payment
+Secondary:
+Save Without Request
+
+9. Group Balance Dashboard
+Top card
+Group:
+Pokhara Trip
+Balance:
+You are owed Rs 2,450
+Or:
+You owe Rs 850
+Or:
+All settled
+Tabs
+Expenses
+Balances
+Members
+Activity
+Expenses tab
+Shows every expense:
+Title
+Amount
+Paid by
+Date
+Split status
+Receipt icon if attached
+Balances tab
+Shows net balances:
+Ritika → You: Rs 1,200
+Suman → You: Rs 750
+You → Nabin: Rs 500
+CTA:
+Settle Up
+Members tab
+Shows:
+Active members
+Former members
+Pending invites
+Admin badge
+Add member
+Remove member
+Former members remain visible in past expenses.
+Activity tab
+Shows:
+Expense added
+Receipt edited
+Payment requested
+Payment completed
+Reminder sent
+Member left
+Dispute raised
+
+10. Settlement Flow
+Entry points
+Home pending card
+Group balance row
+Notification
+Activity feed
+Leave group blocker
+Settlement screen
+Title:
+Pay Ritika
+Amount:
+Rs 850
+Fields:
+Payment amount
+Reason
+Group
+Payment method
+Fee
+Total
+Payment method:
+eSewa Wallet
+CTA:
+Pay with eSewa
+Confirmation
+Details:
+To
+Amount
+Group
+Reason
+Fee
+Wallet balance after payment
+CTA:
+Confirm & Pay
+Then:
+PIN
+Biometric
+Success receipt
+Success screen
+Message:
+Payment successful
+Receipt:
+Transaction ID
+Paid to
+Amount
+Date/time
+Group
+Status
+Actions:
+View Group
+Share Receipt
+
+11. Gift Sending Flow
+Gift transactions are separate from debts. A gift should not reduce what someone owes unless the sender explicitly records a settlement separately.
+Choose recipient
+Search connected friends.
+Recipient card:
+Avatar
+Name
+Verified badge
+Choose gift card
+Categories:
+Birthday
+Dashain
+Tihar
+Teej
+Wedding
+Thank You
+Congratulations
+Custom
+Add amount and message
+Amount presets:
+Rs 500
+Rs 1,000
+Rs 2,000
+Custom
+Message field:
+“Happy Tihar! Wishing you and your family happiness and prosperity.”
+Review gift
+Shows:
+Recipient
+Gift card design
+Amount
+Service fee, if any
+Total
+CTA:
+Send with eSewa
+Success
+Message:
+Gift sent
+Recipient notification:
+“Aayush sent you a Tihar Gift Card worth Rs 1,000.”
+
+12. Dhukuti Group Creation
+Dhukuti is designed as a transparent rotating savings group.
+Dhukuti intro
+Title:
+Create transparent Dhukuti
+Subtitle:
+“Set contribution amount, members, payout order, reminders, and service fees before anyone joins.”
+CTA:
+Start Setup
+Group details
+Fields:
+Dhukuti name
+Contribution amount
+Frequency
+Start date
+Members
+Cycle count
+Service fee
+Reminder schedule
+Example:
+Contribution: Rs 5,000
+Members: 5
+Pot per cycle: Rs 25,000
+Service fee: Rs 50
+Net payout: Rs 24,950
+Add members
+Only connected verified users can be added.
+Payout order
+Options:
+Manual order
+Random order
+By join order
+Preview:
+Cycle 1: Ritika receives
+Cycle 2: Suman receives
+Cycle 3: Aayush receives
+Cycle 4: Ama receives
+Cycle 5: Kaka receives
+Review agreement
+Before invites are sent, the app shows:
+Contribution amount
+Frequency
+Payout order
+Gross pot
+Service fee
+Net payout
+Late contribution rule
+Exit rule
+Admin name
+Checkbox:
+“I understand the contribution and payout schedule.”
+CTA:
+Send Invites
+Dhukuti starts only after all members accept.
+
+13. Dhukuti Contribution Tracking
+Dashboard
+Title:
+Family Dhukuti
+Status:
+Cycle 3 of 10
+Top card:
+This cycle’s pot Rs 25,000
+Current recipient:
+Suman receives this cycle
+Due date:
+“Due by May 30, 2026”
+Contribution list
+Rows:
+Aayush — Paid — Rs 5,000
+Ritika — Paid — Rs 5,000
+Suman — Pending — Rs 5,000
+Ama — Paid — Rs 5,000
+Kaka — Overdue — Rs 5,000
+CTA:
+Pay Contribution
+Payout card
+Shows:
+Gross pot
+Service fee
+Net payout
+Recipient
+Payout date
+Transaction status
+Transaction ID after payout
+Cycle timeline
+Horizontal timeline:
+Cycle 1 — Paid out
+Cycle 2 — Paid out
+Cycle 3 — Current
+Cycle 4 — Upcoming
+Cycle 5 — Upcoming
+Dhukuti exit screen
+If user taps Leave Dhukuti, the app shows one of these states:
+“You can leave before Dhukuti starts.”
+“You have a pending contribution. Please pay before requesting exit.”
+“You already received payout. Please complete remaining contributions.”
+“You have not received payout yet. You can request exit; members must approve the updated schedule.”
+
+14. Notifications and Reminders
+Notification categories
+All
+Payments
+Groups
+Dhukuti
+Requests
+Notification examples
+Settlement request
+“Ritika requested Rs 850 for Pokhara Trip.”
+Actions:
+Pay now
+View split
+Connection request
+“Suman wants to connect with you.”
+Actions:
+Accept
+Decline
+OCR review
+“2 receipt items need review.”
+Action:
+Review
+Dhukuti contribution
+“Family Dhukuti contribution due tomorrow: Rs 5,000.”
+Action:
+Pay Contribution
+Leave request
+“Aayush requested to leave Family Dhukuti. Review schedule changes.”
+Action:
+Review Request
+Gift received
+“You received a Birthday Gift Card worth Rs 1,000.”
+Action:
+Open Gift
+
+15. Profile and Settings
+Profile header
+Avatar
+Name
+Mobile number
+KYC badge
+My QR code
+Account
+My profile
+Linked accounts
+Wallet limits
+Transaction history
+Social finance
+Friends
+Pending requests
+Groups
+Dhukuti agreements
+Blocked users
+Preferences
+Language: English / नेपाली
+Amount format: Rs / रु
+Date format: AD / BS
+Default split method
+Default reminder frequency
+OCR review preference
+Split settings
+Advanced but simple:
+Default split: Equal
+Tax allocation: Proportional by item
+Rounding rule: Apply remainder to payer
+Show calculation details: On
+Security
+Change PIN
+Biometric login
+Trusted devices
+Logout from all devices
+Help
+How splitting works
+How OCR works
+How Dhukuti works
+Report a problem
+Contact support
+
+Updated split engine rules
+Rule 1: Every split must equal the original total
+The app never allows a split total mismatch.
+If the bill is Rs 100, the assigned total must be exactly Rs 100.
+Rule 2: Equal split uses precise rounding
+For Rs 100 among 3:
+Rs 33.34
+Rs 33.33
+Rs 33.33
+The rounding adjustment is shown clearly.
+Rule 3: Item split supports partial participation
+An item can be assigned to:
+One member
+Two members
+Any subset of group members
+All members
+Rule 4: Item split supports shares
+Useful for cases like:
+One person ate more
+Two people shared most of an item
+Kids/adults split differently
+Someone only had drinks
+Rule 5: Multiple payers are supported
+Each expense can have one or more payers.
+The app calculates:
+Paid − Share = Net Balance
+Rule 6: Group balances are netted
+The app does not show unnecessary payment loops.
+Instead of:
+A owes B
+B owes C
+C owes A
+It simplifies the final settlement wherever possible.
+Rule 7: Past records remain visible
+Leaving a group or removing a connection never deletes financial history.
+Rule 8: Dhukuti commitments are stronger than expense groups
+A user who has received payout cannot leave without settling remaining obligations.
+
+Final product positioning
+Sajha Kharcha by eSewa is not just a bill splitter. It is a social finance layer for Nepal.
+It covers:
+Friend connections
+Group expenses
+OCR receipt scanning
+Easy bill splitting
+Uneven item sharing
+Equal split rounding
+Multiple payers
+Balance tracking
+Settlement reminders
+eSewa payments
+Gift cards
+Dhukuti/community savings
+English/Nepali language support
+The final user promise should be:
+“Everyone sees the same bill, the same split, the same balance, and the same settlement status.”
+

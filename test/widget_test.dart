@@ -2,11 +2,47 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sangai/features/auth/auth_controller.dart';
 import 'package:sangai/features/auth/models/user_profile.dart';
+import 'package:sangai/features/auth/screens/login_form.dart';
 import 'package:sangai/src/app.dart';
 import 'package:sangai/src/app_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('login accepts only Nepal mobile numbers', () async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = AuthController();
+
+    expect(
+      () =>
+          controller.login(identifier: 'demo@esewa', password: 'demo-password'),
+      throwsA(isA<AuthValidationException>()),
+    );
+
+    await controller.login(
+      identifier: '+977 9800000001',
+      password: 'demo-password',
+    );
+
+    expect(controller.state.isLoggedIn, isTrue);
+    expect(controller.state.activeUser?.phone, '9800000001');
+  });
+
+  testWidgets('login form asks for Nepal mobile and removes QR login', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(),
+        child: const MaterialApp(home: Scaffold(body: LoginForm())),
+      ),
+    );
+
+    expect(find.text('Nepal mobile number'), findsOneWidget);
+    expect(find.text('Login with QR'), findsNothing);
+  });
+
   Future<void> pumpGroupsForAddExpense(
     WidgetTester tester,
     AppStore store,
@@ -37,7 +73,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('Sangai shell renders seeded dashboard', (tester) async {
+  testWidgets('Sajha Kharcha shell renders seeded dashboard', (tester) async {
     SharedPreferences.setMockInitialValues({
       'auth.hasSeenIntro': true,
       'auth.isLoggedIn': true,
@@ -53,7 +89,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sangai'), findsOneWidget);
+    expect(find.text('Sajha Kharcha'), findsOneWidget);
     expect(find.text('Namaste, Erwin'), findsOneWidget);
     expect(find.text('Fast Demo Flow'), findsOneWidget);
   });
@@ -69,8 +105,39 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Groups'), findsOneWidget);
+    expect(find.text('Expense Groups'), findsWidgets);
     expect(find.text('Select a group'), findsNothing);
+  });
+
+  testWidgets('Groups screen separates expense and Dhukuti groups', (
+    tester,
+  ) async {
+    final store = AppStore();
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: const MaterialApp(home: GroupsScreen()),
+      ),
+    );
+
+    expect(find.text('Dashain Khasi Split'), findsOneWidget);
+    expect(find.text('Shrestha Family'), findsNothing);
+
+    final dhukutiTab = find.text('Dhukuti Groups');
+    await tester.ensureVisible(dhukutiTab);
+    await tester.tapAt(tester.getCenter(dhukutiTab));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Family Dashain Dhukuti'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Family Dashain Dhukuti'), findsOneWidget);
+    expect(find.text('Dashain Khasi Split'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('inactive current member no longer sees group detail', (

@@ -106,7 +106,7 @@ class HomeController {
 
   List<HomeGroupSummary> _activeGroups() {
     return [
-      for (final group in store.visibleGroups.take(5))
+      for (final group in store.visibleExpenseGroups.take(5))
         HomeGroupSummary(
           id: group.id,
           name: group.name,

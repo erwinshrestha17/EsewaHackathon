@@ -13,13 +13,15 @@ class LoginForm extends StatefulWidget {
 class _LoginFormState extends State<LoginForm> {
   final _formKey = GlobalKey<FormState>();
   final _identifier = TextEditingController();
-  final _password = TextEditingController();
+  final _otp = TextEditingController(text: '123456');
   var _submitting = false;
+  var _otpRequested = false;
+  var _biometricEnabled = true;
 
   @override
   void dispose() {
     _identifier.dispose();
-    _password.dispose();
+    _otp.dispose();
     super.dispose();
   }
 
@@ -32,29 +34,55 @@ class _LoginFormState extends State<LoginForm> {
         children: [
           AuthTextField(
             controller: _identifier,
-            label: 'Phone number or eSewa ID',
+            label: 'Nepal mobile number',
             icon: Icons.phone_iphone_outlined,
+            keyboardType: TextInputType.phone,
             textInputAction: TextInputAction.next,
-            validator: _required,
+            validator: _nepalMobileValidator,
           ),
-          const SizedBox(height: 12),
-          AuthTextField(
-            controller: _password,
-            label: 'Password',
-            icon: Icons.lock_outline,
-            obscureText: true,
-            validator: _required,
-          ),
+          if (_otpRequested) ...[
+            const SizedBox(height: 12),
+            AuthTextField(
+              controller: _otp,
+              label: '6-digit OTP',
+              icon: Icons.pin_outlined,
+              keyboardType: TextInputType.number,
+              validator: _otpValidator,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Resend available in 00:29',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _biometricEnabled,
+              title: const Text('Enable biometric login'),
+              subtitle: const Text('Use device unlock after this demo login.'),
+              onChanged: (value) => setState(() => _biometricEnabled = value),
+            ),
+          ],
           const SizedBox(height: 18),
           FilledButton(
             onPressed: _submitting ? null : _login,
-            child: Text(_submitting ? 'Logging in...' : 'Login'),
+            child: Text(
+              _submitting
+                  ? 'Verifying...'
+                  : _otpRequested
+                  ? 'Verify & Continue'
+                  : 'Continue',
+            ),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
-            onPressed: _submitting ? null : _continueAsDemo,
-            icon: const Icon(Icons.person_outline),
-            label: const Text('Continue as Demo User'),
+            onPressed: _submitting
+                ? null
+                : () => _showError(
+                    'Use a Nepal mobile number such as 98XXXXXXXX or +977 98XXXXXXXX.',
+                  ),
+            icon: const Icon(Icons.help_outline),
+            label: const Text('Need help?'),
           ),
         ],
       ),
@@ -65,15 +93,45 @@ class _LoginFormState extends State<LoginForm> {
     return value == null || value.trim().isEmpty ? 'Required' : null;
   }
 
+  String? _nepalMobileValidator(String? value) {
+    final required = _required(value);
+    if (required != null) {
+      return required;
+    }
+    final normalized = _normalizeNepalMobile(value!);
+    final valid = RegExp(r'^9[678]\d{8}$').hasMatch(normalized);
+    return valid ? null : 'Enter a valid Nepal mobile number.';
+  }
+
+  String _normalizeNepalMobile(String value) {
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length == 13 && digits.startsWith('977')) {
+      return digits.substring(3);
+    }
+    return digits;
+  }
+
+  String? _otpValidator(String? value) {
+    final required = _required(value);
+    if (required != null) {
+      return required;
+    }
+    return value!.trim().length == 6 ? null : 'Enter the 6-digit OTP';
+  }
+
   Future<void> _login() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+    if (!_otpRequested) {
+      setState(() => _otpRequested = true);
       return;
     }
     setState(() => _submitting = true);
     try {
       await AuthScope.of(
         context,
-      ).login(identifier: _identifier.text, password: _password.text);
+      ).login(identifier: _identifier.text, password: 'demo-password');
       _openMain();
     } on AuthValidationException catch (error) {
       _showError(error.message);
@@ -81,15 +139,6 @@ class _LoginFormState extends State<LoginForm> {
       if (mounted) {
         setState(() => _submitting = false);
       }
-    }
-  }
-
-  Future<void> _continueAsDemo() async {
-    setState(() => _submitting = true);
-    await AuthScope.of(context).continueAsDemoUser();
-    _openMain();
-    if (mounted) {
-      setState(() => _submitting = false);
     }
   }
 

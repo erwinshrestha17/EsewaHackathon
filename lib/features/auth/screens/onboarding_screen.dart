@@ -16,31 +16,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   static const _slides = <OnboardingSlide>[
     OnboardingSlide(
-      icon: Icons.receipt_long_outlined,
-      title: 'Manage shared expenses together',
+      icon: Icons.restaurant_menu_outlined,
+      title: 'Sajha Kharcha',
       description:
-          'Create groups, add bills, split fairly, and see who owes whom without manual calculation.',
+          'Split expenses. Stay friends. Built for meals, trips, rent, gifts, and Dhukuti in Nepal.',
+      note: 'English | नेपाली',
     ),
     OnboardingSlide(
-      icon: Icons.account_balance_wallet_outlined,
-      title: 'Settle through eSewa-style payments',
+      icon: Icons.document_scanner_outlined,
+      title: 'Scan. Auto-detect. Split.',
       description:
-          'Review balances and confirm settlements with a clear payment flow.',
-      note: 'Payments are simulated in this prototype.',
+          'Scan a receipt and let Sajha Kharcha detect items, totals, VAT, and service charge before you review.',
     ),
     OnboardingSlide(
-      icon: Icons.card_giftcard_outlined,
-      title: 'Send gifts for special moments',
+      icon: Icons.diversity_3_outlined,
+      title: 'For every shared moment',
       description:
-          'Send themed money envelopes for Dashain, Tihar, birthdays, weddings, and group occasions.',
-    ),
-    OnboardingSlide(
-      icon: Icons.sync_alt_outlined,
-      title: 'Track Digital Dhukuti transparently',
-      description:
-          'View contribution schedules, payout turns, member statuses, and ledger history.',
-      note:
-          'Digital Dhukuti is shown as a transparent contribution ledger and payment scheduler. It does not provide credit, interest, investment return, or guaranteed payout.',
+          'Use one social wallet layer for expenses, trips, gifts, and transparent Dhukuti commitments.',
+      note: 'Scan. Split. Settle. Together.',
     ),
   ];
 
@@ -66,14 +59,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 children: [
                   _LogoMark(color: colorScheme.primary),
                   const SizedBox(width: 10),
-                  Text(
-                    'Sangai',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
+                  Expanded(
+                    child: Text(
+                      'Sajha Kharcha',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
-                  const Spacer(),
-                  TextButton(onPressed: _complete, child: const Text('Skip')),
+                  TextButton(
+                    onPressed: _complete,
+                    child: const Text('I already have an account'),
+                  ),
                 ],
               ),
             ),
@@ -111,7 +108,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: _last ? _complete : _next,
-                      child: Text(_last ? 'Get Started' : 'Next'),
+                      child: Text(_last ? 'Continue with eSewa' : 'Next'),
                     ),
                   ),
                 ],

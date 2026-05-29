@@ -8,9 +8,10 @@ import 'widgets/dhukuti_pool_card.dart';
 import 'widgets/dhukuti_tokens.dart';
 
 class DigitalDhukutiScreen extends StatefulWidget {
-  const DigitalDhukutiScreen({required this.store, super.key});
+  const DigitalDhukutiScreen({required this.store, this.onCreate, super.key});
 
   final AppStore store;
+  final Future<void> Function(BuildContext context)? onCreate;
 
   @override
   State<DigitalDhukutiScreen> createState() => _DigitalDhukutiScreenState();
@@ -86,6 +87,10 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
   }
 
   Future<void> _openCreate(BuildContext context) {
+    final override = widget.onCreate;
+    if (override != null) {
+      return override(context);
+    }
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => DhukutiCreateScreen(store: widget.store),
@@ -106,14 +111,14 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'How Sangai Dhukuti Works',
+                  'How Sajha Kharcha Dhukuti Works',
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Sangai Dhukuti tracks contribution schedules, payout turns, member statuses, and ledger activity for transparency.',
+                  'Sajha Kharcha Dhukuti tracks contribution schedules, payout turns, member statuses, and ledger activity for transparency.',
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -161,9 +166,9 @@ class _DhukutiPoolList extends StatelessWidget {
           ),
         ),
         DhukutiSection(
-          title: 'About Sangai Dhukuti',
+          title: 'About Sajha Kharcha Dhukuti',
           child: const Text(
-            'Sangai Dhukuti is a transparent contribution ledger and payment scheduler.',
+            'Sajha Kharcha Dhukuti is a transparent contribution ledger and payment scheduler.',
           ),
         ),
         DhukutiSection(

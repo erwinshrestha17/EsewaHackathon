@@ -83,7 +83,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
                 const SizedBox(height: 22),
                 Text(
-                  'Sangai',
+                  'Sajha Kharcha',
                   style: Theme.of(context).textTheme.displaySmall?.copyWith(
                     fontWeight: FontWeight.w900,
                     color: colorScheme.primary,

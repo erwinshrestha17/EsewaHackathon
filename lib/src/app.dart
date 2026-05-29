@@ -45,7 +45,7 @@ class SangaiApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sangai',
+      title: 'Sajha Kharcha by eSewa',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -198,7 +198,7 @@ void _openFirstSettlementConfirmation(
   AppStore store,
   ValueChanged<int> onNavigate,
 ) {
-  for (final group in store.visibleGroups) {
+  for (final group in store.visibleExpenseGroups) {
     for (final suggestion in store.suggestionsForGroup(group.id)) {
       if (suggestion.payerId == store.currentUserId && !suggestion.hasPending) {
         unawaited(
@@ -239,20 +239,11 @@ class _SangaiShellState extends State<SangaiShell> {
   AppStore? _store;
 
   static const _destinations = <_Destination>[
-    _Destination('Home', Icons.dashboard_outlined, Icons.dashboard),
+    _Destination('Home', Icons.home_outlined, Icons.home),
     _Destination('Groups', Icons.groups_outlined, Icons.groups),
-    _Destination(
-      'Connections',
-      Icons.person_add_alt_1_outlined,
-      Icons.person_add_alt_1,
-    ),
-    _Destination('Gifts', Icons.card_giftcard_outlined, Icons.card_giftcard),
-    _Destination(
-      'Dhukuti',
-      Icons.account_balance_wallet_outlined,
-      Icons.account_balance_wallet,
-    ),
+    _Destination('Scan/Add', Icons.add_circle_outline, Icons.add_circle),
     _Destination('Activity', Icons.timeline_outlined, Icons.timeline),
+    _Destination('Profile', Icons.person_outline, Icons.person),
   ];
 
   @override
@@ -302,10 +293,11 @@ class _SangaiShellState extends State<SangaiShell> {
         activityTimelineLimit:
             _settingsController.state.activityTimelineLimit.count,
       ),
-      2 => const ConnectionsScreen(),
-      3 => const GiftsScreen(),
-      4 => DigitalDhukutiScreen(store: store),
-      5 => const ActivityScreen(),
+      3 => const ActivityScreen(),
+      4 => SettingsScreen(
+        controller: _settingsController,
+        authController: AuthScope.of(context),
+      ),
       _ => HomeScreen(
         store: store,
         onNavigate: _go,
@@ -323,7 +315,7 @@ class _SangaiShellState extends State<SangaiShell> {
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 900;
         return Scaffold(
-          appBar: _index == 0
+          appBar: _index == 0 || _index == 4
               ? null
               : AppBar(
                   title: Row(
@@ -349,9 +341,9 @@ class _SangaiShellState extends State<SangaiShell> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Sangai'),
+                            Text('Sajha Kharcha'),
                             Text(
-                              'Connect, split, gift, settle',
+                              'Scan. Split. Settle. Together.',
                               style: TextStyle(fontSize: 12),
                             ),
                           ],
@@ -420,6 +412,10 @@ class _SangaiShellState extends State<SangaiShell> {
   }
 
   void _go(int index) {
+    if (index == 2) {
+      _openScanAddMenu();
+      return;
+    }
     setState(() => _index = index);
   }
 
@@ -467,10 +463,12 @@ class _SangaiShellState extends State<SangaiShell> {
 
   void _openAddExpenseFromHome() {
     final store = StoreScope.of(context);
-    final group = store.visibleGroups.isEmpty
+    final groups = store.visibleExpenseGroups;
+    final group = groups.isEmpty
         ? null
-        : store.groupByIdOrNull(store.selectedGroupId) ??
-              store.visibleGroups.first;
+        : groups.any((group) => group.id == store.selectedGroupId)
+        ? store.groupByIdOrNull(store.selectedGroupId)
+        : groups.first;
     if (group == null) {
       showCreateGroupDialog(context);
       return;
@@ -480,10 +478,12 @@ class _SangaiShellState extends State<SangaiShell> {
 
   void _openScanBillFromHome() {
     final store = StoreScope.of(context);
-    final group = store.visibleGroups.isEmpty
+    final groups = store.visibleExpenseGroups;
+    final group = groups.isEmpty
         ? null
-        : store.groupByIdOrNull(store.selectedGroupId) ??
-              store.visibleGroups.first;
+        : groups.any((group) => group.id == store.selectedGroupId)
+        ? store.groupByIdOrNull(store.selectedGroupId)
+        : groups.first;
     if (group == null) {
       showModalBottomSheet<void>(
         context: context,
@@ -496,7 +496,7 @@ class _SangaiShellState extends State<SangaiShell> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Scan Bill',
+                  'Scan Receipt',
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
@@ -521,6 +521,99 @@ class _SangaiShellState extends State<SangaiShell> {
       return;
     }
     showAddExpenseOcrFlow(context, group.id);
+  }
+
+  void _openScanAddMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Scan or add',
+                  style: Theme.of(
+                    sheetContext,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Start the main Sajha Kharcha flows from one place.',
+                ),
+                const SizedBox(height: 12),
+                _ActionSheetTile(
+                  icon: Icons.document_scanner_outlined,
+                  title: 'Scan Receipt',
+                  subtitle: 'Capture OCR items, VAT, and service charge',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _openScanBillFromHome();
+                  },
+                ),
+                _ActionSheetTile(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'Add Expense',
+                  subtitle: 'Enter amount, payers, participants, and split',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _openAddExpenseFromHome();
+                  },
+                ),
+                _ActionSheetTile(
+                  icon: Icons.groups_outlined,
+                  title: 'Create Group',
+                  subtitle: 'Expense group or Dhukuti setup',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    showCreateGroupDialog(context);
+                  },
+                ),
+                _ActionSheetTile(
+                  icon: Icons.card_giftcard_outlined,
+                  title: 'Send Gift',
+                  subtitle: 'Choose a connected friend and gift card',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _openStandaloneScreen(const GiftsScreen());
+                  },
+                ),
+                _ActionSheetTile(
+                  icon: Icons.account_balance_wallet_outlined,
+                  title: 'Dhukuti',
+                  subtitle: 'View dues or create a rotating savings group',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _openDhukutiScreen();
+                  },
+                ),
+                _ActionSheetTile(
+                  icon: Icons.person_add_alt_1_outlined,
+                  title: 'Friends',
+                  subtitle: 'Search, accept requests, or show your QR',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _openStandaloneScreen(const ConnectionsScreen());
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openStandaloneScreen(Widget screen) {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+  }
+
+  void _openDhukutiScreen() {
+    _openStandaloneScreen(DigitalDhukutiScreen(store: StoreScope.of(context)));
   }
 
   void _showFestivalTemplates() {
@@ -572,6 +665,31 @@ class _SangaiShellState extends State<SangaiShell> {
           ),
         );
       },
+    );
+  }
+}
+
+class _ActionSheetTile extends StatelessWidget {
+  const _ActionSheetTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(child: Icon(icon)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      subtitle: Text(subtitle),
+      onTap: onTap,
     );
   }
 }
@@ -863,10 +981,12 @@ class GroupsScreen extends StatefulWidget {
 }
 
 class _GroupsScreenState extends State<GroupsScreen> {
+  var _tab = GroupKind.expense;
+
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    final groups = store.visibleGroups;
+    final groups = store.visibleExpenseGroups;
     final selectedId = store.selectedGroupId;
     final selected = groups.any((group) => group.id == selectedId)
         ? store.groupByIdOrNull(selectedId)
@@ -874,16 +994,57 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final tabSelector = Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: SegmentedButton<GroupKind>(
+            segments: const [
+              ButtonSegment(
+                value: GroupKind.expense,
+                icon: Icon(Icons.receipt_long_outlined),
+                label: Text('Expense Groups'),
+              ),
+              ButtonSegment(
+                value: GroupKind.dhukuti,
+                icon: Icon(Icons.account_balance_wallet_outlined),
+                label: Text('Dhukuti Groups'),
+              ),
+            ],
+            selected: {_tab},
+            onSelectionChanged: (value) => setState(() => _tab = value.first),
+          ),
+        );
+
+        if (_tab == GroupKind.dhukuti) {
+          return Column(
+            children: [
+              tabSelector,
+              Expanded(
+                child: DigitalDhukutiScreen(
+                  store: store,
+                  onCreate: (context) => showCreateGroupDialog(
+                    context,
+                    initialKind: GroupKind.dhukuti,
+                    onCreated: (kind) => setState(() => _tab = kind),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
         final twoPane = constraints.maxWidth >= 1000;
         final list = AppScrollView(
           children: [
             ScreenHeader(
-              title: 'Groups',
+              title: 'Expense Groups',
               subtitle:
                   'Create groups from accepted connections, add split expenses, settle, export statements, and keep history visible.',
               icon: Icons.groups,
               action: FilledButton.icon(
-                onPressed: () => showCreateGroupDialog(context),
+                onPressed: () => showCreateGroupDialog(
+                  context,
+                  onCreated: (kind) => setState(() => _tab = kind),
+                ),
                 icon: const Icon(Icons.add),
                 label: const Text('New group'),
               ),
@@ -940,27 +1101,41 @@ class _GroupsScreenState extends State<GroupsScreen> {
               );
 
         if (twoPane) {
-          return Row(
+          return Column(
             children: [
-              SizedBox(width: 410, child: list),
-              const VerticalDivider(width: 1),
-              Expanded(child: detail),
+              tabSelector,
+              Expanded(
+                child: Row(
+                  children: [
+                    SizedBox(width: 410, child: list),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: detail),
+                  ],
+                ),
+              ),
             ],
           );
         }
-        return selected == null
-            ? list
-            : AppScrollView(
-                children: [
-                  TextButton.icon(
-                    onPressed: () =>
-                        setState(() => store.selectedGroupId = null),
-                    icon: const Icon(Icons.arrow_back),
-                    label: const Text('Groups'),
-                  ),
-                  detail,
-                ],
-              );
+        return Column(
+          children: [
+            tabSelector,
+            Expanded(
+              child: selected == null
+                  ? list
+                  : AppScrollView(
+                      children: [
+                        TextButton.icon(
+                          onPressed: () =>
+                              setState(() => store.selectedGroupId = null),
+                          icon: const Icon(Icons.arrow_back),
+                          label: const Text('Expense Groups'),
+                        ),
+                        detail,
+                      ],
+                    ),
+            ),
+          ],
+        );
       },
     );
   }
@@ -1095,7 +1270,7 @@ class GroupDetail extends StatelessWidget {
                 ),
                 label: Text(
                   '${store.nameOf(member.userId)} • ${enumLabel(member.role)}'
-                  '${member.status == MemberStatus.removed ? ' • inactive' : ''}',
+                  '${member.status == MemberStatus.removed ? ' • Former Member' : ''}',
                 ),
                 onDeleted:
                     isAdmin &&
@@ -1380,7 +1555,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
     return AppScrollView(
       children: [
         ScreenHeader(
-          title: 'Sangai Gifts',
+          title: 'Sajha Kharcha Gifts',
           subtitle:
               'Send a themed money envelope to a connection, or run a group gift pool.',
           icon: Icons.card_giftcard,
@@ -1842,7 +2017,6 @@ class _GiftsScreenState extends State<GiftsScreen> {
       },
     );
   }
-
 }
 
 /// A small uppercase section label used between gift compose sections.
@@ -2579,55 +2753,116 @@ class NotificationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
+    const categories = ['All', 'Payments', 'Groups', 'Dhukuti', 'Requests'];
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
-      body: AppScrollView(
-        children: [
-          ScreenHeader(
-            title: 'Notifications',
-            subtitle: 'Review Sangai reminders and status updates.',
-            icon: Icons.notifications_outlined,
-            action: TextButton.icon(
-              onPressed: store.currentNotifications.isEmpty
-                  ? null
-                  : store.markNotificationsRead,
-              icon: const Icon(Icons.done_all),
-              label: const Text('Mark read'),
-            ),
+    return DefaultTabController(
+      length: categories.length,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Notifications'),
+          bottom: const TabBar(
+            isScrollable: true,
+            tabs: [
+              Tab(text: 'All'),
+              Tab(text: 'Payments'),
+              Tab(text: 'Groups'),
+              Tab(text: 'Dhukuti'),
+              Tab(text: 'Requests'),
+            ],
           ),
-          SectionPanel(
-            title: 'Notifications',
-            child: store.currentNotifications.isEmpty
-                ? const EmptyState(
-                    icon: Icons.notifications_none,
-                    title: 'No notifications',
-                    body: 'Settlement nudges and Dhukuti dues appear here.',
-                  )
-                : Column(
-                    children: [
-                      for (final notification in store.currentNotifications)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            notification.read
-                                ? Icons.notifications_none
-                                : Icons.notifications_active_outlined,
-                          ),
-                          title: Text(notification.title),
-                          subtitle: Text(notification.body),
-                          trailing: StatusPill(
-                            label: notification.read ? 'Read' : 'Unread',
-                            tone: notification.read ? Tone.neutral : Tone.info,
-                          ),
-                        ),
-                    ],
+        ),
+        body: TabBarView(
+          children: [
+            for (final category in categories)
+              AppScrollView(
+                children: [
+                  ScreenHeader(
+                    title: category == 'All' ? 'Notifications' : category,
+                    subtitle:
+                        'Review Sajha Kharcha reminders and status updates.',
+                    icon: Icons.notifications_outlined,
+                    action: TextButton.icon(
+                      onPressed: store.currentNotifications.isEmpty
+                          ? null
+                          : store.markNotificationsRead,
+                      icon: const Icon(Icons.done_all),
+                      label: const Text('Mark read'),
+                    ),
                   ),
-          ),
-        ],
+                  _NotificationList(category: category),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _NotificationList extends StatelessWidget {
+  const _NotificationList({required this.category});
+
+  final String category;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final items = store.currentNotifications
+        .where(
+          (item) =>
+              category == 'All' || _notificationCategory(item) == category,
+        )
+        .toList();
+
+    return SectionPanel(
+      title: category == 'All' ? 'Notifications' : '$category notifications',
+      child: items.isEmpty
+          ? const EmptyState(
+              icon: Icons.notifications_none,
+              title: 'No notifications',
+              body:
+                  'Settlement, group, request, gift, and Dhukuti alerts appear here.',
+            )
+          : Column(
+              children: [
+                for (final notification in items)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(_notificationIcon(notification)),
+                    title: Text(notification.title),
+                    subtitle: Text(notification.body),
+                    trailing: StatusPill(
+                      label: notification.read ? 'Read' : 'Unread',
+                      tone: notification.read ? Tone.neutral : Tone.info,
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+String _notificationCategory(NotificationItem item) {
+  final type = item.type.toLowerCase();
+  if (type.contains('settlement') || type.contains('payment')) {
+    return 'Payments';
+  }
+  if (type.contains('dhukuti')) {
+    return 'Dhukuti';
+  }
+  if (type.contains('connection') || type.contains('request')) {
+    return 'Requests';
+  }
+  return 'Groups';
+}
+
+IconData _notificationIcon(NotificationItem item) {
+  return switch (_notificationCategory(item)) {
+    'Payments' => Icons.payments_outlined,
+    'Dhukuti' => Icons.account_balance_wallet_outlined,
+    'Requests' => Icons.person_add_alt_1_outlined,
+    _ => Icons.groups_outlined,
+  };
 }
 
 class AppScrollView extends StatelessWidget {
@@ -4224,6 +4459,8 @@ class _ExpenseItemDraft {
     int? unitAmountMinor,
     this.kind = _BillLineKind.item,
     this.confidence = 1,
+    this.splitByShares = false,
+    Map<String, int>? shareUnits,
     Iterable<String>? assignedTo,
   }) : name = TextEditingController(text: name),
        quantity = TextEditingController(text: quantity.toString()),
@@ -4235,25 +4472,45 @@ class _ExpenseItemDraft {
        ),
        assignedTo = assignedTo == null
            ? <String>{}
-           : Set<String>.from(assignedTo);
+           : Set<String>.from(assignedTo),
+       shareUnits = {
+         for (final entry in (shareUnits ?? const <String, int>{}).entries)
+           entry.key: TextEditingController(text: entry.value.toString()),
+       };
 
   final TextEditingController name;
   final TextEditingController quantity;
   final TextEditingController unitPrice;
   final TextEditingController amount;
   final Set<String> assignedTo;
+  final Map<String, TextEditingController> shareUnits;
   _BillLineKind kind;
   double confidence;
+  bool splitByShares;
 
   int get amountMinor => parseMoneyToMinor(amount.text);
   int get quantityValue => int.tryParse(quantity.text.trim()) ?? 1;
   int get unitAmountMinor => parseMoneyToMinor(unitPrice.text);
+
+  int shareUnitsFor(String userId) =>
+      int.tryParse(shareUnits[userId]?.text.trim() ?? '') ?? 1;
+
+  void ensureShareUnit(String userId) {
+    shareUnits.putIfAbsent(userId, () => TextEditingController(text: '1'));
+  }
+
+  void removeShareUnit(String userId) {
+    shareUnits.remove(userId)?.dispose();
+  }
 
   void dispose() {
     name.dispose();
     quantity.dispose();
     unitPrice.dispose();
     amount.dispose();
+    for (final controller in shareUnits.values) {
+      controller.dispose();
+    }
   }
 }
 
@@ -4330,6 +4587,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
 
   var _splitMode = SplitMode.equal;
   var _skipItemSplit = true;
+  var _allocateBillAdjustmentsEqually = false;
   var _equalPreview = <String, int>{};
   var _initialized = false;
 
@@ -4377,13 +4635,28 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
       unitAmountMinor: draft.unitAmountMinor,
       kind: draft.kind,
       confidence: draft.confidence,
+      splitByShares: draft.splitByShares,
+      shareUnits: {
+        for (final id in draft.shareUnits.keys) id: draft.shareUnitsFor(id),
+      },
       assignedTo: draft.assignedTo,
     );
   }
 
   void _refreshEqualPreview() {
     final ids = _participants.toList();
-    final amounts = equalShares(parseMoneyToMinor(_amount.text), ids);
+    final payerAmounts = <String, int>{};
+    for (final payer in _payerRows) {
+      if (payer.userId != null) {
+        payerAmounts[payer.userId!] = parseMoneyToMinor(payer.amount.text);
+      }
+    }
+    final amounts = equalShares(
+      parseMoneyToMinor(_amount.text),
+      ids,
+      payerId: _payerRows.isEmpty ? null : _payerRows.first.userId,
+      payerAmounts: payerAmounts.isEmpty ? null : payerAmounts,
+    );
     _equalPreview = {
       for (var index = 0; index < ids.length; index++)
         ids[index]: amounts[index],
@@ -4405,7 +4678,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
 
   List<ParsedReceiptItem> _receiptItems() {
     return [
-      for (final item in _items)
+      for (final item in _billItemDrafts())
         if (item.name.text.trim().isNotEmpty)
           ParsedReceiptItem(
             label: item.name.text.trim(),
@@ -4417,10 +4690,34 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
     ];
   }
 
+  List<_ExpenseItemDraft> _billItemDrafts() {
+    return _items.where((item) => item.kind == _BillLineKind.item).toList();
+  }
+
   Map<int, List<String>> _itemAssignments(List<String> selectedParticipants) {
+    final itemDrafts = _billItemDrafts();
     return {
-      for (var index = 0; index < _items.length; index++)
-        index: _assignmentUsers(_items[index], selectedParticipants),
+      for (var index = 0; index < itemDrafts.length; index++)
+        index: _assignmentUsers(itemDrafts[index], selectedParticipants),
+    };
+  }
+
+  Map<int, ItemSplitInput> _itemSplitInputs(List<String> selectedParticipants) {
+    final itemDrafts = _billItemDrafts();
+    return {
+      for (var index = 0; index < itemDrafts.length; index++)
+        index: ItemSplitInput(
+          userIds: _assignmentUsers(itemDrafts[index], selectedParticipants),
+          shareUnits: itemDrafts[index].splitByShares
+              ? {
+                  for (final id in _assignmentUsers(
+                    itemDrafts[index],
+                    selectedParticipants,
+                  ))
+                    id: itemDrafts[index].shareUnitsFor(id),
+                }
+              : null,
+        ),
     };
   }
 
@@ -4570,6 +4867,9 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
       final itemAssignments = effectiveSplitMode == SplitMode.item
           ? _itemAssignments(selectedParticipants)
           : null;
+      final itemSplitInputs = effectiveSplitMode == SplitMode.item
+          ? _itemSplitInputs(selectedParticipants)
+          : null;
       final category = store.groupById(widget.groupId).category.name;
       final data = TransactionConfirmationData(
         id: 'expense-${widget.groupId}-${DateTime.now().microsecondsSinceEpoch}',
@@ -4615,7 +4915,47 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
             ? 'bill_expense'
             : 'group_expense',
         details: [
+          TransactionDetail(
+            'Total paid',
+            money(
+              payerAmounts.values.fold<int>(0, (sum, value) => sum + value),
+            ),
+          ),
+          TransactionDetail(
+            'Paid by',
+            payerAmounts.entries
+                .map(
+                  (entry) => '${store.nameOf(entry.key)} ${money(entry.value)}',
+                )
+                .join(', '),
+          ),
+          TransactionDetail(
+            'Optimized settlements',
+            _optimizedSettlementLines(store, payerAmounts, splitPreview),
+          ),
+          if (_roundingDetail(
+                store,
+                total,
+                selectedParticipants,
+                splitPreview,
+              ) !=
+              null)
+            TransactionDetail(
+              'Rounding adjustment',
+              _roundingDetail(
+                store,
+                total,
+                selectedParticipants,
+                splitPreview,
+              )!,
+            ),
           if (effectiveSplitMode == SplitMode.item) ...[
+            TransactionDetail(
+              'Tax allocation',
+              _allocateBillAdjustmentsEqually
+                  ? 'Equal among included members'
+                  : 'Proportional by item total',
+            ),
             TransactionDetail('Tax/VAT', money(totals.taxMinor)),
             TransactionDetail(
               'Service charge',
@@ -4650,6 +4990,8 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
           ),
           receiptItems: receiptItems,
           itemAssignments: itemAssignments,
+          itemSplitInputs: itemSplitInputs,
+          equalBillAdjustmentAllocation: _allocateBillAdjustmentsEqually,
           taxMinor: totals.taxMinor,
           serviceChargeMinor: totals.serviceChargeMinor,
           discountMinor: totals.discountMinor.abs(),
@@ -4708,6 +5050,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
       percentages: _percentages,
       shares: _shares,
       itemDrafts: _items,
+      equalBillAdjustmentAllocation: _allocateBillAdjustmentsEqually,
     );
     final splitTotal = splitPreview.values.fold<int>(
       0,
@@ -4889,7 +5232,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                                   _payerRows[other].userId!,
                             },
                             canRemove: index > 0,
-                            onChanged: () => setState(() {}),
+                            onChanged: () => setState(_refreshEqualPreview),
                             onRemove: () {
                               setState(() {
                                 final removed = _payerRows.removeAt(index);
@@ -4981,6 +5324,19 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                       ),
                       if (!_skipItemSplit) ...[
                         const SizedBox(height: 12),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: _allocateBillAdjustmentsEqually,
+                          title: const Text('Allocate VAT/service/tip equally'),
+                          subtitle: const Text(
+                            'Default is proportional by each person’s item total.',
+                          ),
+                          onChanged: (value) {
+                            setState(() {
+                              _allocateBillAdjustmentsEqually = value;
+                            });
+                          },
+                        ),
                         _BillTotalsCard(totals: billTotals),
                       ],
                     ],
@@ -5157,6 +5513,15 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
     final scheme = Theme.of(context).colorScheme;
     final item = widget.item;
     final lowConfidence = item.confidence < 0.85;
+    final shareUsers = item.assignedTo
+        .where(widget.selectedParticipants.contains)
+        .toList(growable: false);
+    final safeShareUsers = shareUsers.isEmpty
+        ? widget.selectedParticipants
+        : shareUsers;
+    for (final id in safeShareUsers) {
+      item.ensureShareUnit(id);
+    }
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -5281,8 +5646,10 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
                   onSelected: (selected) {
                     if (selected) {
                       item.assignedTo.add(id);
+                      item.ensureShareUnit(id);
                     } else {
                       item.assignedTo.remove(id);
+                      item.removeShareUnit(id);
                     }
                     widget.onChanged();
                   },
@@ -5291,6 +5658,40 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
                 const Text('Select participants before assigning items.'),
             ],
           ),
+          if (safeShareUsers.length > 1) ...[
+            const SizedBox(height: 10),
+            SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              value: item.splitByShares,
+              title: const Text('Split this item by shares'),
+              subtitle: const Text('Use this when one person had more.'),
+              onChanged: (value) {
+                setState(() => item.splitByShares = value);
+                widget.onChanged();
+              },
+            ),
+            if (item.splitByShares)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final id in safeShareUsers)
+                    SizedBox(
+                      width: 150,
+                      child: TextField(
+                        controller: item.shareUnits[id],
+                        decoration: InputDecoration(
+                          labelText: '${store.nameOf(id)} shares',
+                          suffixText: 'x',
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => widget.onChanged(),
+                      ),
+                    ),
+                ],
+              ),
+          ],
           if (lowConfidence) ...[
             const SizedBox(height: 8),
             Text(
@@ -5431,6 +5832,7 @@ Map<String, int> _manualSplitPreviewFor({
   required Map<String, String> percentages,
   required Map<String, String> shares,
   required List<_ExpenseItemDraft> itemDrafts,
+  bool equalBillAdjustmentAllocation = false,
 }) {
   if (participants.isEmpty) {
     return <String, int>{};
@@ -5460,6 +5862,7 @@ Map<String, int> _manualSplitPreviewFor({
         total,
         participants,
         itemDrafts,
+        equalBillAdjustmentAllocation: equalBillAdjustmentAllocation,
       ),
     };
   } on ArgumentError {
@@ -5470,13 +5873,21 @@ Map<String, int> _manualSplitPreviewFor({
 Map<String, int> _manualItemSplitPreview(
   int total,
   List<String> participants,
-  List<_ExpenseItemDraft> itemDrafts,
-) {
+  List<_ExpenseItemDraft> itemDrafts, {
+  bool equalBillAdjustmentAllocation = false,
+}) {
   final preview = <String, int>{for (final id in participants) id: 0};
-  for (final item in itemDrafts) {
+  for (final item in itemDrafts.where(
+    (item) => item.kind == _BillLineKind.item,
+  )) {
     final users = item.assignedTo.where(participants.contains).toList();
     final safeUsers = users.isEmpty ? participants : users;
-    final splits = equalShares(item.amountMinor, safeUsers);
+    final splits = item.splitByShares
+        ? unitShares(
+            item.amountMinor,
+            safeUsers.map((id) => item.shareUnitsFor(id)).toList(),
+          )
+        : equalShares(item.amountMinor, safeUsers);
     for (var index = 0; index < safeUsers.length; index++) {
       preview[safeUsers[index]] =
           (preview[safeUsers[index]] ?? 0) + splits[index];
@@ -5485,7 +5896,14 @@ Map<String, int> _manualItemSplitPreview(
   final current = preview.values.fold<int>(0, (sum, value) => sum + value);
   final delta = total - current;
   if (delta != 0 && participants.isNotEmpty) {
-    final adjustments = equalShares(delta.abs(), participants);
+    final adjustments = equalBillAdjustmentAllocation
+        ? equalShares(delta.abs(), participants)
+        : distributeByWeights(
+            delta.abs(),
+            participants
+                .map((id) => math.max(preview[id]?.abs() ?? 0, 1))
+                .toList(),
+          );
     for (var index = 0; index < participants.length; index++) {
       preview[participants[index]] =
           (preview[participants[index]] ?? 0) +
@@ -5493,6 +5911,55 @@ Map<String, int> _manualItemSplitPreview(
     }
   }
   return preview;
+}
+
+String? _roundingDetail(
+  AppStore store,
+  int total,
+  List<String> participants,
+  Map<String, int> splitPreview,
+) {
+  if (participants.isEmpty || total % participants.length == 0) {
+    return null;
+  }
+  final base = total ~/ participants.length;
+  final recipient = participants.firstWhere(
+    (id) => (splitPreview[id] ?? 0) > base,
+    orElse: () => participants.first,
+  );
+  final adjustment = (splitPreview[recipient] ?? base) - base;
+  if (adjustment == 0) {
+    return null;
+  }
+  return '+${money(adjustment)} applied to ${store.nameOf(recipient)}';
+}
+
+String _optimizedSettlementLines(
+  AppStore store,
+  Map<String, int> payerAmounts,
+  Map<String, int> participantShares,
+) {
+  final balances = <String, int>{};
+  for (final entry in payerAmounts.entries) {
+    balances[entry.key] = (balances[entry.key] ?? 0) + entry.value;
+  }
+  for (final entry in participantShares.entries) {
+    balances[entry.key] = (balances[entry.key] ?? 0) - entry.value;
+  }
+  final suggestions = simplifySettlements(
+    groupId: 'preview',
+    balances: balances..removeWhere((_, value) => value == 0),
+    settlements: const <Settlement>[],
+  );
+  if (suggestions.isEmpty) {
+    return 'All participants are settled after this expense.';
+  }
+  return suggestions
+      .map(
+        (suggestion) =>
+            '${store.nameOf(suggestion.payerId)} → ${store.nameOf(suggestion.payeeId)} ${money(suggestion.amountMinor)}',
+      )
+      .join('\n');
 }
 
 String? _itemValidationMessage({
@@ -5564,10 +6031,16 @@ Future<void> showMyQrDialog(BuildContext context) async {
   );
 }
 
-Future<void> showCreateGroupDialog(BuildContext context) async {
+Future<void> showCreateGroupDialog(
+  BuildContext context, {
+  GroupKind initialKind = GroupKind.expense,
+  ValueChanged<GroupKind>? onCreated,
+}) async {
+  final rootContext = context;
   final store = StoreScope.of(context);
   final name = TextEditingController(text: 'Office Bhoj');
   var category = GroupCategory.bhoj;
+  var dhukutiGroup = initialKind == GroupKind.dhukuti;
   final selected = <String>{
     for (final user in store.activeConnectionUsers()) user.id,
   };
@@ -5585,6 +6058,24 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                          value: false,
+                          icon: Icon(Icons.receipt_long_outlined),
+                          label: Text('Expense Group'),
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          icon: Icon(Icons.account_balance_wallet_outlined),
+                          label: Text('Dhukuti Group'),
+                        ),
+                      ],
+                      selected: {dhukutiGroup},
+                      onSelectionChanged: (value) =>
+                          setState(() => dhukutiGroup = value.first),
+                    ),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: name,
                       decoration: const InputDecoration(
@@ -5604,6 +6095,16 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
                       ],
                       onChanged: (value) =>
                           setState(() => category = value ?? category),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: const [
+                        Chip(label: Text('Currency: NPR')),
+                        Chip(label: Text('Default split: Equal')),
+                        Chip(label: Text('Reminder: Every 2 days')),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     Align(
@@ -5644,16 +6145,34 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
               ),
               FilledButton(
                 onPressed: () {
-                  store.createGroup(
+                  final groupId = store.createGroup(
                     name: name.text.trim().isEmpty
                         ? 'New Group'
                         : name.text.trim(),
                     category: category,
                     memberIds: selected.toList(),
+                    kind: dhukutiGroup ? GroupKind.dhukuti : GroupKind.expense,
                   );
                   Navigator.pop(dialogContext);
+                  if (dhukutiGroup) {
+                    onCreated?.call(GroupKind.dhukuti);
+                    store.selectedDhukutiPoolId = null;
+                    unawaited(
+                      showCreateDhukutiDialog(
+                        rootContext,
+                        initialGroupId: groupId,
+                      ).then((_) => onCreated?.call(GroupKind.dhukuti)),
+                    );
+                  } else {
+                    store.selectedGroupId = groupId;
+                    onCreated?.call(GroupKind.expense);
+                    showSnack(
+                      rootContext,
+                      '${store.groupById(groupId).name} created.',
+                    );
+                  }
                 },
-                child: const Text('Create'),
+                child: Text(dhukutiGroup ? 'Start Setup' : 'Create'),
               ),
             ],
           );
@@ -5755,31 +6274,138 @@ Future<void> showAddMemberDialog(BuildContext context, String groupId) async {
 Future<void> showLeaveGroupDialog(BuildContext context, String groupId) async {
   final store = StoreScope.of(context);
   final group = store.groupById(groupId);
+  final adminCandidates = store
+      .membersForGroup(groupId, activeOnly: true)
+      .where((member) => member.userId != store.currentUserId)
+      .toList();
+  String? newAdminId = adminCandidates.isEmpty
+      ? null
+      : adminCandidates.first.userId;
   await showDialog<void>(
     context: context,
     builder: (dialogContext) {
-      return AlertDialog(
-        title: const Text('Leave group?'),
-        content: Text(
-          'You will stop participating in new expenses for ${group.name}. Existing history remains available to the group.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final error = store.leaveGroup(groupId);
-              Navigator.pop(dialogContext);
-              showSnack(context, error ?? 'You left ${group.name}.');
-            },
-            child: const Text('Leave group'),
-          ),
-        ],
+      return StatefulBuilder(
+        builder: (context, setState) {
+          final decision = store.groupLeaveDecision(groupId);
+          final isAdminTransfer =
+              decision.type == GroupLeaveDecisionType.needsNewAdmin;
+          final canPrimary =
+              decision.canLeaveNow ||
+              decision.type == GroupLeaveDecisionType.owesMoney ||
+              (isAdminTransfer && newAdminId != null);
+          return AlertDialog(
+            title: Text(decision.title),
+            content: SizedBox(
+              width: 460,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(decision.message),
+                  const SizedBox(height: 14),
+                  _LeaveRuleLine(
+                    icon: Icons.history,
+                    label:
+                        'Past expenses remain visible as former-member history.',
+                  ),
+                  _LeaveRuleLine(
+                    icon: Icons.payments_outlined,
+                    label:
+                        'Pending receivables and payment prompts stay active after leaving.',
+                  ),
+                  if (isAdminTransfer) ...[
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<String>(
+                      initialValue: newAdminId,
+                      decoration: const InputDecoration(
+                        labelText: 'Choose new admin',
+                      ),
+                      items: [
+                        for (final member in adminCandidates)
+                          DropdownMenuItem(
+                            value: member.userId,
+                            child: Text(store.nameOf(member.userId)),
+                          ),
+                      ],
+                      onChanged: (value) => setState(() => newAdminId = value),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              if (decision.secondaryAction != null &&
+                  decision.type != GroupLeaveDecisionType.needsNewAdmin)
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    showSnack(context, 'Open balances remain visible below.');
+                  },
+                  child: Text(decision.secondaryAction!),
+                ),
+              FilledButton(
+                onPressed: canPrimary
+                    ? () {
+                        String? error;
+                        if (decision.type == GroupLeaveDecisionType.owesMoney) {
+                          final count = store.settleCurrentUserInGroup(groupId);
+                          error = count == 0
+                              ? 'No payable settlement is open for this user.'
+                              : store.leaveGroup(groupId);
+                        } else if (isAdminTransfer && newAdminId != null) {
+                          store.updateMemberRole(
+                            groupId,
+                            newAdminId!,
+                            MemberRole.admin,
+                          );
+                          error = store.leaveGroup(groupId);
+                        } else {
+                          error = store.leaveGroup(groupId);
+                        }
+                        Navigator.pop(dialogContext);
+                        showSnack(context, error ?? 'You left ${group.name}.');
+                      }
+                    : null,
+                child: Text(decision.primaryAction ?? 'Leave group'),
+              ),
+            ],
+          );
+        },
       );
     },
   );
+}
+
+class _LeaveRuleLine extends StatelessWidget {
+  const _LeaveRuleLine({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 Future<void> showDisbandGroupDialog(
@@ -5923,7 +6549,18 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
 
   void refreshEqualPreview() {
     final ids = participants.toList();
-    final amounts = equalShares(parseMoneyToMinor(amount.text), ids);
+    final payerAmounts = <String, int>{};
+    for (final payer in payerRows) {
+      if (payer.userId != null) {
+        payerAmounts[payer.userId!] = parseMoneyToMinor(payer.amount.text);
+      }
+    }
+    final amounts = equalShares(
+      parseMoneyToMinor(amount.text),
+      ids,
+      payerId: payerRows.isEmpty ? null : payerRows.first.userId,
+      payerAmounts: payerAmounts.isEmpty ? null : payerAmounts,
+    );
     equalPreview = {
       for (var index = 0; index < ids.length; index++)
         ids[index]: amounts[index],
@@ -6105,7 +6742,7 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                                       payerRows[other].userId!,
                                 },
                                 canRemove: index > 0,
-                                onChanged: () => setState(() {}),
+                                onChanged: () => setState(refreshEqualPreview),
                                 onRemove: () {
                                   setState(() {
                                     final removed = payerRows.removeAt(index);
@@ -8077,14 +8714,14 @@ String _csvCell(String value) {
 
 Future<void> showCreateGiftPoolDialog(BuildContext context) async {
   final store = StoreScope.of(context);
-  final groups = store.visibleGroups;
+  final groups = store.visibleExpenseGroups;
   String? groupId = groups.isEmpty ? null : groups.first.id;
   String? recipientId = store.activeConnectionUsers().isEmpty
       ? null
       : store.activeConnectionUsers().first.id;
   final title = TextEditingController(text: 'Group gift pool');
   final target = TextEditingController(text: '5000');
-  final message = TextEditingController(text: 'Together from Sangai.');
+  final message = TextEditingController(text: 'Together from Sajha Kharcha.');
   var template = 'Tihar';
   await showDialog<void>(
     context: context,
@@ -8392,9 +9029,7 @@ Future<void> showGiftPoolDetailsDialog(
               if (contributions.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(
-                    child: Text('No contributions yet.'),
-                  ),
+                  child: Center(child: Text('No contributions yet.')),
                 )
               else
                 Flexible(
@@ -8404,8 +9039,7 @@ Future<void> showGiftPoolDetailsDialog(
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final contribution = contributions[index];
-                      final paid =
-                          contribution.status == PaymentStatus.paid;
+                      final paid = contribution.status == PaymentStatus.paid;
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: UserAvatar(
@@ -8460,10 +9094,13 @@ Future<void> showGiftPoolDetailsDialog(
   );
 }
 
-Future<void> showCreateDhukutiDialog(BuildContext context) async {
+Future<void> showCreateDhukutiDialog(
+  BuildContext context, {
+  String? initialGroupId,
+}) async {
   final store = StoreScope.of(context);
-  final groups = store.visibleGroups;
-  String? groupId = groups.isEmpty ? null : groups.first.id;
+  final groups = store.visibleDhukutiGroups;
+  String? groupId = initialGroupId ?? (groups.isEmpty ? null : groups.first.id);
   final name = TextEditingController(text: 'New Digital Dhukuti');
   final contribution = TextEditingController(text: '2000');
   final members = <String>{
@@ -8494,6 +9131,12 @@ Future<void> showCreateDhukutiDialog(BuildContext context) async {
                           DropdownMenuItem(
                             value: group.id,
                             child: Text(group.name),
+                          ),
+                        if (initialGroupId != null &&
+                            !groups.any((group) => group.id == initialGroupId))
+                          DropdownMenuItem(
+                            value: initialGroupId,
+                            child: Text(store.groupById(initialGroupId).name),
                           ),
                       ],
                       onChanged: (value) => setState(() => groupId = value),
@@ -8560,7 +9203,7 @@ Future<void> showCreateDhukutiDialog(BuildContext context) async {
                 onPressed: groupId == null
                     ? null
                     : () {
-                        store.createDhukutiPool(
+                        final poolId = store.createDhukutiPool(
                           groupId: groupId!,
                           name: name.text,
                           contributionAmountMinor: parseMoneyToMinor(
@@ -8570,6 +9213,7 @@ Future<void> showCreateDhukutiDialog(BuildContext context) async {
                           startDate: DateTime.now(),
                           memberIds: members.toList(),
                         );
+                        store.selectedDhukutiPoolId = poolId;
                         Navigator.pop(dialogContext);
                       },
                 child: const Text('Create'),

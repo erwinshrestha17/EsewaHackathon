@@ -20,6 +20,31 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setTaxAllocationMode(TaxAllocationMode value) {
+    _state = _state.copyWith(taxAllocationMode: value);
+    notifyListeners();
+  }
+
+  void setAmountFormatMode(AmountFormatMode value) {
+    _state = _state.copyWith(amountFormatMode: value);
+    notifyListeners();
+  }
+
+  void setDateFormatMode(DateFormatMode value) {
+    _state = _state.copyWith(dateFormatMode: value);
+    notifyListeners();
+  }
+
+  void setReminderFrequency(ReminderFrequency value) {
+    _state = _state.copyWith(reminderFrequency: value);
+    notifyListeners();
+  }
+
+  void setOcrReviewPreference(OcrReviewPreference value) {
+    _state = _state.copyWith(ocrReviewPreference: value);
+    notifyListeners();
+  }
+
   void setActivityTimelineLimit(ActivityTimelineLimit value) {
     _state = _state.copyWith(activityTimelineLimit: value);
     notifyListeners();
