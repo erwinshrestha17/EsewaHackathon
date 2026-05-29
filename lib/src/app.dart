@@ -4522,8 +4522,6 @@ class _ExpenseItemDraft {
     int? unitAmountMinor,
     this.kind = _BillLineKind.item,
     this.confidence = 1,
-    this.splitByShares = false,
-    Map<String, int>? shareUnits,
     Iterable<String>? assignedTo,
   }) : name = TextEditingController(text: name),
        quantity = TextEditingController(text: quantity.toString()),
@@ -4535,45 +4533,25 @@ class _ExpenseItemDraft {
        ),
        assignedTo = assignedTo == null
            ? <String>{}
-           : Set<String>.from(assignedTo),
-       shareUnits = {
-         for (final entry in (shareUnits ?? const <String, int>{}).entries)
-           entry.key: TextEditingController(text: entry.value.toString()),
-       };
+           : Set<String>.from(assignedTo);
 
   final TextEditingController name;
   final TextEditingController quantity;
   final TextEditingController unitPrice;
   final TextEditingController amount;
   final Set<String> assignedTo;
-  final Map<String, TextEditingController> shareUnits;
   _BillLineKind kind;
   double confidence;
-  bool splitByShares;
 
   int get amountMinor => parseMoneyToMinor(amount.text);
   int get quantityValue => int.tryParse(quantity.text.trim()) ?? 1;
   int get unitAmountMinor => parseMoneyToMinor(unitPrice.text);
-
-  int shareUnitsFor(String userId) =>
-      int.tryParse(shareUnits[userId]?.text.trim() ?? '') ?? 1;
-
-  void ensureShareUnit(String userId) {
-    shareUnits.putIfAbsent(userId, () => TextEditingController(text: '1'));
-  }
-
-  void removeShareUnit(String userId) {
-    shareUnits.remove(userId)?.dispose();
-  }
 
   void dispose() {
     name.dispose();
     quantity.dispose();
     unitPrice.dispose();
     amount.dispose();
-    for (final controller in shareUnits.values) {
-      controller.dispose();
-    }
   }
 }
 
@@ -4644,8 +4622,6 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
   final _payerRows = <_PayerDraft>[];
   final _participants = <String>{};
   final _custom = <String, String>{};
-  final _percentages = <String, String>{};
-  final _shares = <String, String>{};
   final _items = <_ExpenseItemDraft>[];
 
   var _splitMode = SplitMode.equal;
@@ -4660,8 +4636,8 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
     if (_initialized) {
       return;
     }
+
     final store = StoreScope.of(context);
-    final members = store.membersForGroup(widget.groupId, activeOnly: true);
     _payerRows.add(
       _PayerDraft(userId: store.currentUserId, amountText: _amount.text),
     );
@@ -4697,10 +4673,6 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
       unitAmountMinor: draft.unitAmountMinor,
       kind: draft.kind,
       confidence: draft.confidence,
-      splitByShares: draft.splitByShares,
-      shareUnits: {
-        for (final id in draft.shareUnits.keys) id: draft.shareUnitsFor(id),
-      },
       assignedTo: draft.assignedTo,
     );
   }
@@ -4756,6 +4728,10 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
     return _items.where((item) => item.kind == _BillLineKind.item).toList();
   }
 
+  List<_ExpenseItemDraft> _billAdjustmentDrafts() {
+    return _items.where((item) => item.kind != _BillLineKind.item).toList();
+  }
+
   Map<int, List<String>> _itemAssignments(List<String> selectedParticipants) {
     final itemDrafts = _billItemDrafts();
     return {
@@ -4770,15 +4746,6 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
       for (var index = 0; index < itemDrafts.length; index++)
         index: ItemSplitInput(
           userIds: _assignmentUsers(itemDrafts[index], selectedParticipants),
-          shareUnits: itemDrafts[index].splitByShares
-              ? {
-                  for (final id in _assignmentUsers(
-                    itemDrafts[index],
-                    selectedParticipants,
-                  ))
-                    id: itemDrafts[index].shareUnitsFor(id),
-                }
-              : null,
         ),
     };
   }
@@ -4796,8 +4763,6 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
   void _removeParticipant(String userId) {
     _participants.remove(userId);
     _custom.remove(userId);
-    _percentages.remove(userId);
-    _shares.remove(userId);
     for (final item in _items) {
       item.assignedTo.remove(userId);
     }
@@ -4845,6 +4810,18 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
   void _addItem() {
     setState(() {
       _items.add(_ExpenseItemDraft(name: 'New item', amountMinor: 0));
+      _skipItemSplit = false;
+      _splitMode = SplitMode.item;
+      _syncTotalFromItems();
+      _refreshEqualPreview();
+    });
+  }
+
+  void _addBillAdjustment() {
+    setState(() {
+      _items.add(
+        _ExpenseItemDraft(name: 'VAT', amountMinor: 0, kind: _BillLineKind.tax),
+      );
       _skipItemSplit = false;
       _splitMode = SplitMode.item;
       _syncTotalFromItems();
@@ -5013,7 +4990,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
             ),
           if (effectiveSplitMode == SplitMode.item) ...[
             TransactionDetail(
-              'Tax allocation',
+              'Adjustment allocation',
               _allocateBillAdjustmentsEqually
                   ? 'Equal among included members'
                   : 'Proportional by item total',
@@ -5043,12 +5020,6 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
               : null,
           customAmounts: _custom.map(
             (key, value) => MapEntry(key, parseMoneyToMinor(value)),
-          ),
-          percentages: _percentages.map(
-            (key, value) => MapEntry(key, double.tryParse(value) ?? 0),
-          ),
-          shareUnits: _shares.map(
-            (key, value) => MapEntry(key, int.tryParse(value) ?? 1),
           ),
           receiptItems: receiptItems,
           itemAssignments: itemAssignments,
@@ -5109,8 +5080,6 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
       splitMode: itemModeActive ? SplitMode.item : _splitMode,
       equalPreview: _equalPreview,
       custom: _custom,
-      percentages: _percentages,
-      shares: _shares,
       itemDrafts: _items,
       equalBillAdjustmentAllocation: _allocateBillAdjustmentsEqually,
     );
@@ -5166,9 +5135,6 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                 padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
                 child: _ManualSheetHeader(
                   groupName: group.name,
-                  totalMinor: total,
-                  payerTotalMinor: payerTotal,
-                  participantsLabel: participantsLabel,
                   itemModeActive: itemModeActive,
                   readyToSave: readyToSave,
                 ),
@@ -5325,7 +5291,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                   icon: Icons.list_alt_outlined,
                   subtitle: _skipItemSplit
                       ? 'Use one total amount'
-                      : 'Assign items, VAT, service and rounding',
+                      : 'Assign items, VAT, discount and rounding',
                   trailing: _CountPill(
                     label:
                         '${_billItemDrafts().length} ${_billItemDrafts().length == 1 ? 'item' : 'items'}',
@@ -5353,10 +5319,10 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                         },
                       ),
                       if (!_skipItemSplit) ...[
-                        for (var index = 0; index < _items.length; index++)
+                        for (final item in _billItemDrafts())
                           _ExpenseItemDraftRow(
-                            key: ValueKey(_items[index]),
-                            item: _items[index],
+                            key: ValueKey(item),
+                            item: item,
                             selectedParticipants: selectedParticipants,
                             onChanged: () {
                               setState(() {
@@ -5366,8 +5332,8 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                             },
                             onRemove: () {
                               setState(() {
-                                final removed = _items.removeAt(index);
-                                removed.dispose();
+                                _items.remove(item);
+                                item.dispose();
                                 _syncTotalFromItems();
                                 _refreshEqualPreview();
                               });
@@ -5382,10 +5348,29 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                       ),
                       if (!_skipItemSplit) ...[
                         const SizedBox(height: 12),
+                        _BillAdjustmentsSection(
+                          adjustments: _billAdjustmentDrafts(),
+                          onAdd: _addBillAdjustment,
+                          onChanged: () {
+                            setState(() {
+                              _syncTotalFromItems();
+                              _refreshEqualPreview();
+                            });
+                          },
+                          onRemove: (item) {
+                            setState(() {
+                              _items.remove(item);
+                              item.dispose();
+                              _syncTotalFromItems();
+                              _refreshEqualPreview();
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 12),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           value: _allocateBillAdjustmentsEqually,
-                          title: const Text('Allocate VAT/service/tip equally'),
+                          title: const Text('Allocate VAT/adjustments equally'),
                           subtitle: const Text(
                             'Default is proportional by each person’s item total.',
                           ),
@@ -5404,7 +5389,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                 _ManualFormSection(
                   title: 'Split mode',
                   icon: Icons.call_split_outlined,
-                  subtitle: 'Equal, custom, percentage, shares or items',
+                  subtitle: 'Equal, custom, or item split',
                   child: DropdownButtonFormField<SplitMode>(
                     initialValue: _splitMode,
                     decoration: const InputDecoration(labelText: 'Split mode'),
@@ -5435,27 +5420,6 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                     label: 'Custom amount',
                     values: _custom,
                     suffix: 'NPR',
-                    onChanged: () => setState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (_splitMode == SplitMode.percentage) ...[
-                  _AmountGrid(
-                    ids: selectedParticipants,
-                    label: 'Percentage',
-                    values: _percentages,
-                    suffix: '%',
-                    maxValue: 100,
-                    onChanged: () => setState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (_splitMode == SplitMode.shares) ...[
-                  _AmountGrid(
-                    ids: selectedParticipants,
-                    label: 'Share units',
-                    values: _shares,
-                    suffix: 'x',
                     onChanged: () => setState(() {}),
                   ),
                   const SizedBox(height: 12),
@@ -5547,17 +5511,11 @@ class _ReviewMessage extends StatelessWidget {
 class _ManualSheetHeader extends StatelessWidget {
   const _ManualSheetHeader({
     required this.groupName,
-    required this.totalMinor,
-    required this.payerTotalMinor,
-    required this.participantsLabel,
     required this.itemModeActive,
     required this.readyToSave,
   });
 
   final String groupName;
-  final int totalMinor;
-  final int payerTotalMinor;
-  final String participantsLabel;
   final bool itemModeActive;
   final bool readyToSave;
 
@@ -5646,95 +5604,7 @@ class _ManualSheetHeader extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final compact = constraints.maxWidth < 560;
-            final chips = [
-              _ManualHeaderMetric(
-                icon: Icons.payments_outlined,
-                label: 'Total',
-                value: statementMoney(totalMinor),
-              ),
-              _ManualHeaderMetric(
-                icon: Icons.account_balance_wallet_outlined,
-                label: 'Paid',
-                value: statementMoney(payerTotalMinor),
-              ),
-              _ManualHeaderMetric(
-                icon: Icons.people_alt_outlined,
-                label: 'Split',
-                value: participantsLabel,
-              ),
-            ];
-            if (compact) {
-              return Wrap(spacing: 8, runSpacing: 8, children: chips);
-            }
-            return Row(
-              children: [
-                for (var index = 0; index < chips.length; index++) ...[
-                  if (index > 0) const SizedBox(width: 8),
-                  Expanded(child: chips[index]),
-                ],
-              ],
-            );
-          },
-        ),
       ],
-    );
-  }
-}
-
-class _ManualHeaderMetric extends StatelessWidget {
-  const _ManualHeaderMetric({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      constraints: const BoxConstraints(minWidth: 144),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18, color: scheme.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: scheme.onSurfaceVariant,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                Text(
-                  value,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -5766,7 +5636,7 @@ class _ManualProgressStrip extends StatelessWidget {
         children: [
           _ManualStepPill(label: 'Details', active: detailsReady),
           _ManualStepPill(label: 'Payers', active: payersReady),
-          _ManualStepPill(label: 'Split', active: splitReady),
+          _ManualStepPill(label: 'Review', active: splitReady),
         ],
       ),
     );
@@ -5948,15 +5818,6 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
     final scheme = Theme.of(context).colorScheme;
     final item = widget.item;
     final lowConfidence = item.confidence < 0.85;
-    final shareUsers = item.assignedTo
-        .where(widget.selectedParticipants.contains)
-        .toList(growable: false);
-    final safeShareUsers = shareUsers.isEmpty
-        ? widget.selectedParticipants
-        : shareUsers;
-    for (final id in safeShareUsers) {
-      item.ensureShareUnit(id);
-    }
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -6017,37 +5878,6 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
             ],
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              SizedBox(
-                width: 190,
-                child: DropdownButtonFormField<_BillLineKind>(
-                  isExpanded: true,
-                  initialValue: item.kind,
-                  decoration: const InputDecoration(labelText: 'Line type'),
-                  items: [
-                    for (final kind in _BillLineKind.values)
-                      DropdownMenuItem(
-                        value: kind,
-                        child: Text(_billLineKindLabel(kind)),
-                      ),
-                  ],
-                  onChanged: (value) {
-                    item.kind = value ?? item.kind;
-                    widget.onChanged();
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Total ${statementMoney(item.amountMinor)}',
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
           Text(
             'Assign participants',
             style: Theme.of(context).textTheme.labelLarge,
@@ -6065,10 +5895,8 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
                   onSelected: (selected) {
                     if (selected) {
                       item.assignedTo.add(id);
-                      item.ensureShareUnit(id);
                     } else {
                       item.assignedTo.remove(id);
-                      item.removeShareUnit(id);
                     }
                     widget.onChanged();
                   },
@@ -6077,43 +5905,6 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
                 const Text('Select participants before assigning items.'),
             ],
           ),
-          if (safeShareUsers.length > 1) ...[
-            const SizedBox(height: 10),
-            Material(
-              type: MaterialType.transparency,
-              child: SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                value: item.splitByShares,
-                title: const Text('Split this item by shares'),
-                subtitle: const Text('Use this when one person had more.'),
-                onChanged: (value) {
-                  setState(() => item.splitByShares = value);
-                  widget.onChanged();
-                },
-              ),
-            ),
-            if (item.splitByShares)
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final id in safeShareUsers)
-                    SizedBox(
-                      width: 150,
-                      child: TextField(
-                        controller: item.shareUnits[id],
-                        decoration: InputDecoration(
-                          labelText: '${store.nameOf(id)} shares',
-                          suffixText: 'x',
-                        ),
-                        keyboardType: TextInputType.number,
-                        onChanged: (_) => widget.onChanged(),
-                      ),
-                    ),
-                ],
-              ),
-          ],
           if (lowConfidence) ...[
             const SizedBox(height: 8),
             Text(
@@ -6126,6 +5917,137 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _BillAdjustmentsSection extends StatelessWidget {
+  const _BillAdjustmentsSection({
+    required this.adjustments,
+    required this.onAdd,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final List<_ExpenseItemDraft> adjustments;
+  final VoidCallback onAdd;
+  final VoidCallback onChanged;
+  final ValueChanged<_ExpenseItemDraft> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.24),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'VAT and adjustments',
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          if (adjustments.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            for (final item in adjustments)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _BillAdjustmentDraftRow(
+                  item: item,
+                  onChanged: onChanged,
+                  onRemove: () => onRemove(item),
+                ),
+              ),
+          ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add),
+              label: const Text('Add VAT/adjustment'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BillAdjustmentDraftRow extends StatelessWidget {
+  const _BillAdjustmentDraftRow({
+    required this.item,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final _ExpenseItemDraft item;
+  final VoidCallback onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        SizedBox(
+          width: 180,
+          child: TextField(
+            controller: item.name,
+            decoration: const InputDecoration(labelText: 'Label'),
+            onChanged: (_) => onChanged(),
+          ),
+        ),
+        SizedBox(
+          width: 132,
+          child: TextField(
+            controller: item.amount,
+            decoration: const InputDecoration(
+              labelText: 'Amount',
+              prefixText: 'NPR ',
+            ),
+            keyboardType: TextInputType.number,
+            onChanged: (_) {
+              item.quantity.text = '1';
+              item.unitPrice.text = item.amount.text;
+              onChanged();
+            },
+          ),
+        ),
+        SizedBox(
+          width: 190,
+          child: DropdownButtonFormField<_BillLineKind>(
+            isExpanded: true,
+            initialValue: item.kind,
+            decoration: const InputDecoration(labelText: 'Line type'),
+            items: [
+              for (final kind in _BillLineKind.values)
+                if (kind != _BillLineKind.item)
+                  DropdownMenuItem(
+                    value: kind,
+                    child: Text(_billLineKindLabel(kind)),
+                  ),
+            ],
+            onChanged: (value) {
+              item.kind = value ?? item.kind;
+              onChanged();
+            },
+          ),
+        ),
+        IconButton(
+          onPressed: onRemove,
+          icon: const Icon(Icons.delete_outline),
+          tooltip: 'Delete adjustment',
+        ),
+      ],
     );
   }
 }
@@ -6176,11 +6098,7 @@ class _BillTotals {
   final int roundingAdjustmentMinor;
 
   int get finalTotalMinor =>
-      subtotalMinor +
-      serviceChargeMinor +
-      taxMinor +
-      discountMinor +
-      roundingAdjustmentMinor;
+      subtotalMinor + taxMinor + discountMinor + roundingAdjustmentMinor;
 }
 
 class _BillTotalsCard extends StatelessWidget {
@@ -6196,7 +6114,10 @@ class _BillTotalsCard extends StatelessWidget {
       child: Column(
         children: [
           _BillTotalLine('Items subtotal', totals.subtotalMinor),
-          _BillTotalLine('Service charge', totals.serviceChargeMinor),
+          _BillTotalLine(
+            'Service charge (excluded)',
+            totals.serviceChargeMinor,
+          ),
           _BillTotalLine('VAT/Tax', totals.taxMinor),
           _BillTotalLine('Discount', totals.discountMinor),
           _BillTotalLine('Rounding adjustment', totals.roundingAdjustmentMinor),
@@ -6245,14 +6166,22 @@ class _BillTotalLine extends StatelessWidget {
   }
 }
 
+String _billLineKindLabel(_BillLineKind kind) {
+  return switch (kind) {
+    _BillLineKind.item => 'Item',
+    _BillLineKind.serviceCharge => 'Service charge',
+    _BillLineKind.tax => 'VAT/Tax',
+    _BillLineKind.discount => 'Discount',
+    _BillLineKind.rounding => 'Rounding',
+  };
+}
+
 Map<String, int> _manualSplitPreviewFor({
   required int total,
   required List<String> participants,
   required SplitMode splitMode,
   required Map<String, int> equalPreview,
   required Map<String, String> custom,
-  required Map<String, String> percentages,
-  required Map<String, String> shares,
   required List<_ExpenseItemDraft> itemDrafts,
   bool equalBillAdjustmentAllocation = false,
 }) {
@@ -6267,19 +6196,6 @@ Map<String, int> _manualSplitPreviewFor({
       SplitMode.custom => {
         for (final id in participants) id: parseMoneyToMinor(custom[id] ?? ''),
       },
-      SplitMode.percentage => _amountMapFromList(
-        participants,
-        percentageShares(total, [
-          for (final id in participants)
-            double.tryParse(percentages[id] ?? '') ?? 0,
-        ]),
-      ),
-      SplitMode.shares => _amountMapFromList(
-        participants,
-        unitShares(total, [
-          for (final id in participants) int.tryParse(shares[id] ?? '') ?? 1,
-        ]),
-      ),
       SplitMode.item => _manualItemSplitPreview(
         total,
         participants,
@@ -6304,12 +6220,7 @@ Map<String, int> _manualItemSplitPreview(
   )) {
     final users = item.assignedTo.where(participants.contains).toList();
     final safeUsers = users.isEmpty ? participants : users;
-    final splits = item.splitByShares
-        ? unitShares(
-            item.amountMinor,
-            safeUsers.map((id) => item.shareUnitsFor(id)).toList(),
-          )
-        : equalShares(item.amountMinor, safeUsers);
+    final splits = equalShares(item.amountMinor, safeUsers);
     for (var index = 0; index < safeUsers.length; index++) {
       preview[safeUsers[index]] =
           (preview[safeUsers[index]] ?? 0) + splits[index];
@@ -6402,16 +6313,6 @@ String? _itemValidationMessage({
     return 'Total item amount must equal the final expense total.';
   }
   return null;
-}
-
-String _billLineKindLabel(_BillLineKind kind) {
-  return switch (kind) {
-    _BillLineKind.item => 'Item',
-    _BillLineKind.serviceCharge => 'Service charge',
-    _BillLineKind.tax => 'VAT/Tax',
-    _BillLineKind.discount => 'Discount',
-    _BillLineKind.rounding => 'Rounding',
-  };
 }
 
 Future<void> showMyQrDialog(BuildContext context) async {
@@ -7227,8 +7128,6 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
   ];
   final participants = <String>{for (final member in members) member.userId};
   final custom = <String, String>{};
-  final percentages = <String, String>{};
-  final shares = <String, String>{};
   var equalPreview = <String, int>{};
   var parsedItems = parseControlledReceipt('');
   final itemAssignments = <int, String>{};
@@ -7293,8 +7192,6 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
             splitMode: splitMode,
             equalPreview: equalPreview,
             custom: custom,
-            percentages: percentages,
-            shares: shares,
             receiptItems: splitMode == SplitMode.item
                 ? parseControlledReceipt(receipt.text)
                 : parsedItems,
@@ -7354,8 +7251,6 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                                       )) {
                                         participants.remove(member.userId);
                                         custom.remove(member.userId);
-                                        percentages.remove(member.userId);
-                                        shares.remove(member.userId);
                                       } else {
                                         participants.add(member.userId);
                                       }
@@ -7501,23 +7396,6 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                               suffix: 'NPR',
                               onChanged: () => setState(() {}),
                             ),
-                          if (splitMode == SplitMode.percentage)
-                            _AmountGrid(
-                              ids: selectedParticipants,
-                              label: 'Percentage',
-                              values: percentages,
-                              suffix: '%',
-                              maxValue: 100,
-                              onChanged: () => setState(() {}),
-                            ),
-                          if (splitMode == SplitMode.shares)
-                            _AmountGrid(
-                              ids: selectedParticipants,
-                              label: 'Share units',
-                              values: shares,
-                              suffix: 'x',
-                              onChanged: () => setState(() {}),
-                            ),
                           if (splitMode == SplitMode.item) ...[
                             TextField(
                               controller: receipt,
@@ -7638,14 +7516,6 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                             (key, value) =>
                                 MapEntry(key, parseMoneyToMinor(value)),
                           );
-                          final percentageAmounts = percentages.map(
-                            (key, value) =>
-                                MapEntry(key, double.tryParse(value) ?? 0),
-                          );
-                          final shareAmounts = shares.map(
-                            (key, value) =>
-                                MapEntry(key, int.tryParse(value) ?? 1),
-                          );
                           final data = TransactionConfirmationData(
                             id: 'expense-$groupId-${DateTime.now().microsecondsSinceEpoch}',
                             transactionType: splitMode == SplitMode.item
@@ -7708,8 +7578,6 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                                       ? equalPreview
                                       : null,
                                   customAmounts: customAmounts,
-                                  percentages: percentageAmounts,
-                                  shareUnits: shareAmounts,
                                   receiptItems: parsed,
                                   itemAssignments: assignmentMap,
                                 );
@@ -7898,9 +7766,7 @@ class ParticipantSelectorCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: selected
-                    ? scheme.primary
-                    : scheme.outlineVariant,
+                color: selected ? scheme.primary : scheme.outlineVariant,
                 width: selected ? 1.4 : 1,
               ),
             ),
@@ -7962,14 +7828,6 @@ class SplitPreview extends StatelessWidget {
       ...payerAmounts.keys,
       ...participantShares.keys,
     }.toList()..sort((a, b) => store.nameOf(a).compareTo(store.nameOf(b)));
-    final payerTotal = payerAmounts.values.fold<int>(
-      0,
-      (sum, amount) => sum + amount,
-    );
-    final splitTotal = participantShares.values.fold<int>(
-      0,
-      (sum, amount) => sum + amount,
-    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -7980,59 +7838,6 @@ class SplitPreview extends StatelessWidget {
             color: Theme.of(context).colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w600,
           ),
-        ),
-        const SizedBox(height: 12),
-        PreviewCard(
-          icon: Icons.groups_2_outlined,
-          title: 'Participants & shares',
-          trailing: _CountPill(
-            label:
-                '${participants.length} ${participants.length == 1 ? 'participant' : 'participants'}',
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (participantShares.isEmpty)
-                const _PreviewEmptyLine('Please select participants.')
-              else
-                _ResponsivePreviewGrid(
-                  children: [
-                    for (final entry in participantShares.entries)
-                      ParticipantShareRow(
-                        user: store.userById(entry.key),
-                        amountMinor: entry.value,
-                      ),
-                  ],
-                ),
-              if (showRoundingNote) ...[
-                const SizedBox(height: 10),
-                _RoundingNote(
-                  message:
-                      'Rounded by ${statementMoney(1)} to match the total.',
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        PreviewCard(
-          icon: Icons.account_balance_wallet_outlined,
-          title: 'Paid by',
-          trailing: _CountPill(
-            label:
-                '${payerAmounts.length} ${payerAmounts.length == 1 ? 'payer' : 'payers'}',
-          ),
-          child: payerAmounts.isEmpty
-              ? const _PreviewEmptyLine('Please select who paid.')
-              : Column(
-                  children: [
-                    for (final entry in payerAmounts.entries)
-                      PayerRow(
-                        user: store.userById(entry.key),
-                        amountMinor: entry.value,
-                      ),
-                  ],
-                ),
         ),
         const SizedBox(height: 12),
         PreviewCard(
@@ -8050,14 +7855,18 @@ class SplitPreview extends StatelessWidget {
                         paidMinor: payerAmounts[id] ?? 0,
                         shareMinor: participantShares[id] ?? 0,
                       ),
+                    if (showRoundingNote) ...[
+                      const SizedBox(height: 10),
+                      _RoundingNote(
+                        message:
+                            'Rounded by ${statementMoney(1)} to match the total.',
+                      ),
+                    ],
                   ],
                 ),
         ),
         const SizedBox(height: 12),
         ValidationSummaryCard(
-          expenseTotal: expenseTotal,
-          payerTotal: payerTotal,
-          splitTotal: splitTotal,
           payerError: payerError,
           splitError: splitError,
           ready: ready,
@@ -8186,11 +7995,13 @@ class NetResultRow extends StatelessWidget {
     final net = paidMinor - shareMinor;
     final scheme = Theme.of(context).colorScheme;
     final accent = toneColor(context, Tone.success);
-    final label = net > 0
-        ? 'Gets back ${statementMoney(net)}'
+    final result = net > 0
+        ? 'gets back ${statementMoney(net)}'
         : net < 0
-        ? 'Owes ${statementMoney(net.abs())}'
-        : 'Settled';
+        ? 'pays ${statementMoney(net.abs())}'
+        : 'settled';
+    final paid = paidMinor > 0 ? ' · paid ${statementMoney(paidMinor)}' : '';
+    final label = 'Owes ${statementMoney(shareMinor)}$paid · $result';
     final color = net > 0 ? accent : scheme.onSurfaceVariant;
     final icon = net > 0
         ? Icons.call_received_rounded
@@ -8220,18 +8031,12 @@ class NetResultRow extends StatelessWidget {
 
 class ValidationSummaryCard extends StatelessWidget {
   const ValidationSummaryCard({
-    required this.expenseTotal,
-    required this.payerTotal,
-    required this.splitTotal,
     required this.payerError,
     required this.splitError,
     required this.ready,
     super.key,
   });
 
-  final int expenseTotal;
-  final int payerTotal;
-  final int splitTotal;
   final String? payerError;
   final String? splitError;
   final bool ready;
@@ -8252,45 +8057,6 @@ class ValidationSummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final stacked = constraints.maxWidth < 560;
-              final items = [
-                _SummaryValue(
-                  label: 'Expense total',
-                  value: statementMoney(expenseTotal),
-                ),
-                _SummaryValue(
-                  label: 'Total paid by payers',
-                  value: statementMoney(payerTotal),
-                ),
-                _SummaryValue(
-                  label: 'Total split among participants',
-                  value: statementMoney(splitTotal),
-                ),
-              ];
-              if (stacked) {
-                return Column(
-                  children: [
-                    for (var index = 0; index < items.length; index++) ...[
-                      if (index > 0) const SizedBox(height: 10),
-                      items[index],
-                    ],
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var index = 0; index < items.length; index++) ...[
-                    if (index > 0) const SizedBox(width: 12),
-                    Expanded(child: items[index]),
-                  ],
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 12),
           Row(
             children: [
               Icon(
@@ -8378,35 +8144,6 @@ class _PersonAmountRow extends StatelessWidget {
   }
 }
 
-class _ResponsivePreviewGrid extends StatelessWidget {
-  const _ResponsivePreviewGrid({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 560 ? 2 : 1;
-        final spacing = columns == 1 ? 0.0 : 10.0;
-        final itemWidth =
-            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: 0,
-          children: [
-            for (final child in children)
-              SizedBox(
-                width: itemWidth.isFinite ? itemWidth : null,
-                child: child,
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
 class _CountPill extends StatelessWidget {
   const _CountPill({required this.label});
 
@@ -8425,39 +8162,6 @@ class _CountPill extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(color: accent, fontWeight: FontWeight.w800),
-      ),
-    );
-  }
-}
-
-class _SummaryValue extends StatelessWidget {
-  const _SummaryValue({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
-          ),
-        ],
       ),
     );
   }
@@ -8509,8 +8213,6 @@ Map<String, int> _splitPreviewFor({
   required SplitMode splitMode,
   required Map<String, int> equalPreview,
   required Map<String, String> custom,
-  required Map<String, String> percentages,
-  required Map<String, String> shares,
   required List<ParsedReceiptItem> receiptItems,
   required Map<int, String> itemAssignments,
 }) {
@@ -8525,19 +8227,6 @@ Map<String, int> _splitPreviewFor({
       SplitMode.custom => {
         for (final id in participants) id: parseMoneyToMinor(custom[id] ?? ''),
       },
-      SplitMode.percentage => _amountMapFromList(
-        participants,
-        percentageShares(total, [
-          for (final id in participants)
-            double.tryParse(percentages[id] ?? '') ?? 0,
-        ]),
-      ),
-      SplitMode.shares => _amountMapFromList(
-        participants,
-        unitShares(total, [
-          for (final id in participants) int.tryParse(shares[id] ?? '') ?? 1,
-        ]),
-      ),
       SplitMode.item => _itemSplitPreview(
         total,
         participants,
@@ -8548,12 +8237,6 @@ Map<String, int> _splitPreviewFor({
   } on ArgumentError {
     return <String, int>{};
   }
-}
-
-Map<String, int> _amountMapFromList(List<String> ids, List<int> amounts) {
-  return {
-    for (var index = 0; index < ids.length; index++) ids[index]: amounts[index],
-  };
 }
 
 Map<String, int> _itemSplitPreview(
@@ -8614,7 +8297,6 @@ class _AmountGrid extends StatelessWidget {
     required this.label,
     required this.values,
     required this.suffix,
-    this.maxValue,
     this.onChanged,
   });
 
@@ -8622,7 +8304,6 @@ class _AmountGrid extends StatelessWidget {
   final String label;
   final Map<String, String> values;
   final String suffix;
-  final num? maxValue;
   final VoidCallback? onChanged;
 
   @override
@@ -8640,9 +8321,6 @@ class _AmountGrid extends StatelessWidget {
                 suffixText: suffix,
               ),
               keyboardType: TextInputType.number,
-              inputFormatters: [
-                if (maxValue != null) _MaxNumberInputFormatter(maxValue!),
-              ],
               onChanged: (value) {
                 values[id] = value;
                 onChanged?.call();
@@ -8651,28 +8329,6 @@ class _AmountGrid extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _MaxNumberInputFormatter extends TextInputFormatter {
-  const _MaxNumberInputFormatter(this.maxValue);
-
-  final num maxValue;
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final raw = newValue.text.trim();
-    if (raw.isEmpty) {
-      return newValue;
-    }
-    final value = num.tryParse(raw);
-    if (value == null || value > maxValue) {
-      return oldValue;
-    }
-    return newValue;
   }
 }
 

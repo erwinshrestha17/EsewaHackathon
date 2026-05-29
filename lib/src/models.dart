@@ -28,7 +28,7 @@ enum GroupCategory {
   custom,
 }
 
-enum SplitMode { equal, custom, percentage, shares, item }
+enum SplitMode { equal, custom, item }
 
 enum ExpenseStatus { draft, active, voided }
 

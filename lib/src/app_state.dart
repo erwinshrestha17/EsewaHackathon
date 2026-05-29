@@ -891,7 +891,7 @@ class AppStore extends ChangeNotifier {
     final items = <ExpenseItem>[];
     final shareAmounts = <String, int>{};
     final subtotal = receiptItems == null || receiptItems.isEmpty
-        ? totalMinor - taxMinor - serviceChargeMinor - tipMinor + discountMinor
+        ? totalMinor - taxMinor - tipMinor + discountMinor
         : receiptItems.fold<int>(0, (sum, item) => sum + item.amountMinor);
     final finalTotal = totalMinor;
 
@@ -914,18 +914,6 @@ class AppStore extends ChangeNotifier {
             .map((id) => customAmounts?[id] ?? 0)
             .toList();
         validateCustomShares(finalTotal, amounts);
-        for (var i = 0; i < participants.length; i++) {
-          shareAmounts[participants[i]] = amounts[i];
-        }
-      case SplitMode.percentage:
-        final values = participants.map((id) => percentages?[id] ?? 0).toList();
-        final amounts = percentageShares(finalTotal, values);
-        for (var i = 0; i < participants.length; i++) {
-          shareAmounts[participants[i]] = amounts[i];
-        }
-      case SplitMode.shares:
-        final units = participants.map((id) => shareUnits?[id] ?? 1).toList();
-        final amounts = unitShares(finalTotal, units);
         for (var i = 0; i < participants.length; i++) {
           shareAmounts[participants[i]] = amounts[i];
         }
@@ -2679,13 +2667,13 @@ class AppStore extends ChangeNotifier {
       totalMinor: npr(12000),
       payerId: 'u-pasang',
       category: 'travel',
-      splitMode: SplitMode.shares,
+      splitMode: SplitMode.custom,
       participantIds: <String>['u-sita', 'u-maya', 'u-pasang', 'u-arjun'],
-      shareUnits: <String, int>{
-        'u-sita': 1,
-        'u-maya': 1,
-        'u-pasang': 2,
-        'u-arjun': 1,
+      customAmounts: <String, int>{
+        'u-sita': npr(2400),
+        'u-maya': npr(2400),
+        'u-pasang': npr(4800),
+        'u-arjun': npr(2400),
       },
     );
     addExpense(
@@ -2694,9 +2682,13 @@ class AppStore extends ChangeNotifier {
       totalMinor: npr(5400),
       payerId: 'u-laxmi',
       category: 'household',
-      splitMode: SplitMode.percentage,
+      splitMode: SplitMode.custom,
       participantIds: <String>['u-sita', 'u-arjun', 'u-laxmi'],
-      percentages: <String, double>{'u-sita': 30, 'u-arjun': 35, 'u-laxmi': 35},
+      customAmounts: <String, int>{
+        'u-sita': npr(1620),
+        'u-arjun': npr(1890),
+        'u-laxmi': npr(1890),
+      },
     );
 
     final firstSuggestion = suggestionsForGroup(dashain.id).firstWhere(

@@ -9,6 +9,7 @@ class AuthTextField extends StatefulWidget {
     this.keyboardType,
     this.textInputAction,
     this.prefixText,
+    this.hintText,
     this.inputFormatters,
     this.obscureText = false,
     this.validator,
@@ -21,6 +22,7 @@ class AuthTextField extends StatefulWidget {
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final String? prefixText;
+  final String? hintText;
   final List<TextInputFormatter>? inputFormatters;
   final bool obscureText;
   final FormFieldValidator<String>? validator;
@@ -49,6 +51,7 @@ class _AuthTextFieldState extends State<AuthTextField> {
       validator: widget.validator,
       decoration: InputDecoration(
         labelText: widget.label,
+        hintText: widget.hintText,
         prefixIcon: Icon(widget.icon),
         prefixText: widget.prefixText,
         suffixIcon: widget.obscureText

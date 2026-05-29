@@ -10,6 +10,10 @@ class AuthController extends ChangeNotifier {
   static const _hasSeenIntroKey = 'auth.hasSeenIntro';
   static const _isLoggedInKey = 'auth.isLoggedIn';
   static const _activeUserProfileKey = 'auth.activeUserProfile';
+  static const _mPinKey = 'auth.mPin';
+  static const _biometricEnabledKey = 'auth.biometricEnabled';
+  static const demoOtp = '123456';
+  static const demoMpin = '1234';
 
   SharedPreferences? _preferences;
   AuthState _state = const AuthState.initial();
@@ -64,34 +68,62 @@ class AuthController extends ChangeNotifier {
     await _saveLoggedInProfile(profile);
   }
 
+  Future<void> loginWithMpin(String mPin) async {
+    if (!_isValidMpin(mPin)) {
+      throw const AuthValidationException('Enter your 4-digit M-PIN.');
+    }
+    final preferences = await _prefs();
+    final savedMpin = preferences.getString(_mPinKey) ?? demoMpin;
+    if (mPin.trim() != savedMpin) {
+      throw const AuthValidationException('M-PIN does not match.');
+    }
+    await _saveLoggedInProfile(_storedOrDemoProfile(preferences));
+  }
+
+  Future<void> loginWithBiometric() async {
+    final preferences = await _prefs();
+    final biometricEnabled = preferences.getBool(_biometricEnabledKey) ?? true;
+    if (!biometricEnabled) {
+      throw const AuthValidationException('Biometric login is not enabled.');
+    }
+    await _saveLoggedInProfile(_storedOrDemoProfile(preferences));
+  }
+
   String? _normalizeNepalMobile(String value) {
     final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
     return RegExp(r'^9[678]\d{8}$').hasMatch(digits) ? digits : null;
   }
 
   Future<void> register({
-    required String fullName,
-    required String phone,
-    required String esewaId,
-    required String district,
-    required String password,
+    required String userName,
+    required DateTime dateOfBirth,
+    required String mPin,
+    required String otp,
+    required bool biometricEnabled,
   }) async {
-    if (fullName.trim().isEmpty ||
-        phone.trim().isEmpty ||
-        esewaId.trim().isEmpty ||
-        district.trim().isEmpty ||
-        password.isEmpty) {
+    if (userName.trim().isEmpty || !_isValidMpin(mPin) || otp.trim().isEmpty) {
       throw const AuthValidationException('Complete all required fields.');
+    }
+    if (otp.trim() != demoOtp) {
+      throw const AuthValidationException('Enter the 6-digit OTP.');
+    }
+    final now = DateTime.now();
+    if (dateOfBirth.isAfter(DateTime(now.year, now.month, now.day))) {
+      throw const AuthValidationException('Date of birth cannot be in future.');
     }
 
     final profile = UserProfile(
       id: UserProfile.activeUserId,
-      displayName: fullName.trim(),
-      phone: phone.trim(),
-      esewaId: esewaId.trim(),
-      district: district.trim(),
-      createdAt: DateTime.now(),
+      displayName: userName.trim(),
+      phone: '',
+      esewaId: '',
+      district: '',
+      dateOfBirth: dateOfBirth,
+      createdAt: now,
     );
+    final preferences = await _prefs();
+    await preferences.setString(_mPinKey, mPin.trim());
+    await preferences.setBool(_biometricEnabledKey, biometricEnabled);
     await _saveLoggedInProfile(profile);
   }
 
@@ -129,6 +161,22 @@ class AuthController extends ChangeNotifier {
 
   Future<SharedPreferences> _prefs() async {
     return _preferences ??= await SharedPreferences.getInstance();
+  }
+
+  bool _isValidMpin(String value) {
+    return RegExp(r'^\d{4}$').hasMatch(value.trim());
+  }
+
+  UserProfile _storedOrDemoProfile(SharedPreferences preferences) {
+    final rawProfile = preferences.getString(_activeUserProfileKey);
+    if (rawProfile != null) {
+      try {
+        return UserProfile.fromJsonString(rawProfile);
+      } on FormatException {
+        return UserProfile.demo();
+      }
+    }
+    return UserProfile.demo();
   }
 }
 

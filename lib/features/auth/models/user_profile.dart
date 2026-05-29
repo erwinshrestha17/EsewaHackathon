@@ -8,6 +8,7 @@ class UserProfile {
     required this.esewaId,
     required this.district,
     required this.createdAt,
+    this.dateOfBirth,
     this.avatarUrl,
   });
 
@@ -19,6 +20,7 @@ class UserProfile {
       esewaId: 'erwin@esewa',
       district: 'Bharatpur',
       createdAt: DateTime(2026, 5, 1, 10),
+      dateOfBirth: DateTime(1998, 1, 1),
     );
   }
 
@@ -30,6 +32,7 @@ class UserProfile {
       esewaId: json['esewaId'] as String? ?? 'erwin@esewa',
       district: json['district'] as String? ?? 'Bharatpur',
       avatarUrl: json['avatarUrl'] as String?,
+      dateOfBirth: DateTime.tryParse(json['dateOfBirth'] as String? ?? ''),
       createdAt:
           DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime(2026, 5, 1, 10),
@@ -49,6 +52,7 @@ class UserProfile {
   final String district;
   final String? avatarUrl;
   final DateTime createdAt;
+  final DateTime? dateOfBirth;
 
   String get firstName {
     final parts = displayName.trim().split(RegExp(r'\s+'));
@@ -76,6 +80,7 @@ class UserProfile {
       'district': district,
       'avatarUrl': avatarUrl,
       'createdAt': createdAt.toIso8601String(),
+      'dateOfBirth': dateOfBirth?.toIso8601String(),
     };
   }
 
@@ -89,6 +94,7 @@ class UserProfile {
     String? district,
     String? avatarUrl,
     DateTime? createdAt,
+    DateTime? dateOfBirth,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -98,6 +104,7 @@ class UserProfile {
       district: district ?? this.district,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       createdAt: createdAt ?? this.createdAt,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
     );
   }
 }

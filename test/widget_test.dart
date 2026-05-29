@@ -3,49 +3,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sangai/features/auth/auth_controller.dart';
 import 'package:sangai/features/auth/models/user_profile.dart';
 import 'package:sangai/features/auth/screens/login_form.dart';
+import 'package:sangai/features/auth/screens/register_form.dart';
 import 'package:sangai/src/app.dart';
 import 'package:sangai/src/app_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  test('login accepts only Nepal mobile numbers', () async {
+  test('login accepts saved M-PIN and rejects invalid pins', () async {
     SharedPreferences.setMockInitialValues({});
     final controller = AuthController();
 
     expect(
-      () =>
-          controller.login(identifier: 'demo@esewa', password: 'demo-password'),
+      () => controller.loginWithMpin('12'),
       throwsA(isA<AuthValidationException>()),
     );
     expect(
-      () =>
-          controller.login(identifier: '980000001', password: 'demo-password'),
-      throwsA(isA<AuthValidationException>()),
-    );
-    expect(
-      () => controller.login(
-        identifier: '98000000011',
-        password: 'demo-password',
-      ),
-      throwsA(isA<AuthValidationException>()),
-    );
-    expect(
-      () => controller.login(
-        identifier: '+977 9800000001',
-        password: 'demo-password',
-      ),
+      () => controller.loginWithMpin('9999'),
       throwsA(isA<AuthValidationException>()),
     );
 
-    await controller.login(identifier: '9800000001', password: 'demo-password');
+    await controller.loginWithMpin(AuthController.demoMpin);
 
     expect(controller.state.isLoggedIn, isTrue);
-    expect(controller.state.activeUser?.phone, '9800000001');
+    expect(controller.state.activeUser?.displayName, 'Erwin Shrestha');
   });
 
-  testWidgets('login form asks for Nepal mobile and removes QR login', (
-    tester,
-  ) async {
+  testWidgets('login form uses M-PIN or biometric', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
     await tester.pumpWidget(
@@ -55,17 +38,68 @@ void main() {
       ),
     );
 
-    expect(find.text('Nepal mobile number'), findsOneWidget);
-    expect(find.text('+977 '), findsOneWidget);
-    expect(find.text('Login with QR'), findsNothing);
+    expect(find.text('M-PIN'), findsOneWidget);
+    expect(find.text('Login with M-PIN'), findsOneWidget);
+    expect(find.text('Login with biometric'), findsOneWidget);
+    expect(find.text('Nepal mobile number'), findsNothing);
 
-    await tester.enterText(find.byType(TextFormField).first, '98000000011');
+    await tester.enterText(find.byType(TextFormField).first, '12345');
     await tester.pump();
 
-    final phoneField = tester.widget<TextFormField>(
+    final pinField = tester.widget<TextFormField>(
       find.byType(TextFormField).first,
     );
-    expect(phoneField.controller?.text, '9800000001');
+    expect(pinField.controller?.text, '1234');
+  });
+
+  testWidgets('sign up requires username dob M-PIN then verifies OTP', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = AuthController();
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: controller,
+        child: MaterialApp(
+          home: const Scaffold(body: RegisterForm()),
+          routes: {'/main': (_) => const Scaffold(body: Text('Main'))},
+        ),
+      ),
+    );
+
+    expect(find.text('User name'), findsOneWidget);
+    expect(find.text('Date of birth'), findsOneWidget);
+    expect(find.text('Create M-PIN'), findsOneWidget);
+    expect(find.text('Phone number'), findsNothing);
+    expect(find.text('Password'), findsNothing);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'User name'),
+      'Asha',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Date of birth'),
+      '2000-01-02',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Create M-PIN'),
+      '2468',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Send OTP'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('6-digit OTP'), findsOneWidget);
+    expect(find.text('Verify OTP & Create Account'), findsOneWidget);
+
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Verify OTP & Create Account'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.state.isLoggedIn, isTrue);
+    expect(controller.state.activeUser?.displayName, 'Asha');
+    expect(controller.state.activeUser?.dateOfBirth, DateTime(2000, 1, 2));
   });
 
   Future<void> pumpGroupsForAddExpense(
@@ -399,8 +433,6 @@ void main() {
     expect(find.text('Who paid?'), findsWidgets);
     expect(find.text('Split preview'), findsOneWidget);
     expect(find.text('Calculated equal split'), findsOneWidget);
-    expect(find.text('Participants & shares'), findsOneWidget);
-    expect(find.text('Paid by'), findsOneWidget);
     expect(find.text('Net result'), findsOneWidget);
     expect(find.text('Status: Ready to save'), findsOneWidget);
 
@@ -430,6 +462,44 @@ void main() {
     expect(find.text('Enter the amount paid by each payer.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'Manual entry defaults who paid to current user and remains editable',
+    (tester) async {
+      final store = AppStore()
+        ..switchUser('u-arjun')
+        ..selectedGroupId = 'g-dashain';
+
+      await pumpGroupsForAddExpense(tester, store);
+      await openManualEntry(tester);
+
+      final payerDropdown = find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            widget.decoration.labelText == 'Who paid?',
+      );
+      expect(payerDropdown, findsOneWidget);
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(payerDropdown)
+            .initialValue,
+        'u-arjun',
+      );
+
+      await tester.tap(payerDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sita Shrestha').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(payerDropdown)
+            .initialValue,
+        'u-sita',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('Add expense participant cards toggle split preview', (
     tester,
@@ -469,49 +539,6 @@ void main() {
       find.widgetWithText(FilledButton, 'Save expense'),
     );
     expect(save.onPressed, isNull);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Add expense percentage split rejects values above 100', (
-    tester,
-  ) async {
-    final store = AppStore()..selectedGroupId = 'g-dashain';
-
-    await pumpGroupsForAddExpense(tester, store);
-    await openManualEntry(tester);
-
-    // Select all participants first
-    final participantCards = find.byType(ParticipantSelectorCard);
-    final cardCount = participantCards.evaluate().length;
-    for (var index = 0; index < cardCount; index++) {
-      await tester.ensureVisible(participantCards.at(index));
-      await tester.tap(participantCards.at(index));
-      await tester.pumpAndSettle();
-    }
-
-    final splitModeDropdown = find.byWidgetPredicate(
-      (widget) =>
-          widget.runtimeType.toString().startsWith('DropdownButtonFormField'),
-    );
-    await tester.ensureVisible(splitModeDropdown.last);
-    await tester.tap(splitModeDropdown.last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Percentage').last);
-    await tester.pumpAndSettle();
-
-    final percentageField = find.widgetWithText(
-      TextFormField,
-      'Sita Shrestha Percentage',
-    );
-    expect(percentageField, findsWidgets);
-
-    await tester.enterText(percentageField.first, '101');
-    await tester.pump();
-    expect(find.text('101'), findsNothing);
-
-    await tester.enterText(percentageField.first, '100');
-    await tester.pump();
-    expect(find.text('100'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -601,6 +628,80 @@ void main() {
       ),
       findsNothing,
     );
+    expect(find.text('Split this item by shares'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            (widget.decoration?.labelText ?? '').endsWith('shares'),
+      ),
+      findsNothing,
+    );
+    expect(find.text('Line type'), findsNothing);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Add VAT/adjustment'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('VAT and adjustments'), findsOneWidget);
+    expect(find.text('Line type'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Manual entry excludes service charge from bill total', (
+    tester,
+  ) async {
+    final store = AppStore()..selectedGroupId = 'g-dashain';
+
+    await pumpGroupsForAddExpense(tester, store);
+    await openManualEntry(tester);
+
+    final skipItemSplitSwitch = find.widgetWithText(
+      SwitchListTile,
+      'Skip item split and use total amount',
+    );
+    await tester.ensureVisible(skipItemSplitSwitch);
+    await tester.tap(skipItemSplitSwitch);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '+ Add item'));
+    await tester.pumpAndSettle();
+
+    final itemAmount = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == 'Amount',
+    );
+    await tester.enterText(itemAmount.first, '100');
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Add VAT/adjustment'));
+    await tester.pumpAndSettle();
+
+    final lineType = find.byWidgetPredicate(
+      (widget) =>
+          widget is DropdownButtonFormField<dynamic> &&
+          widget.decoration.labelText == 'Line type',
+    );
+    await tester.tap(lineType);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Service charge').last);
+    await tester.pumpAndSettle();
+
+    final amountFields = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == 'Amount',
+    );
+    await tester.enterText(amountFields.last, '50');
+    await tester.pump();
+
+    final totalAmountField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == 'Total amount',
+    );
+    expect(
+      tester.widget<TextField>(totalAmountField).controller?.text,
+      '100.00',
+    );
+    expect(find.text('Service charge (excluded)'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

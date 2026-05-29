@@ -67,6 +67,36 @@ void main() {
     );
   });
 
+  test('service charge is stored but excluded from expense subtotal math', () {
+    final store = AppStore();
+    final groupId = store.createGroup(
+      name: 'Service charge test',
+      category: GroupCategory.custom,
+      memberIds: const ['u-arjun'],
+    );
+
+    final expenseId = store.addExpense(
+      groupId: groupId,
+      title: 'VAT plus service metadata',
+      totalMinor: npr(113),
+      payerId: 'u-sita',
+      category: 'custom',
+      splitMode: SplitMode.equal,
+      participantIds: const ['u-sita', 'u-arjun'],
+      taxMinor: npr(13),
+      serviceChargeMinor: npr(10),
+    );
+
+    final expense = store.expenses.firstWhere((item) => item.id == expenseId);
+    expect(expense.subtotalMinor, npr(100));
+    expect(expense.totalMinor, npr(113));
+    expect(expense.billServiceChargeMinor, npr(10));
+    expect(
+      expense.shares.fold<int>(0, (sum, share) => sum + share.amountMinor),
+      npr(113),
+    );
+  });
+
   test(
     'multiple payer equal split gives rounding to largest included payer',
     () {

@@ -1,6 +1,6 @@
 enum ConnectionRequestPreference { everyone, contactsOnly, qrInviteOnly }
 
-enum DefaultSplitMode { equal, exactAmount, percentage, shares }
+enum DefaultSplitMode { equal, exactAmount }
 
 enum TaxAllocationMode { proportionalByItem, equalAmongIncluded }
 
@@ -182,8 +182,6 @@ extension DefaultSplitModeLabel on DefaultSplitMode {
     return switch (this) {
       DefaultSplitMode.equal => 'Equal Split',
       DefaultSplitMode.exactAmount => 'Exact Amount',
-      DefaultSplitMode.percentage => 'Percentage',
-      DefaultSplitMode.shares => 'Shares',
     };
   }
 }

@@ -13,16 +13,12 @@ class LoginForm extends StatefulWidget {
 
 class _LoginFormState extends State<LoginForm> {
   final _formKey = GlobalKey<FormState>();
-  final _identifier = TextEditingController();
-  final _otp = TextEditingController(text: '123456');
+  final _mPin = TextEditingController();
   var _submitting = false;
-  var _otpRequested = false;
-  var _biometricEnabled = true;
 
   @override
   void dispose() {
-    _identifier.dispose();
-    _otp.dispose();
+    _mPin.dispose();
     super.dispose();
   }
 
@@ -34,106 +30,65 @@ class _LoginFormState extends State<LoginForm> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AuthTextField(
-            controller: _identifier,
-            label: 'Nepal mobile number',
-            icon: Icons.phone_iphone_outlined,
-            keyboardType: TextInputType.phone,
-            textInputAction: TextInputAction.next,
-            prefixText: '+977 ',
+            controller: _mPin,
+            label: 'M-PIN',
+            icon: Icons.pin_outlined,
+            keyboardType: TextInputType.number,
+            obscureText: true,
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(10),
+              LengthLimitingTextInputFormatter(4),
             ],
-            validator: _nepalMobileValidator,
+            validator: _mPinValidator,
           ),
-          if (_otpRequested) ...[
-            const SizedBox(height: 12),
-            AuthTextField(
-              controller: _otp,
-              label: '6-digit OTP',
-              icon: Icons.pin_outlined,
-              keyboardType: TextInputType.number,
-              validator: _otpValidator,
+          const SizedBox(height: 10),
+          Text(
+            'Use your 4-digit M-PIN or device biometric unlock.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Resend available in 00:29',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _biometricEnabled,
-              title: const Text('Enable biometric login'),
-              subtitle: const Text('Use device unlock after this demo login.'),
-              onChanged: (value) => setState(() => _biometricEnabled = value),
-            ),
-          ],
+          ),
           const SizedBox(height: 18),
           FilledButton(
-            onPressed: _submitting ? null : _login,
-            child: Text(
-              _submitting
-                  ? 'Verifying...'
-                  : _otpRequested
-                  ? 'Verify & Continue'
-                  : 'Continue',
-            ),
+            onPressed: _submitting ? null : _loginWithMpin,
+            child: Text(_submitting ? 'Verifying...' : 'Login with M-PIN'),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
-            onPressed: _submitting
-                ? null
-                : () => _showError(
-                    'Enter exactly 10 digits after +977, such as 98XXXXXXXX.',
-                  ),
-            icon: const Icon(Icons.help_outline),
-            label: const Text('Need help?'),
+            onPressed: _submitting ? null : _loginWithBiometric,
+            icon: const Icon(Icons.fingerprint),
+            label: const Text('Login with biometric'),
           ),
         ],
       ),
     );
   }
 
-  String? _required(String? value) {
-    return value == null || value.trim().isEmpty ? 'Required' : null;
-  }
-
-  String? _nepalMobileValidator(String? value) {
-    final required = _required(value);
-    if (required != null) {
-      return required;
+  String? _mPinValidator(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Enter your M-PIN';
     }
-    final digits = value!.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length != 10) {
-      return 'Enter exactly 10 digits after +977.';
-    }
-    return RegExp(r'^9[678]\d{8}$').hasMatch(digits)
+    return RegExp(r'^\d{4}$').hasMatch(value.trim())
         ? null
-        : 'Enter a valid Nepal mobile number.';
+        : 'Enter a 4-digit M-PIN';
   }
 
-  String? _otpValidator(String? value) {
-    final required = _required(value);
-    if (required != null) {
-      return required;
-    }
-    return value!.trim().length == 6 ? null : 'Enter the 6-digit OTP';
-  }
-
-  Future<void> _login() async {
+  Future<void> _loginWithMpin() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
-    if (!_otpRequested) {
-      setState(() => _otpRequested = true);
-      return;
-    }
+    await _submit(() => AuthScope.of(context).loginWithMpin(_mPin.text));
+  }
+
+  Future<void> _loginWithBiometric() async {
+    await _submit(() => AuthScope.of(context).loginWithBiometric());
+  }
+
+  Future<void> _submit(Future<void> Function() action) async {
     setState(() => _submitting = true);
     try {
-      await AuthScope.of(
-        context,
-      ).login(identifier: _identifier.text, password: 'demo-password');
+      await action();
       _openMain();
     } on AuthValidationException catch (error) {
       _showError(error.message);
