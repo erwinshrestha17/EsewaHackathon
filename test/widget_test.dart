@@ -181,7 +181,7 @@ void main() {
     expect(find.text('Activity'), findsNothing);
   });
 
-  testWidgets('Scan navigation opens OCR directly', (tester) async {
+  testWidgets('Main navigation excludes Scan tab', (tester) async {
     tester.view.physicalSize = const Size(800, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
@@ -203,11 +203,17 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Scan'));
+    expect(find.text('Scan'), findsNothing);
+
+    await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Scan or add'), findsNothing);
-    expect(find.text('Align the bill inside the frame'), findsOneWidget);
+    expect(
+      find.text(
+        'Manage your profile, social finance, payments, and Sajha Kharcha preferences.',
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 

@@ -246,11 +246,6 @@ class _SangaiShellState extends State<SangaiShell> {
       Icons.card_giftcard_outlined,
       Icons.card_giftcard,
     ),
-    _Destination(
-      'Scan',
-      Icons.document_scanner_outlined,
-      Icons.document_scanner,
-    ),
     _Destination('Profile', Icons.person_outline, Icons.person),
   ];
 
@@ -306,7 +301,7 @@ class _SangaiShellState extends State<SangaiShell> {
             _settingsController.state.activityTimelineLimit.count,
       ),
       2 => const GiftsScreen(),
-      4 => SettingsScreen(
+      3 => SettingsScreen(
         controller: _settingsController,
         authController: AuthScope.of(context),
       ),
@@ -331,7 +326,7 @@ class _SangaiShellState extends State<SangaiShell> {
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 900;
         return Scaffold(
-          appBar: _index == 0 || _index == 3
+          appBar: _index == 0
               ? null
               : AppBar(
                   title: Row(
@@ -428,10 +423,6 @@ class _SangaiShellState extends State<SangaiShell> {
   }
 
   void _go(int index) {
-    if (index == 3) {
-      _openScanBillFromHome();
-      return;
-    }
     setState(() => _index = index);
   }
 
@@ -1706,29 +1697,61 @@ class _GiftsScreenState extends State<GiftsScreen> {
               : Column(
                   children: [
                     for (final gift in visibleGifts)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: GiftEnvelopeCard(
-                          gift: gift,
-                          isRecipient: gift.recipientId == store.currentUserId,
-                          senderName: store.nameOf(gift.senderId),
-                          recipientName: store.nameOf(gift.recipientId),
-                          onOpen: () {
-                            if (store.openGift(gift.id)) {
-                              showGiftOpenedCelebration(
-                                context,
-                                gift,
-                                fromName: store.nameOf(gift.senderId),
-                                toName: store.nameOf(gift.recipientId),
-                              );
-                            }
-                          },
-                        ),
-                      ),
+                      _giftLedgerTile(context, store, gift),
                   ],
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _giftLedgerTile(BuildContext context, AppStore store, GiftCard gift) {
+    final isRecipient = gift.recipientId == store.currentUserId;
+    final senderName = store.nameOf(gift.senderId);
+    final recipientName = store.nameOf(gift.recipientId);
+    final canOpen = isRecipient && gift.status == GiftStatus.sent;
+    final theme = giftThemeFor(gift.template);
+    final message = gift.message.trim();
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      onTap: canOpen
+          ? () {
+              if (store.openGift(gift.id)) {
+                showGiftOpenedCelebration(
+                  context,
+                  gift,
+                  fromName: senderName,
+                  toName: recipientName,
+                );
+              }
+            }
+          : null,
+      leading: CircleAvatar(
+        backgroundColor: theme.from.withValues(alpha: 0.12),
+        foregroundColor: theme.from,
+        child: Icon(theme.icon),
+      ),
+      title: Text(isRecipient ? 'From $senderName' : 'To $recipientName'),
+      subtitle: Text(
+        [
+          money(gift.amountMinor),
+          dateTimeLabel(gift.createdAt),
+          if (message.isNotEmpty) message,
+        ].join(' • '),
+      ),
+      isThreeLine: message.isNotEmpty,
+      trailing: Wrap(
+        spacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          StatusPill(
+            label: enumLabel(gift.status),
+            tone: toneForGiftStatus(gift.status),
+          ),
+          if (canOpen) const Icon(Icons.chevron_right),
+        ],
+      ),
     );
   }
 
