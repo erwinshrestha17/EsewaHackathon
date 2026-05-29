@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-import '../settings_models.dart';
+import '../../auth/models/user_profile.dart';
 
 class SettingsProfileCard extends StatelessWidget {
   const SettingsProfileCard({
-    required this.state,
+    required this.profile,
     required this.onEdit,
     super.key,
   });
 
-  final SettingsState state;
+  final UserProfile profile;
   final VoidCallback onEdit;
 
   @override
@@ -44,7 +44,7 @@ class SettingsProfileCard extends StatelessWidget {
                 backgroundColor: colorScheme.primary,
                 foregroundColor: colorScheme.onPrimary,
                 child: Text(
-                  state.avatarInitials,
+                  profile.initials,
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 18,
@@ -57,7 +57,7 @@ class SettingsProfileCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      state.displayName,
+                      profile.displayName,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
@@ -67,14 +67,14 @@ class SettingsProfileCard extends StatelessWidget {
                       spacing: 10,
                       runSpacing: 4,
                       children: [
-                        _ProfileDetail(icon: Icons.phone, label: state.phone),
+                        _ProfileDetail(icon: Icons.phone, label: profile.phone),
                         _ProfileDetail(
                           icon: Icons.account_balance_wallet_outlined,
-                          label: state.esewaId,
+                          label: profile.esewaId,
                         ),
                         _ProfileDetail(
                           icon: Icons.location_on_outlined,
-                          label: state.district,
+                          label: profile.district,
                         ),
                       ],
                     ),

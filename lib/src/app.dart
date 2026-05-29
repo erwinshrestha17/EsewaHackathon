@@ -8,6 +8,10 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../features/auth/auth_controller.dart';
+import '../features/auth/screens/auth_screen.dart';
+import '../features/auth/screens/onboarding_screen.dart';
+import '../features/auth/screens/splash_screen.dart';
 import '../features/dhukuti/dhukuti_list_screen.dart';
 import '../features/settings/settings_controller.dart';
 import '../features/settings/settings_models.dart';
@@ -77,7 +81,13 @@ class SangaiApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const SangaiShell(),
+      initialRoute: '/splash',
+      routes: {
+        '/splash': (_) => const SplashScreen(),
+        '/intro': (_) => const OnboardingScreen(),
+        '/auth': (_) => const AuthScreen(),
+        '/main': (_) => const SangaiShell(),
+      },
     );
   }
 }
@@ -92,6 +102,8 @@ class SangaiShell extends StatefulWidget {
 class _SangaiShellState extends State<SangaiShell> {
   var _index = 0;
   final _settingsController = SettingsController();
+  AuthController? _authController;
+  AppStore? _store;
 
   static const _destinations = <_Destination>[
     _Destination('Home', Icons.dashboard_outlined, Icons.dashboard),
@@ -107,6 +119,7 @@ class _SangaiShellState extends State<SangaiShell> {
       Icons.account_balance_wallet_outlined,
       Icons.account_balance_wallet,
     ),
+    _Destination('Activity', Icons.timeline_outlined, Icons.timeline),
   ];
 
   @override
@@ -117,10 +130,24 @@ class _SangaiShellState extends State<SangaiShell> {
 
   @override
   void dispose() {
+    _authController?.removeListener(_handleAuthChanged);
     _settingsController
       ..removeListener(_handleSettingsChanged)
       ..dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextAuth = AuthScope.of(context);
+    final nextStore = StoreScope.of(context);
+    if (_authController != nextAuth) {
+      _authController?.removeListener(_handleAuthChanged);
+      _authController = nextAuth..addListener(_handleAuthChanged);
+    }
+    _store = nextStore;
+    _syncActiveProfile();
   }
 
   @override
@@ -135,6 +162,7 @@ class _SangaiShellState extends State<SangaiShell> {
       2 => const ConnectionsScreen(),
       3 => const GiftsScreen(),
       4 => DigitalDhukutiScreen(store: store),
+      5 => const ActivityScreen(),
       _ => HomeScreen(onNavigate: _go),
     };
 
@@ -194,7 +222,7 @@ class _SangaiShellState extends State<SangaiShell> {
                 ),
               ),
               const SizedBox(width: 4),
-              _UserSwitcher(store: store),
+              _CurrentUserBadge(store: store),
               const SizedBox(width: 12),
             ],
           ),
@@ -246,10 +274,32 @@ class _SangaiShellState extends State<SangaiShell> {
     }
   }
 
+  void _handleAuthChanged() {
+    _syncActiveProfile();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _syncActiveProfile() {
+    final activeUser = _authController?.state.activeUser;
+    final store = _store;
+    if (activeUser != null && store != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          store.applyActiveUserProfile(activeUser);
+        }
+      });
+    }
+  }
+
   void _openSettings() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => SettingsScreen(controller: _settingsController),
+        builder: (_) => SettingsScreen(
+          controller: _settingsController,
+          authController: AuthScope.of(context),
+        ),
       ),
     );
   }
@@ -419,6 +469,36 @@ class HomeScreen extends StatelessWidget {
         SectionPanel(
           title: 'Recent Activity',
           child: ActivityList(items: store.visibleActivity.take(6).toList()),
+        ),
+      ],
+    );
+  }
+}
+
+class ActivityScreen extends StatelessWidget {
+  const ActivityScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    return AppScrollView(
+      children: [
+        const ScreenHeader(
+          title: 'Activity',
+          subtitle:
+              'A single timeline for your groups, gifts, settlements, and Digital Dhukuti actions.',
+          icon: Icons.timeline,
+        ),
+        SectionPanel(
+          title: 'Recent Activity',
+          child: store.visibleActivity.isEmpty
+              ? const EmptyState(
+                  icon: Icons.timeline_outlined,
+                  title: 'No activity yet',
+                  body:
+                      'Your shared finance actions will appear here after you create or settle something.',
+                )
+              : ActivityList(items: store.visibleActivity.take(20).toList()),
         ),
       ],
     );
@@ -3197,36 +3277,39 @@ int? activityAmount(AppStore store, ActivityLog item) {
   return null;
 }
 
-class _UserSwitcher extends StatelessWidget {
-  const _UserSwitcher({required this.store});
+class _CurrentUserBadge extends StatelessWidget {
+  const _CurrentUserBadge({required this.store});
 
   final AppStore store;
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonHideUnderline(
-      child: DropdownButton<String>(
-        value: store.currentUserId,
-        borderRadius: BorderRadius.circular(8),
-        items: [
-          for (final user in store.users)
-            DropdownMenuItem(
-              value: user.id,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  UserAvatar(user: user, small: true),
-                  const SizedBox(width: 8),
-                  Text(user.displayName.split(' ').first),
-                ],
+    final user = store.currentUser;
+    return Tooltip(
+      message: user.displayName,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            UserAvatar(user: user, small: true),
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 78),
+              child: Text(
+                user.displayName.split(' ').first,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
             ),
-        ],
-        onChanged: (value) {
-          if (value != null) {
-            store.switchUser(value);
-          }
-        },
+          ],
+        ),
       ),
     );
   }

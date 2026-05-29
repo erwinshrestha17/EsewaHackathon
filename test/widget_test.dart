@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sangai/features/auth/auth_controller.dart';
+import 'package:sangai/features/auth/models/user_profile.dart';
 import 'package:sangai/src/app.dart';
 import 'package:sangai/src/app_state.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   Future<void> pumpGroupsForAddExpense(
@@ -35,12 +38,23 @@ void main() {
   }
 
   testWidgets('Sangai shell renders seeded dashboard', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'auth.hasSeenIntro': true,
+      'auth.isLoggedIn': true,
+      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
+    });
+
     await tester.pumpWidget(
-      StoreScope(notifier: AppStore(), child: const SangaiApp()),
+      AuthScope(
+        notifier: AuthController(),
+        child: StoreScope(notifier: AppStore(), child: const SangaiApp()),
+      ),
     );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
 
     expect(find.text('Sangai'), findsOneWidget);
-    expect(find.textContaining('Namaste'), findsOneWidget);
+    expect(find.text('Namaste, Erwin'), findsOneWidget);
     expect(find.text('Fast Demo Flow'), findsOneWidget);
   });
 

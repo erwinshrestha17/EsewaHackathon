@@ -10,17 +10,6 @@ class SettingsController extends ChangeNotifier {
 
   SettingsState get state => _state;
 
-  void updateProfile(ProfileDraft draft) {
-    _state = _state.copyWith(
-      displayName: draft.displayName,
-      phone: draft.phone,
-      esewaId: draft.esewaId,
-      district: draft.district,
-      avatarInitials: draft.avatarInitials,
-    );
-    notifyListeners();
-  }
-
   void setConnectionRequestPreference(ConnectionRequestPreference value) {
     _state = _state.copyWith(connectionRequestPreference: value);
     notifyListeners();
