@@ -20,6 +20,75 @@ import 'widgets/dhukuti_tokens.dart';
 
 enum _DhukutiTab { overview, members, schedule, ledger }
 
+Future<void> showRenameDhukutiPoolDialog({
+  required BuildContext context,
+  required AppStore store,
+  required DhukutiPool pool,
+  required VoidCallback onRenamed,
+}) async {
+  if (!store.canManageDhukutiPool(pool.id, store.currentUserId)) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Only the Dhukuti admin can rename this group.'),
+      ),
+    );
+    return;
+  }
+  final name = TextEditingController(text: pool.name);
+  String? errorText;
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Rename Dhukuti group'),
+            content: SizedBox(
+              width: 420,
+              child: TextField(
+                controller: name,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  labelText: 'Dhukuti group name',
+                  errorText: errorText,
+                ),
+                onChanged: (_) {
+                  if (errorText != null) {
+                    setState(() => errorText = null);
+                  }
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final error = store.renameDhukutiPool(pool.id, name.text);
+                  if (error != null) {
+                    setState(() => errorText = error);
+                    return;
+                  }
+                  Navigator.pop(dialogContext);
+                  onRenamed();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${pool.name} saved.')),
+                  );
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+  name.dispose();
+}
+
 class DhukutiDetailScreen extends StatefulWidget {
   const DhukutiDetailScreen({
     required this.store,
@@ -53,6 +122,7 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
         .where((item) => item.cycleId == currentCycle?.id)
         .toList();
     final statusLabel = poolDisplayStatus(pool, currentCycle);
+    final canManage = store.canManageDhukutiPool(pool.id, store.currentUserId);
 
     return DhukutiScrollView(
       children: [
@@ -69,9 +139,27 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
           title: pool.name,
           subtitle:
               '${widget.store.groupById(pool.groupId).name} • ${money(pool.contributionAmountMinor)} ${pool.frequency}',
-          action: DhukutiStatusBadge(
-            label: statusLabel,
-            tone: toneForPoolStatus(statusLabel),
+          action: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.end,
+            children: [
+              DhukutiStatusBadge(
+                label: statusLabel,
+                tone: toneForPoolStatus(statusLabel),
+              ),
+              if (canManage)
+                OutlinedButton.icon(
+                  onPressed: () => showRenameDhukutiPoolDialog(
+                    context: context,
+                    store: store,
+                    pool: pool,
+                    onRenamed: () => setState(() {}),
+                  ),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Rename'),
+                ),
+            ],
           ),
         ),
         _TopFacts(store: store, pool: pool, members: members, cycles: cycles),

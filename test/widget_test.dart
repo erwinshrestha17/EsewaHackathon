@@ -118,9 +118,11 @@ void main() {
     expect(find.text('Sajha Kharcha'), findsOneWidget);
     expect(find.text('Namaste, Erwin'), findsOneWidget);
     expect(find.text('Fast Demo Flow'), findsOneWidget);
+    expect(find.text('Create Group'), findsOneWidget);
+    expect(find.text('Activity'), findsNothing);
   });
 
-  testWidgets('Scan/Add sheet opens without vertical overflow', (tester) async {
+  testWidgets('Scan navigation opens OCR directly', (tester) async {
     tester.view.physicalSize = const Size(800, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
@@ -142,11 +144,11 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Scan/Add'));
+    await tester.tap(find.text('Scan'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Scan or add'), findsOneWidget);
-    expect(find.text('Scan Receipt'), findsWidgets);
+    expect(find.text('Scan or add'), findsNothing);
+    expect(find.text('Align the bill inside the frame'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -309,6 +311,32 @@ void main() {
       ),
     );
 
+    expect(find.widgetWithText(OutlinedButton, 'Rename'), findsOneWidget);
+  });
+
+  testWidgets('admin sees rename action in dhukuti group detail', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final store = AppStore();
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: const MaterialApp(home: GroupsScreen()),
+      ),
+    );
+
+    final dhukutiTab = find.text('Dhukuti Groups');
+    await tester.tapAt(tester.getCenter(dhukutiTab));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Family Dashain Dhukuti'), findsWidgets);
     expect(find.widgetWithText(OutlinedButton, 'Rename'), findsOneWidget);
   });
 

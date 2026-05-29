@@ -137,6 +137,12 @@ HomeDashboardData mockHomeDashboardData() {
         icon: Icons.receipt_long_outlined,
       ),
       HomeQuickAction(
+        id: 'create_group',
+        label: 'Create Group',
+        helper: 'Expense or Dhukuti',
+        icon: Icons.groups_outlined,
+      ),
+      HomeQuickAction(
         id: 'settle',
         label: 'Settle',
         helper: 'Pay open dues',

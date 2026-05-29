@@ -241,8 +241,11 @@ class _SangaiShellState extends State<SangaiShell> {
   static const _destinations = <_Destination>[
     _Destination('Home', Icons.home_outlined, Icons.home),
     _Destination('Groups', Icons.groups_outlined, Icons.groups),
-    _Destination('Scan/Add', Icons.add_circle_outline, Icons.add_circle),
-    _Destination('Activity', Icons.timeline_outlined, Icons.timeline),
+    _Destination(
+      'Scan',
+      Icons.document_scanner_outlined,
+      Icons.document_scanner,
+    ),
     _Destination('Profile', Icons.person_outline, Icons.person),
   ];
 
@@ -287,14 +290,17 @@ class _SangaiShellState extends State<SangaiShell> {
         onCreateGroup: () => showCreateGroupDialog(context),
         onSettle: () => _openFirstSettlementConfirmation(context, store, _go),
         onScanBill: _openScanBillFromHome,
+        onSendGift: () => _openStandaloneScreen(const GiftsScreen()),
+        onOpenDhukuti: _openDhukutiScreen,
+        onOpenFriends: () => _openStandaloneScreen(const ConnectionsScreen()),
+        onViewActivity: () => _openStandaloneScreen(const ActivityScreen()),
         onExploreTemplates: _showFestivalTemplates,
       ),
       1 => GroupsScreen(
         activityTimelineLimit:
             _settingsController.state.activityTimelineLimit.count,
       ),
-      3 => const ActivityScreen(),
-      4 => SettingsScreen(
+      3 => SettingsScreen(
         controller: _settingsController,
         authController: AuthScope.of(context),
       ),
@@ -307,6 +313,10 @@ class _SangaiShellState extends State<SangaiShell> {
         onCreateGroup: () => showCreateGroupDialog(context),
         onSettle: () => _openFirstSettlementConfirmation(context, store, _go),
         onScanBill: _openScanBillFromHome,
+        onSendGift: () => _openStandaloneScreen(const GiftsScreen()),
+        onOpenDhukuti: _openDhukutiScreen,
+        onOpenFriends: () => _openStandaloneScreen(const ConnectionsScreen()),
+        onViewActivity: () => _openStandaloneScreen(const ActivityScreen()),
         onExploreTemplates: _showFestivalTemplates,
       ),
     };
@@ -315,7 +325,7 @@ class _SangaiShellState extends State<SangaiShell> {
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 900;
         return Scaffold(
-          appBar: _index == 0 || _index == 4
+          appBar: _index == 0 || _index == 3
               ? null
               : AppBar(
                   title: Row(
@@ -413,7 +423,7 @@ class _SangaiShellState extends State<SangaiShell> {
 
   void _go(int index) {
     if (index == 2) {
-      _openScanAddMenu();
+      _openScanBillFromHome();
       return;
     }
     setState(() => _index = index);
@@ -523,102 +533,6 @@ class _SangaiShellState extends State<SangaiShell> {
     showAddExpenseOcrFlow(context, group.id);
   }
 
-  void _openScanAddMenu() {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: constraints.maxHeight * 0.88,
-                ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Scan or add',
-                        style: Theme.of(sheetContext).textTheme.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Start the main Sajha Kharcha flows from one place.',
-                      ),
-                      const SizedBox(height: 12),
-                      _ActionSheetTile(
-                        icon: Icons.document_scanner_outlined,
-                        title: 'Scan Receipt',
-                        subtitle: 'Capture OCR items, VAT, and service charge',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _openScanBillFromHome();
-                        },
-                      ),
-                      _ActionSheetTile(
-                        icon: Icons.receipt_long_outlined,
-                        title: 'Add Expense',
-                        subtitle:
-                            'Enter amount, payers, participants, and split',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _openAddExpenseFromHome();
-                        },
-                      ),
-                      _ActionSheetTile(
-                        icon: Icons.groups_outlined,
-                        title: 'Create Group',
-                        subtitle: 'Expense group or Dhukuti setup',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          showCreateGroupDialog(context);
-                        },
-                      ),
-                      _ActionSheetTile(
-                        icon: Icons.card_giftcard_outlined,
-                        title: 'Send Gift',
-                        subtitle: 'Choose a connected friend and gift card',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _openStandaloneScreen(const GiftsScreen());
-                        },
-                      ),
-                      _ActionSheetTile(
-                        icon: Icons.account_balance_wallet_outlined,
-                        title: 'Dhukuti',
-                        subtitle:
-                            'View dues or create a rotating savings group',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _openDhukutiScreen();
-                        },
-                      ),
-                      _ActionSheetTile(
-                        icon: Icons.person_add_alt_1_outlined,
-                        title: 'Friends',
-                        subtitle: 'Search, accept requests, or show your QR',
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _openStandaloneScreen(const ConnectionsScreen());
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
   void _openStandaloneScreen(Widget screen) {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
@@ -676,31 +590,6 @@ class _SangaiShellState extends State<SangaiShell> {
           ),
         );
       },
-    );
-  }
-}
-
-class _ActionSheetTile extends StatelessWidget {
-  const _ActionSheetTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(child: Icon(icon)),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-      subtitle: Text(subtitle),
-      onTap: onTap,
     );
   }
 }

@@ -270,6 +270,32 @@ void main() {
     expect(store.groupById(groupId).name, 'Admin only name');
   });
 
+  test('dhukuti admins can rename dhukuti groups', () {
+    final store = AppStore();
+
+    expect(
+      store.renameDhukutiPool('d-family-dashain', 'Family Savings Dhukuti'),
+      isNull,
+    );
+
+    expect(store.poolById('d-family-dashain').name, 'Family Savings Dhukuti');
+    expect(
+      store.activityForGroup('g-shrestha-family').map((item) => item.eventType),
+      contains('dhukuti_renamed'),
+    );
+  });
+
+  test('non-admin members cannot rename dhukuti groups', () {
+    final store = AppStore()..switchUser('u-arjun');
+
+    expect(
+      store.renameDhukutiPool('d-family-dashain', 'Member Dhukuti Name'),
+      'Only the Dhukuti admin can rename this group.',
+    );
+
+    expect(store.poolById('d-family-dashain').name, 'Family Dashain Dhukuti');
+  });
+
   test('seeded store keeps group balances zero-sum after settlement', () {
     final store = AppStore();
     final balances = store.balancesForGroup('g-dashain');

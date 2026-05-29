@@ -30,6 +30,10 @@ class HomeScreen extends StatefulWidget {
     required this.onCreateGroup,
     required this.onSettle,
     required this.onScanBill,
+    required this.onSendGift,
+    required this.onOpenDhukuti,
+    required this.onOpenFriends,
+    required this.onViewActivity,
     required this.onExploreTemplates,
     super.key,
   });
@@ -42,6 +46,10 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onCreateGroup;
   final VoidCallback onSettle;
   final VoidCallback onScanBill;
+  final VoidCallback onSendGift;
+  final VoidCallback onOpenDhukuti;
+  final VoidCallback onOpenFriends;
+  final VoidCallback onViewActivity;
   final VoidCallback onExploreTemplates;
 
   @override
@@ -101,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 18),
                       HomeEmptyState(
                         onCreateGroup: widget.onCreateGroup,
-                        onConnectFriend: () => widget.onNavigate(2),
+                        onConnectFriend: widget.onOpenFriends,
                       ),
                     ],
                     if (data.pendingSettlements.isNotEmpty) ...[
@@ -118,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         onPay: () => unawaited(
                           _payDhukutiDue(data.upcomingDhukutiDues.first),
                         ),
-                        onViewLedger: () => widget.onNavigate(2),
+                        onViewLedger: widget.onOpenDhukuti,
                       ),
                     ],
                     const SizedBox(height: 18),
@@ -130,8 +138,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 18),
                     RecentActivityList(
                       items: data.recentActivities,
-                      onViewAll: () => widget.onNavigate(3),
-                      onItemTap: (_) => widget.onNavigate(3),
+                      onViewAll: widget.onViewActivity,
+                      onItemTap: (_) => widget.onViewActivity(),
                     ),
                     const SizedBox(height: 18),
                     FestivalModeCard(onExplore: widget.onExploreTemplates),
@@ -163,13 +171,15 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'settle':
         widget.onSettle();
       case 'send_gift':
-        widget.onNavigate(2);
+        widget.onSendGift();
       case 'dhukuti':
-        widget.onNavigate(2);
+        widget.onOpenDhukuti();
       case 'scan_bill':
         widget.onScanBill();
+      case 'create_group':
+        widget.onCreateGroup();
       case 'connect_friend':
-        widget.onNavigate(4);
+        widget.onOpenFriends();
       default:
         widget.onNavigate(0);
     }

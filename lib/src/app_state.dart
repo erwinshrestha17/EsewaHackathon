@@ -96,6 +96,18 @@ class AppStore extends ChangeNotifier {
   DhukutiPool poolById(String id) =>
       dhukutiPools.firstWhere((pool) => pool.id == id);
 
+  DhukutiPool? poolByIdOrNull(String? id) {
+    if (id == null) {
+      return null;
+    }
+    for (final pool in dhukutiPools) {
+      if (pool.id == id) {
+        return pool;
+      }
+    }
+    return null;
+  }
+
   String nameOf(String userId) => userById(userId).displayName;
 
   String _id(String prefix) => '$prefix-${_sequence++}';
@@ -1609,6 +1621,44 @@ class AppStore extends ChangeNotifier {
   List<DhukutiMember> membersForPool(String poolId) {
     return dhukutiMembers.where((member) => member.poolId == poolId).toList()
       ..sort((a, b) => a.payoutOrder.compareTo(b.payoutOrder));
+  }
+
+  bool canManageDhukutiPool(String poolId, String userId) {
+    final pool = poolByIdOrNull(poolId);
+    if (pool == null) {
+      return false;
+    }
+    return pool.createdBy == userId || isGroupAdmin(pool.groupId, userId);
+  }
+
+  String? renameDhukutiPool(String poolId, String name) {
+    final pool = poolByIdOrNull(poolId);
+    if (pool == null) {
+      return 'Dhukuti group is no longer available.';
+    }
+    if (!canManageDhukutiPool(poolId, currentUserId)) {
+      return 'Only the Dhukuti admin can rename this group.';
+    }
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return 'Dhukuti group name cannot be empty.';
+    }
+    if (trimmed == pool.name) {
+      return null;
+    }
+    final previousName = pool.name;
+    pool.name = trimmed;
+    _activity(
+      actorId: currentUserId,
+      groupId: pool.groupId,
+      eventType: 'dhukuti_renamed',
+      entityType: 'dhukuti_pool',
+      entityId: pool.id,
+      title: 'Dhukuti group renamed',
+      body: '${nameOf(currentUserId)} renamed $previousName to ${pool.name}.',
+    );
+    notifyListeners();
+    return null;
   }
 
   void acceptDhukuti(String poolId) {
