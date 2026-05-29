@@ -166,18 +166,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _handleQuickAction(String id) {
     switch (id) {
-      case 'add_expense':
-        widget.onAddExpense();
       case 'settle':
         widget.onSettle();
       case 'send_gift':
         widget.onSendGift();
       case 'dhukuti':
         widget.onOpenDhukuti();
-      case 'scan_bill':
-        widget.onScanBill();
-      case 'create_group':
-        widget.onCreateGroup();
       case 'connect_friend':
         widget.onOpenFriends();
       default:

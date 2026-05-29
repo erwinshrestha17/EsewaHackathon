@@ -242,6 +242,11 @@ class _SangaiShellState extends State<SangaiShell> {
     _Destination('Home', Icons.home_outlined, Icons.home),
     _Destination('Groups', Icons.groups_outlined, Icons.groups),
     _Destination(
+      'Send Gift',
+      Icons.card_giftcard_outlined,
+      Icons.card_giftcard,
+    ),
+    _Destination(
       'Scan',
       Icons.document_scanner_outlined,
       Icons.document_scanner,
@@ -290,7 +295,7 @@ class _SangaiShellState extends State<SangaiShell> {
         onCreateGroup: () => showCreateGroupDialog(context),
         onSettle: () => _openFirstSettlementConfirmation(context, store, _go),
         onScanBill: _openScanBillFromHome,
-        onSendGift: () => _openStandaloneScreen(const GiftsScreen()),
+        onSendGift: () => _go(2),
         onOpenDhukuti: _openDhukutiScreen,
         onOpenFriends: () => _openStandaloneScreen(const ConnectionsScreen()),
         onViewActivity: () => _openStandaloneScreen(const ActivityScreen()),
@@ -300,7 +305,8 @@ class _SangaiShellState extends State<SangaiShell> {
         activityTimelineLimit:
             _settingsController.state.activityTimelineLimit.count,
       ),
-      3 => SettingsScreen(
+      2 => const GiftsScreen(),
+      4 => SettingsScreen(
         controller: _settingsController,
         authController: AuthScope.of(context),
       ),
@@ -313,7 +319,7 @@ class _SangaiShellState extends State<SangaiShell> {
         onCreateGroup: () => showCreateGroupDialog(context),
         onSettle: () => _openFirstSettlementConfirmation(context, store, _go),
         onScanBill: _openScanBillFromHome,
-        onSendGift: () => _openStandaloneScreen(const GiftsScreen()),
+        onSendGift: () => _go(2),
         onOpenDhukuti: _openDhukutiScreen,
         onOpenFriends: () => _openStandaloneScreen(const ConnectionsScreen()),
         onViewActivity: () => _openStandaloneScreen(const ActivityScreen()),
@@ -422,7 +428,7 @@ class _SangaiShellState extends State<SangaiShell> {
   }
 
   void _go(int index) {
-    if (index == 2) {
+    if (index == 3) {
       _openScanBillFromHome();
       return;
     }
@@ -4645,6 +4651,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
       _items.addAll(widget.scannedItems.map(_cloneDraft));
       _splitMode = SplitMode.item;
       _skipItemSplit = false;
+      _ensureFixedBillAdjustments();
       _syncTotalFromItems();
     }
     _refreshEqualPreview();
@@ -4729,7 +4736,56 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
   }
 
   List<_ExpenseItemDraft> _billAdjustmentDrafts() {
-    return _items.where((item) => item.kind != _BillLineKind.item).toList();
+    final serviceCharge = _items.where(
+      (item) => item.kind == _BillLineKind.serviceCharge,
+    );
+    final tax = _items.where((item) => item.kind == _BillLineKind.tax);
+    return <_ExpenseItemDraft>[
+      if (serviceCharge.isNotEmpty) serviceCharge.first,
+      if (tax.isNotEmpty) tax.first,
+    ];
+  }
+
+  void _ensureFixedBillAdjustments() {
+    _ensureSingleBillAdjustment(_BillLineKind.serviceCharge, 'Service charge');
+    _ensureSingleBillAdjustment(_BillLineKind.tax, 'VAT');
+
+    final unsupportedAdjustments = _items
+        .where(
+          (item) =>
+              item.kind != _BillLineKind.item &&
+              item.kind != _BillLineKind.serviceCharge &&
+              item.kind != _BillLineKind.tax,
+        )
+        .toList();
+    for (final item in unsupportedAdjustments) {
+      _items.remove(item);
+      item.dispose();
+    }
+  }
+
+  void _ensureSingleBillAdjustment(_BillLineKind kind, String label) {
+    final matches = _items.where((item) => item.kind == kind).toList();
+    if (matches.isEmpty) {
+      _items.add(_ExpenseItemDraft(name: label, amountMinor: 0, kind: kind));
+      return;
+    }
+
+    final keeper = matches.first;
+    final totalMinor = matches.fold<int>(
+      0,
+      (sum, item) => sum + item.amountMinor,
+    );
+    keeper.kind = kind;
+    keeper.name.text = label;
+    keeper.amount.text = (totalMinor / 100).toStringAsFixed(2);
+    keeper.quantity.text = '1';
+    keeper.unitPrice.text = keeper.amount.text;
+
+    for (final duplicate in matches.skip(1)) {
+      _items.remove(duplicate);
+      duplicate.dispose();
+    }
   }
 
   Map<int, List<String>> _itemAssignments(List<String> selectedParticipants) {
@@ -4801,6 +4857,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
       _splitMode = value;
       if (value == SplitMode.item) {
         _skipItemSplit = false;
+        _ensureFixedBillAdjustments();
         _syncTotalFromItems();
       }
       _refreshEqualPreview();
@@ -4812,18 +4869,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
       _items.add(_ExpenseItemDraft(name: 'New item', amountMinor: 0));
       _skipItemSplit = false;
       _splitMode = SplitMode.item;
-      _syncTotalFromItems();
-      _refreshEqualPreview();
-    });
-  }
-
-  void _addBillAdjustment() {
-    setState(() {
-      _items.add(
-        _ExpenseItemDraft(name: 'VAT', amountMinor: 0, kind: _BillLineKind.tax),
-      );
-      _skipItemSplit = false;
-      _splitMode = SplitMode.item;
+      _ensureFixedBillAdjustments();
       _syncTotalFromItems();
       _refreshEqualPreview();
     });
@@ -5312,6 +5358,7 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                                 ? SplitMode.equal
                                 : SplitMode.item;
                             if (!value) {
+                              _ensureFixedBillAdjustments();
                               _syncTotalFromItems();
                             }
                             _refreshEqualPreview();
@@ -5350,17 +5397,8 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                         const SizedBox(height: 12),
                         _BillAdjustmentsSection(
                           adjustments: _billAdjustmentDrafts(),
-                          onAdd: _addBillAdjustment,
                           onChanged: () {
                             setState(() {
-                              _syncTotalFromItems();
-                              _refreshEqualPreview();
-                            });
-                          },
-                          onRemove: (item) {
-                            setState(() {
-                              _items.remove(item);
-                              item.dispose();
                               _syncTotalFromItems();
                               _refreshEqualPreview();
                             });
@@ -5924,15 +5962,11 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
 class _BillAdjustmentsSection extends StatelessWidget {
   const _BillAdjustmentsSection({
     required this.adjustments,
-    required this.onAdd,
     required this.onChanged,
-    required this.onRemove,
   });
 
   final List<_ExpenseItemDraft> adjustments;
-  final VoidCallback onAdd;
   final VoidCallback onChanged;
-  final ValueChanged<_ExpenseItemDraft> onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -5949,7 +5983,7 @@ class _BillAdjustmentsSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'VAT and adjustments',
+            'Service charge and VAT',
             style: Theme.of(
               context,
             ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900),
@@ -5962,18 +5996,9 @@ class _BillAdjustmentsSection extends StatelessWidget {
                 child: _BillAdjustmentDraftRow(
                   item: item,
                   onChanged: onChanged,
-                  onRemove: () => onRemove(item),
                 ),
               ),
           ],
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add),
-              label: const Text('Add VAT/adjustment'),
-            ),
-          ),
         ],
       ),
     );
@@ -5981,18 +6006,16 @@ class _BillAdjustmentsSection extends StatelessWidget {
 }
 
 class _BillAdjustmentDraftRow extends StatelessWidget {
-  const _BillAdjustmentDraftRow({
-    required this.item,
-    required this.onChanged,
-    required this.onRemove,
-  });
+  const _BillAdjustmentDraftRow({required this.item, required this.onChanged});
 
   final _ExpenseItemDraft item;
   final VoidCallback onChanged;
-  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
+    final label = item.kind == _BillLineKind.serviceCharge
+        ? 'Service charge'
+        : 'VAT';
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -6000,18 +6023,19 @@ class _BillAdjustmentDraftRow extends StatelessWidget {
       children: [
         SizedBox(
           width: 180,
-          child: TextField(
-            controller: item.name,
-            decoration: const InputDecoration(labelText: 'Label'),
-            onChanged: (_) => onChanged(),
+          child: Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w800),
           ),
         ),
         SizedBox(
-          width: 132,
+          width: 180,
           child: TextField(
             controller: item.amount,
-            decoration: const InputDecoration(
-              labelText: 'Amount',
+            decoration: InputDecoration(
+              labelText: '$label amount',
               prefixText: 'NPR ',
             ),
             keyboardType: TextInputType.number,
@@ -6021,31 +6045,6 @@ class _BillAdjustmentDraftRow extends StatelessWidget {
               onChanged();
             },
           ),
-        ),
-        SizedBox(
-          width: 190,
-          child: DropdownButtonFormField<_BillLineKind>(
-            isExpanded: true,
-            initialValue: item.kind,
-            decoration: const InputDecoration(labelText: 'Line type'),
-            items: [
-              for (final kind in _BillLineKind.values)
-                if (kind != _BillLineKind.item)
-                  DropdownMenuItem(
-                    value: kind,
-                    child: Text(_billLineKindLabel(kind)),
-                  ),
-            ],
-            onChanged: (value) {
-              item.kind = value ?? item.kind;
-              onChanged();
-            },
-          ),
-        ),
-        IconButton(
-          onPressed: onRemove,
-          icon: const Icon(Icons.delete_outline),
-          tooltip: 'Delete adjustment',
         ),
       ],
     );
@@ -6164,16 +6163,6 @@ class _BillTotalLine extends StatelessWidget {
       ),
     );
   }
-}
-
-String _billLineKindLabel(_BillLineKind kind) {
-  return switch (kind) {
-    _BillLineKind.item => 'Item',
-    _BillLineKind.serviceCharge => 'Service charge',
-    _BillLineKind.tax => 'VAT/Tax',
-    _BillLineKind.discount => 'Discount',
-    _BillLineKind.rounding => 'Rounding',
-  };
 }
 
 Map<String, int> _manualSplitPreviewFor({
@@ -6300,13 +6289,16 @@ String? _itemValidationMessage({
   required _BillTotals totals,
   required List<_ExpenseItemDraft> items,
 }) {
-  if (items.isEmpty) {
+  final billItems = items
+      .where((item) => item.kind == _BillLineKind.item)
+      .toList();
+  if (billItems.isEmpty) {
     return 'Add at least one bill item or skip item split.';
   }
-  if (items.any((item) => item.name.text.trim().isEmpty)) {
+  if (billItems.any((item) => item.name.text.trim().isEmpty)) {
     return 'Every item needs a name.';
   }
-  if (items.any((item) => item.amountMinor == 0)) {
+  if (billItems.any((item) => item.amountMinor == 0)) {
     return 'Every item needs an amount.';
   }
   if (totals.finalTotalMinor != total) {

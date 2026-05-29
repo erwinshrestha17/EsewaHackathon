@@ -9,26 +9,37 @@ import 'package:sangai/src/app_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  test('login accepts saved M-PIN and rejects invalid pins', () async {
-    SharedPreferences.setMockInitialValues({});
-    final controller = AuthController();
+  test(
+    'login accepts phone plus saved M-PIN and rejects invalid values',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final controller = AuthController();
 
-    expect(
-      () => controller.loginWithMpin('12'),
-      throwsA(isA<AuthValidationException>()),
-    );
-    expect(
-      () => controller.loginWithMpin('9999'),
-      throwsA(isA<AuthValidationException>()),
-    );
+      expect(
+        () => controller.loginWithMpin(phone: 'demo', mPin: '1234'),
+        throwsA(isA<AuthValidationException>()),
+      );
+      expect(
+        () => controller.loginWithMpin(phone: '9800000001', mPin: '12'),
+        throwsA(isA<AuthValidationException>()),
+      );
+      expect(
+        () => controller.loginWithMpin(phone: '9800000001', mPin: '9999'),
+        throwsA(isA<AuthValidationException>()),
+      );
 
-    await controller.loginWithMpin(AuthController.demoMpin);
+      await controller.loginWithMpin(
+        phone: '9800000001',
+        mPin: AuthController.demoMpin,
+      );
 
-    expect(controller.state.isLoggedIn, isTrue);
-    expect(controller.state.activeUser?.displayName, 'Erwin Shrestha');
-  });
+      expect(controller.state.isLoggedIn, isTrue);
+      expect(controller.state.activeUser?.displayName, 'Erwin Shrestha');
+      expect(controller.state.activeUser?.phone, '9800000001');
+    },
+  );
 
-  testWidgets('login form uses M-PIN or biometric', (tester) async {
+  testWidgets('login form requires phone number and M-PIN', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
     await tester.pumpWidget(
@@ -38,17 +49,28 @@ void main() {
       ),
     );
 
+    expect(find.text('Nepal mobile number'), findsOneWidget);
     expect(find.text('M-PIN'), findsOneWidget);
     expect(find.text('Login with M-PIN'), findsOneWidget);
     expect(find.text('Login with biometric'), findsOneWidget);
-    expect(find.text('Nepal mobile number'), findsNothing);
 
-    await tester.enterText(find.byType(TextFormField).first, '12345');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Nepal mobile number'),
+      '98000000011',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'M-PIN'),
+      '12345',
+    );
     await tester.pump();
 
-    final pinField = tester.widget<TextFormField>(
-      find.byType(TextFormField).first,
+    final phoneField = tester.widget<TextFormField>(
+      find.widgetWithText(TextFormField, 'Nepal mobile number'),
     );
+    final pinField = tester.widget<TextFormField>(
+      find.widgetWithText(TextFormField, 'M-PIN'),
+    );
+    expect(phoneField.controller?.text, '9800000001');
     expect(pinField.controller?.text, '1234');
   });
 
@@ -152,7 +174,10 @@ void main() {
     expect(find.text('Sajha Kharcha'), findsOneWidget);
     expect(find.text('Namaste, Erwin'), findsOneWidget);
     expect(find.text('Fast Demo Flow'), findsOneWidget);
-    expect(find.text('Create Group'), findsOneWidget);
+    expect(find.text('Scan Receipt'), findsNothing);
+    expect(find.text('Add Expense'), findsNothing);
+    expect(find.text('Create Group'), findsNothing);
+    expect(find.text('Send Gift'), findsWidgets);
     expect(find.text('Activity'), findsNothing);
   });
 
@@ -637,13 +662,15 @@ void main() {
       ),
       findsNothing,
     );
+    expect(find.text('Service charge and VAT'), findsOneWidget);
+    expect(find.text('Service charge'), findsOneWidget);
+    expect(find.text('VAT'), findsOneWidget);
     expect(find.text('Line type'), findsNothing);
-
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Add VAT/adjustment'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('VAT and adjustments'), findsOneWidget);
-    expect(find.text('Line type'), findsOneWidget);
+    expect(
+      find.widgetWithText(OutlinedButton, 'Add VAT/adjustment'),
+      findsNothing,
+    );
+    expect(find.byTooltip('Delete adjustment'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -673,24 +700,12 @@ void main() {
     await tester.enterText(itemAmount.first, '100');
     await tester.pump();
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Add VAT/adjustment'));
-    await tester.pumpAndSettle();
-
-    final lineType = find.byWidgetPredicate(
+    final serviceChargeAmount = find.byWidgetPredicate(
       (widget) =>
-          widget is DropdownButtonFormField<dynamic> &&
-          widget.decoration.labelText == 'Line type',
+          widget is TextField &&
+          widget.decoration?.labelText == 'Service charge amount',
     );
-    await tester.tap(lineType);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Service charge').last);
-    await tester.pumpAndSettle();
-
-    final amountFields = find.byWidgetPredicate(
-      (widget) =>
-          widget is TextField && widget.decoration?.labelText == 'Amount',
-    );
-    await tester.enterText(amountFields.last, '50');
+    await tester.enterText(serviceChargeAmount, '50');
     await tester.pump();
 
     final totalAmountField = find.byWidgetPredicate(

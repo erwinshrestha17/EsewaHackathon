@@ -68,7 +68,14 @@ class AuthController extends ChangeNotifier {
     await _saveLoggedInProfile(profile);
   }
 
-  Future<void> loginWithMpin(String mPin) async {
+  Future<void> loginWithMpin({
+    required String phone,
+    required String mPin,
+  }) async {
+    final mobile = _normalizeNepalMobile(phone);
+    if (mobile == null) {
+      throw const AuthValidationException('Enter a valid Nepal mobile number.');
+    }
     if (!_isValidMpin(mPin)) {
       throw const AuthValidationException('Enter your 4-digit M-PIN.');
     }
@@ -77,16 +84,30 @@ class AuthController extends ChangeNotifier {
     if (mPin.trim() != savedMpin) {
       throw const AuthValidationException('M-PIN does not match.');
     }
-    await _saveLoggedInProfile(_storedOrDemoProfile(preferences));
+    final profile = _storedOrDemoProfile(preferences);
+    final savedMobile = _normalizeNepalMobile(profile.phone);
+    if (savedMobile != null && savedMobile != mobile) {
+      throw const AuthValidationException('Phone number does not match.');
+    }
+    await _saveLoggedInProfile(profile.copyWith(phone: mobile));
   }
 
-  Future<void> loginWithBiometric() async {
+  Future<void> loginWithBiometric({required String phone}) async {
+    final mobile = _normalizeNepalMobile(phone);
+    if (mobile == null) {
+      throw const AuthValidationException('Enter a valid Nepal mobile number.');
+    }
     final preferences = await _prefs();
     final biometricEnabled = preferences.getBool(_biometricEnabledKey) ?? true;
     if (!biometricEnabled) {
       throw const AuthValidationException('Biometric login is not enabled.');
     }
-    await _saveLoggedInProfile(_storedOrDemoProfile(preferences));
+    final profile = _storedOrDemoProfile(preferences);
+    final savedMobile = _normalizeNepalMobile(profile.phone);
+    if (savedMobile != null && savedMobile != mobile) {
+      throw const AuthValidationException('Phone number does not match.');
+    }
+    await _saveLoggedInProfile(profile.copyWith(phone: mobile));
   }
 
   String? _normalizeNepalMobile(String value) {

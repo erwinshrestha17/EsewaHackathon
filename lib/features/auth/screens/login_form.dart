@@ -13,11 +13,13 @@ class LoginForm extends StatefulWidget {
 
 class _LoginFormState extends State<LoginForm> {
   final _formKey = GlobalKey<FormState>();
+  final _phone = TextEditingController();
   final _mPin = TextEditingController();
   var _submitting = false;
 
   @override
   void dispose() {
+    _phone.dispose();
     _mPin.dispose();
     super.dispose();
   }
@@ -29,6 +31,20 @@ class _LoginFormState extends State<LoginForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          AuthTextField(
+            controller: _phone,
+            label: 'Nepal mobile number',
+            icon: Icons.phone_iphone_outlined,
+            keyboardType: TextInputType.phone,
+            textInputAction: TextInputAction.next,
+            prefixText: '+977 ',
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10),
+            ],
+            validator: _nepalMobileValidator,
+          ),
+          const SizedBox(height: 12),
           AuthTextField(
             controller: _mPin,
             label: 'M-PIN',
@@ -43,7 +59,7 @@ class _LoginFormState extends State<LoginForm> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Use your 4-digit M-PIN or device biometric unlock.',
+            'Use your phone number with M-PIN, or verify by biometric unlock.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w700,
@@ -65,6 +81,19 @@ class _LoginFormState extends State<LoginForm> {
     );
   }
 
+  String? _nepalMobileValidator(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Enter your phone number';
+    }
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length != 10) {
+      return 'Enter exactly 10 digits after +977.';
+    }
+    return RegExp(r'^9[678]\d{8}$').hasMatch(digits)
+        ? null
+        : 'Enter a valid Nepal mobile number.';
+  }
+
   String? _mPinValidator(String? value) {
     if (value == null || value.trim().isEmpty) {
       return 'Enter your M-PIN';
@@ -78,11 +107,22 @@ class _LoginFormState extends State<LoginForm> {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
-    await _submit(() => AuthScope.of(context).loginWithMpin(_mPin.text));
+    await _submit(
+      () => AuthScope.of(
+        context,
+      ).loginWithMpin(phone: _phone.text, mPin: _mPin.text),
+    );
   }
 
   Future<void> _loginWithBiometric() async {
-    await _submit(() => AuthScope.of(context).loginWithBiometric());
+    final phoneError = _nepalMobileValidator(_phone.text);
+    if (phoneError != null) {
+      _showError(phoneError);
+      return;
+    }
+    await _submit(
+      () => AuthScope.of(context).loginWithBiometric(phone: _phone.text),
+    );
   }
 
   Future<void> _submit(Future<void> Function() action) async {

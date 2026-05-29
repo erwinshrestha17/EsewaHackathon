@@ -125,24 +125,6 @@ HomeDashboardData mockHomeDashboardData() {
     ],
     suggestedActions: const [
       HomeQuickAction(
-        id: 'scan_bill',
-        label: 'Scan Receipt',
-        helper: 'OCR or manual',
-        icon: Icons.document_scanner_outlined,
-      ),
-      HomeQuickAction(
-        id: 'add_expense',
-        label: 'Add Expense',
-        helper: 'Split with a group',
-        icon: Icons.receipt_long_outlined,
-      ),
-      HomeQuickAction(
-        id: 'create_group',
-        label: 'Create Group',
-        helper: 'Expense or Dhukuti',
-        icon: Icons.groups_outlined,
-      ),
-      HomeQuickAction(
         id: 'settle',
         label: 'Settle',
         helper: 'Pay open dues',
