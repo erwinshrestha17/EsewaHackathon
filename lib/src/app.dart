@@ -655,36 +655,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
               ),
             ),
             SectionPanel(
-              title: 'Festival Mode',
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final template in const [
-                    'Dashain Khasi Split',
-                    'Tihar Gift Pool',
-                    'New Year Trek',
-                    'Office Bhoj',
-                    'College Picnic',
-                    'Apartment Monthly',
-                  ])
-                    ActionChip(
-                      avatar: Icon(
-                        template.contains('Tihar')
-                            ? Icons.card_giftcard
-                            : Icons.celebration,
-                        size: 18,
-                      ),
-                      label: Text(template),
-                      onPressed: () {
-                        final id = store.createFestivalTemplate(template);
-                        setState(() => store.selectedGroupId = id);
-                      },
-                    ),
-                ],
-              ),
-            ),
-            SectionPanel(
               title: 'Your Groups',
               child: groups.isEmpty
                   ? const EmptyState(
@@ -726,8 +696,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 child: EmptyState(
                   icon: Icons.groups_2_outlined,
                   title: 'Select a group',
-                  body:
-                      'Pick a group from the list or create a Festival Mode template.',
+                  body: 'Pick a group from the list or create a new group.',
                 ),
               )
             : GroupDetail(group: selected, scrollable: twoPane);
@@ -1054,8 +1023,9 @@ class GroupDetail extends StatelessWidget {
       ),
       SectionPanel(
         title: 'Activity Timeline',
-        child: ActivityList(
-          items: store.activityForGroup(group.id).take(8).toList(),
+        child: GroupActivitySummary(
+          groupId: group.id,
+          items: store.activityForGroup(group.id).take(5).toList(),
         ),
       ),
     ];
@@ -2076,6 +2046,239 @@ class ActivityList extends StatelessWidget {
   }
 }
 
+class GroupActivitySummary extends StatelessWidget {
+  const GroupActivitySummary({
+    required this.groupId,
+    required this.items,
+    super.key,
+  });
+
+  final String groupId;
+  final List<ActivityLog> items;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const EmptyState(
+        icon: Icons.history_toggle_off,
+        title: 'No activity',
+        body: 'Recent group activity appears here.',
+      );
+    }
+    return Column(
+      children: [
+        for (final item in items) GroupActivityTile(item: item, compact: true),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: () => showGroupActivityDialog(context, groupId),
+            icon: const Icon(Icons.history),
+            label: const Text('View all activity'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class GroupActivityTile extends StatelessWidget {
+  const GroupActivityTile({
+    required this.item,
+    this.compact = false,
+    super.key,
+  });
+
+  final ActivityLog item;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final actor = item.actorId == null ? 'System' : store.nameOf(item.actorId!);
+    final amount = activityAmount(store, item);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(child: Icon(activityIcon(item))),
+      title: Text(activityDescription(store, item)),
+      subtitle: Text(
+        [
+          activityTypeLabel(item),
+          actor,
+          dateTimeLabel(item.createdAt),
+          if (amount != null) statementMoney(amount),
+        ].join(' • '),
+      ),
+      isThreeLine: !compact,
+    );
+  }
+}
+
+Future<void> showGroupActivityDialog(
+  BuildContext context,
+  String groupId,
+) async {
+  final store = StoreScope.of(context);
+  var filter = 'All';
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          final allItems = store.activityForGroup(groupId);
+          final items = allItems
+              .where(
+                (item) => filter == 'All' || activityFilter(item) == filter,
+              )
+              .toList();
+          return AlertDialog(
+            title: Text('${store.groupById(groupId).name} Activity'),
+            content: SizedBox(
+              width: 760,
+              height: math.min(560, MediaQuery.sizeOf(context).height * 0.68),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final option in const [
+                        'All',
+                        'Expenses',
+                        'Settlements',
+                        'Members',
+                        'Adjustments',
+                        'Gifts',
+                      ])
+                        ChoiceChip(
+                          label: Text(option),
+                          selected: filter == option,
+                          onSelected: (_) => setState(() => filter = option),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: items.isEmpty
+                        ? const EmptyState(
+                            icon: Icons.filter_alt_off_outlined,
+                            title: 'No matching activity',
+                            body: 'Try a different activity filter.',
+                          )
+                        : ListView.builder(
+                            itemCount: items.length,
+                            itemBuilder: (context, index) =>
+                                GroupActivityTile(item: items[index]),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+String activityTypeLabel(ActivityLog item) {
+  return switch (activityFilter(item)) {
+    'Expenses' => 'Expense',
+    'Settlements' => 'Settlement',
+    'Members' => 'Member',
+    'Adjustments' => 'Adjustment',
+    'Gifts' => 'Gift',
+    _ => enumLabel(item.eventType),
+  };
+}
+
+String activityFilter(ActivityLog item) {
+  if (item.entityType.contains('expense') ||
+      item.eventType.contains('expense')) {
+    return 'Expenses';
+  }
+  if (item.entityType.contains('settlement') ||
+      item.eventType.contains('settlement')) {
+    return 'Settlements';
+  }
+  if (item.entityType.contains('member') || item.eventType.contains('member')) {
+    return 'Members';
+  }
+  if (item.entityType.contains('adjustment') ||
+      item.eventType.contains('adjustment')) {
+    return 'Adjustments';
+  }
+  if (item.entityType.contains('gift') || item.eventType.contains('gift')) {
+    return 'Gifts';
+  }
+  return 'Other';
+}
+
+IconData activityIcon(ActivityLog item) {
+  return switch (activityFilter(item)) {
+    'Expenses' => Icons.receipt_long,
+    'Settlements' => Icons.payments,
+    'Members' => Icons.group,
+    'Adjustments' => Icons.tune,
+    'Gifts' => Icons.card_giftcard,
+    _ => Icons.timeline,
+  };
+}
+
+String activityDescription(AppStore store, ActivityLog item) {
+  final amount = activityAmount(store, item);
+  if (item.eventType == 'settlement_paid' && amount != null) {
+    return '${item.body.replaceAll(' via mock eSewa.', '')}.';
+  }
+  if (item.eventType == 'expense_added') {
+    return item.body;
+  }
+  if (item.eventType == 'adjustment_created' && amount != null) {
+    return 'System applied ${statementMoney(amount)} adjustment.';
+  }
+  if (item.eventType == 'member_added') {
+    return item.body.replaceAll(' joined ', ' was added to ');
+  }
+  if (item.eventType == 'member_removed') {
+    return item.body;
+  }
+  return item.body;
+}
+
+int? activityAmount(AppStore store, ActivityLog item) {
+  if (item.entityType == 'expense') {
+    for (final expense in store.expenses) {
+      if (expense.id == item.entityId) {
+        return expense.totalMinor;
+      }
+    }
+  }
+  if (item.entityType == 'settlement') {
+    for (final settlement in store.settlements) {
+      if (settlement.id == item.entityId) {
+        return settlement.amountMinor;
+      }
+    }
+  }
+  if (item.entityType == 'adjustment') {
+    for (final adjustment in store.adjustments) {
+      if (adjustment.id == item.entityId) {
+        return adjustment.entries
+            .where((entry) => entry.direction == 'credit')
+            .fold<int>(0, (sum, entry) => sum + entry.amountMinor);
+      }
+    }
+  }
+  return null;
+}
+
 class _UserSwitcher extends StatelessWidget {
   const _UserSwitcher({required this.store});
 
@@ -2739,12 +2942,15 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
     showSnack(context, 'Only active group members can add expenses.');
     return;
   }
+
   final title = TextEditingController(text: 'Shared expense');
   final amount = TextEditingController(text: '1200');
   final note = TextEditingController();
   final receipt = TextEditingController();
   var splitMode = SplitMode.equal;
-  final payerAmounts = <String, String>{store.currentUserId: amount.text};
+  final payerRows = <_PayerDraft>[
+    _PayerDraft(userId: store.currentUserId, amountText: amount.text),
+  ];
   final participants = <String>{for (final member in members) member.userId};
   final custom = <String, String>{};
   final percentages = <String, String>{};
@@ -2763,15 +2969,8 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
   }
 
   void syncSinglePayerToTotal() {
-    final payerIds = payerAmounts.entries
-        .where((entry) => parseMoneyToMinor(entry.value) > 0)
-        .map((entry) => entry.key)
-        .toList();
-    if (payerIds.length <= 1) {
-      payerAmounts
-        ..clear()
-        ..[payerIds.isEmpty ? store.currentUserId : payerIds.first] =
-            amount.text;
+    if (payerRows.length == 1) {
+      payerRows.first.amount.text = amount.text;
     }
   }
 
@@ -2782,179 +2981,364 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
     builder: (dialogContext) {
       return StatefulBuilder(
         builder: (context, setState) {
+          final total = parseMoneyToMinor(amount.text);
           final selectedParticipants = participants.toList();
+          final payerAmounts = <String, int>{};
+          var hasMissingPayer = false;
+          var hasZeroPayerAmount = false;
+          for (final payer in payerRows) {
+            final paid = parseMoneyToMinor(payer.amount.text);
+            if (payer.userId == null) {
+              hasMissingPayer = true;
+            }
+            if (paid <= 0) {
+              hasZeroPayerAmount = true;
+            }
+            if (payer.userId != null && paid > 0) {
+              payerAmounts[payer.userId!] = paid;
+            }
+          }
+          final payerTotal = payerAmounts.values.fold<int>(
+            0,
+            (sum, value) => sum + value,
+          );
+          final splitPreview = _splitPreviewFor(
+            total: total,
+            participants: selectedParticipants,
+            splitMode: splitMode,
+            equalPreview: equalPreview,
+            custom: custom,
+            percentages: percentages,
+            shares: shares,
+            receiptItems: splitMode == SplitMode.item
+                ? parseControlledReceipt(receipt.text)
+                : parsedItems,
+            itemAssignments: itemAssignments,
+          );
+          final splitTotal = splitPreview.values.fold<int>(
+            0,
+            (sum, value) => sum + value,
+          );
+          final payerError = _payerValidationMessage(
+            total: total,
+            payerTotal: payerTotal,
+            hasMissingPayer: hasMissingPayer,
+            hasZeroPayerAmount: hasZeroPayerAmount,
+          );
+          final splitError = selectedParticipants.isEmpty
+              ? 'Choose at least one participant.'
+              : splitTotal != total
+              ? 'Participant split amounts must add up to the total expense.'
+              : null;
+          final readyToSave =
+              total > 0 &&
+              payerError == null &&
+              splitError == null &&
+              splitPreview.isNotEmpty;
+
           return AlertDialog(
             title: const Text('Add Expense'),
             content: SizedBox(
-              width: 680,
+              width: 780,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextField(
-                      controller: title,
-                      decoration: const InputDecoration(labelText: 'Title'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: amount,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Total amount',
-                        prefixText: 'NPR ',
-                      ),
-                      onChanged: (_) {
-                        setState(() {
-                          syncSinglePayerToTotal();
-                          refreshEqualPreview();
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _AmountGrid(
-                      ids: [for (final member in members) member.userId],
-                      label: 'Paid amount',
-                      values: payerAmounts,
-                      suffix: 'NPR',
-                      onChanged: () => setState(() {}),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<SplitMode>(
-                      initialValue: splitMode,
-                      decoration: const InputDecoration(
-                        labelText: 'Split mode',
-                      ),
-                      items: [
-                        for (final item in SplitMode.values)
-                          DropdownMenuItem(
-                            value: item,
-                            child: Text(enumLabel(item)),
+                    _DialogSection(
+                      title: 'Participants',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final id in selectedParticipants)
+                                InputChip(
+                                  avatar: UserAvatar(
+                                    user: store.userById(id),
+                                    small: true,
+                                  ),
+                                  label: Text(store.nameOf(id)),
+                                  onDeleted: () {
+                                    setState(() {
+                                      participants.remove(id);
+                                      custom.remove(id);
+                                      percentages.remove(id);
+                                      shares.remove(id);
+                                      refreshEqualPreview();
+                                    });
+                                  },
+                                ),
+                            ],
                           ),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => splitMode = value ?? splitMode),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final member in members)
+                                FilterChip(
+                                  selected: participants.contains(
+                                    member.userId,
+                                  ),
+                                  avatar: UserAvatar(
+                                    user: store.userById(member.userId),
+                                    small: true,
+                                  ),
+                                  label: Text(store.nameOf(member.userId)),
+                                  onSelected: (checked) {
+                                    setState(() {
+                                      checked
+                                          ? participants.add(member.userId)
+                                          : participants.remove(member.userId);
+                                      refreshEqualPreview();
+                                    });
+                                  },
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    Text(
-                      'Participants',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final member in members)
-                          FilterChip(
-                            selected: participants.contains(member.userId),
-                            avatar: UserAvatar(
-                              user: store.userById(member.userId),
-                              small: true,
+                    _DialogSection(
+                      title: 'Expense details',
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: title,
+                            decoration: const InputDecoration(
+                              labelText: 'Title',
                             ),
-                            label: Text(store.nameOf(member.userId)),
-                            onSelected: (checked) {
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: amount,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Total amount',
+                              prefixText: 'NPR ',
+                            ),
+                            onChanged: (_) {
                               setState(() {
-                                checked
-                                    ? participants.add(member.userId)
-                                    : participants.remove(member.userId);
+                                syncSinglePayerToTotal();
                                 refreshEqualPreview();
                               });
                             },
                           ),
-                      ],
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: note,
+                            decoration: const InputDecoration(
+                              labelText: 'Note',
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    if (splitMode == SplitMode.equal)
-                      _AmountPreview(
-                        title: 'Calculated equal split',
-                        amounts: equalPreview,
-                      ),
-                    if (splitMode == SplitMode.custom)
-                      _AmountGrid(
-                        ids: selectedParticipants,
-                        label: 'Custom amount',
-                        values: custom,
-                        suffix: 'NPR',
-                        onChanged: () => setState(() {}),
-                      ),
-                    if (splitMode == SplitMode.percentage)
-                      _AmountGrid(
-                        ids: selectedParticipants,
-                        label: 'Percentage',
-                        values: percentages,
-                        suffix: '%',
-                        onChanged: () => setState(() {}),
-                      ),
-                    if (splitMode == SplitMode.shares)
-                      _AmountGrid(
-                        ids: selectedParticipants,
-                        label: 'Share units',
-                        values: shares,
-                        suffix: 'x',
-                        onChanged: () => setState(() {}),
-                      ),
-                    if (splitMode == SplitMode.item) ...[
-                      TextField(
-                        controller: receipt,
-                        minLines: 3,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          labelText: 'Controlled receipt text',
-                          hintText: 'Khasi meat 6000\nMasala 650',
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            parsedItems = parseControlledReceipt(receipt.text);
-                            amount.text =
-                                (parsedItems.fold<int>(
-                                          0,
-                                          (sum, item) => sum + item.amountMinor,
-                                        ) /
-                                        100)
-                                    .toStringAsFixed(0);
-                            syncSinglePayerToTotal();
-                            refreshEqualPreview();
-                          });
-                        },
-                        icon: const Icon(Icons.document_scanner_outlined),
-                        label: const Text('Parse receipt'),
-                      ),
-                      const SizedBox(height: 8),
-                      for (var i = 0; i < parsedItems.length; i++)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: DropdownButtonFormField<String>(
-                            initialValue: itemAssignments[i] ?? 'all',
-                            decoration: InputDecoration(
-                              labelText:
-                                  '${parsedItems[i].label} • ${money(parsedItems[i].amountMinor)}',
-                            ),
-                            items: [
-                              const DropdownMenuItem(
-                                value: 'all',
-                                child: Text('Shared by all selected'),
+                    _DialogSection(
+                      title: 'Who paid?',
+                      child: Column(
+                        children: [
+                          for (var index = 0; index < payerRows.length; index++)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                bottom: index == payerRows.length - 1 ? 0 : 8,
                               ),
-                              for (final id in selectedParticipants)
-                                DropdownMenuItem(
-                                  value: id,
-                                  child: Text(store.nameOf(id)),
-                                ),
-                            ],
-                            onChanged: (value) {
-                              setState(
-                                () => itemAssignments[i] = value ?? 'all',
-                              );
-                            },
+                              child: _PayerInputRow(
+                                members: members,
+                                payer: payerRows[index],
+                                selectedByOtherRows: {
+                                  for (
+                                    var other = 0;
+                                    other < payerRows.length;
+                                    other++
+                                  )
+                                    if (other != index &&
+                                        payerRows[other].userId != null)
+                                      payerRows[other].userId!,
+                                },
+                                canRemove: index > 0,
+                                onChanged: () => setState(() {}),
+                                onRemove: () {
+                                  setState(() {
+                                    final removed = payerRows.removeAt(index);
+                                    removed.dispose();
+                                  });
+                                },
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              onPressed: payerRows.length >= members.length
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        final selected = payerRows
+                                            .map((payer) => payer.userId)
+                                            .whereType<String>()
+                                            .toSet();
+                                        final next = members
+                                            .map((member) => member.userId)
+                                            .firstWhere(
+                                              (id) => !selected.contains(id),
+                                              orElse: () =>
+                                                  members.first.userId,
+                                            );
+                                        payerRows.add(
+                                          _PayerDraft(userId: next),
+                                        );
+                                      });
+                                    },
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add another payer'),
+                            ),
                           ),
+                          if (payerError != null) ...[
+                            const SizedBox(height: 8),
+                            _ValidationText(payerError),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _DialogSection(
+                      title: 'Split mode',
+                      child: DropdownButtonFormField<SplitMode>(
+                        initialValue: splitMode,
+                        decoration: const InputDecoration(
+                          labelText: 'Split mode',
                         ),
-                    ],
-                    TextField(
-                      controller: note,
-                      decoration: const InputDecoration(labelText: 'Note'),
+                        items: [
+                          for (final item in SplitMode.values)
+                            DropdownMenuItem(
+                              value: item,
+                              child: Text(enumLabel(item)),
+                            ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => splitMode = value ?? splitMode),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _DialogSection(
+                      title: 'Split preview',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (splitMode == SplitMode.equal)
+                            _AmountPreview(
+                              title: 'Calculated equal split',
+                              amounts: equalPreview,
+                            ),
+                          if (splitMode == SplitMode.custom)
+                            _AmountGrid(
+                              ids: selectedParticipants,
+                              label: 'Custom amount',
+                              values: custom,
+                              suffix: 'NPR',
+                              onChanged: () => setState(() {}),
+                            ),
+                          if (splitMode == SplitMode.percentage)
+                            _AmountGrid(
+                              ids: selectedParticipants,
+                              label: 'Percentage',
+                              values: percentages,
+                              suffix: '%',
+                              onChanged: () => setState(() {}),
+                            ),
+                          if (splitMode == SplitMode.shares)
+                            _AmountGrid(
+                              ids: selectedParticipants,
+                              label: 'Share units',
+                              values: shares,
+                              suffix: 'x',
+                              onChanged: () => setState(() {}),
+                            ),
+                          if (splitMode == SplitMode.item) ...[
+                            TextField(
+                              controller: receipt,
+                              minLines: 3,
+                              maxLines: 5,
+                              decoration: const InputDecoration(
+                                labelText: 'Controlled receipt text',
+                                hintText: 'Khasi meat 6000\nMasala 650',
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  parsedItems = parseControlledReceipt(
+                                    receipt.text,
+                                  );
+                                  amount.text =
+                                      (parsedItems.fold<int>(
+                                                0,
+                                                (sum, item) =>
+                                                    sum + item.amountMinor,
+                                              ) /
+                                              100)
+                                          .toStringAsFixed(0);
+                                  syncSinglePayerToTotal();
+                                  refreshEqualPreview();
+                                });
+                              },
+                              icon: const Icon(Icons.document_scanner_outlined),
+                              label: const Text('Parse receipt'),
+                            ),
+                            const SizedBox(height: 8),
+                            for (var i = 0; i < parsedItems.length; i++)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: itemAssignments[i] ?? 'all',
+                                  decoration: InputDecoration(
+                                    labelText:
+                                        '${parsedItems[i].label} • ${statementMoney(parsedItems[i].amountMinor)}',
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(
+                                      value: 'all',
+                                      child: Text('Shared by all selected'),
+                                    ),
+                                    for (final id in selectedParticipants)
+                                      DropdownMenuItem(
+                                        value: id,
+                                        child: Text(store.nameOf(id)),
+                                      ),
+                                  ],
+                                  onChanged: (value) {
+                                    setState(
+                                      () => itemAssignments[i] = value ?? 'all',
+                                    );
+                                  },
+                                ),
+                              ),
+                          ],
+                          if (splitError != null) ...[
+                            const SizedBox(height: 8),
+                            _ValidationText(splitError),
+                          ],
+                          const SizedBox(height: 8),
+                          _ExpenseSplitPreview(
+                            payerAmounts: payerAmounts,
+                            participantShares: splitPreview,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _SaveSummary(
+                      expenseTotal: total,
+                      payerTotal: payerTotal,
+                      splitTotal: splitTotal,
+                      ready: readyToSave,
                     ),
                   ],
                 ),
@@ -2966,64 +3350,60 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: () {
-                  try {
-                    final total = parseMoneyToMinor(amount.text);
-                    final ids = participants.toList();
-                    final paidBy = payerAmounts.map(
-                      (key, value) => MapEntry(key, parseMoneyToMinor(value)),
-                    )..removeWhere((_, value) => value == 0);
-                    if (paidBy.isEmpty) {
-                      showSnack(context, 'Choose at least one payer.');
-                      return;
-                    }
-                    final parsed = splitMode == SplitMode.item
-                        ? parseControlledReceipt(receipt.text)
-                        : <ParsedReceiptItem>[];
-                    store.addExpense(
-                      groupId: groupId,
-                      title: title.text.trim().isEmpty
-                          ? 'Shared expense'
-                          : title.text.trim(),
-                      totalMinor: total == 0 && parsed.isNotEmpty
-                          ? parsed.fold<int>(
-                              0,
-                              (sum, item) => sum + item.amountMinor,
-                            )
-                          : total,
-                      payerId: paidBy.keys.first,
-                      payerAmounts: paidBy,
-                      category: store.groupById(groupId).category.name,
-                      splitMode: splitMode,
-                      participantIds: ids,
-                      note: note.text,
-                      equalAmounts: splitMode == SplitMode.equal
-                          ? equalPreview
-                          : null,
-                      customAmounts: custom.map(
-                        (key, value) => MapEntry(key, parseMoneyToMinor(value)),
-                      ),
-                      percentages: percentages.map(
-                        (key, value) =>
-                            MapEntry(key, double.tryParse(value) ?? 0),
-                      ),
-                      shareUnits: shares.map(
-                        (key, value) => MapEntry(key, int.tryParse(value) ?? 1),
-                      ),
-                      receiptItems: parsed,
-                      itemAssignments: {
-                        for (final entry in itemAssignments.entries)
-                          entry.key: entry.value == 'all'
-                              ? ids
-                              : <String>[entry.value],
-                      },
-                    );
-                    Navigator.pop(dialogContext);
-                  } on ArgumentError catch (error) {
-                    showSnack(context, error.message.toString());
-                  }
-                },
-                child: const Text('Add'),
+                onPressed: readyToSave
+                    ? () {
+                        try {
+                          final ids = participants.toList();
+                          final parsed = splitMode == SplitMode.item
+                              ? parseControlledReceipt(receipt.text)
+                              : <ParsedReceiptItem>[];
+                          store.addExpense(
+                            groupId: groupId,
+                            title: title.text.trim().isEmpty
+                                ? 'Shared expense'
+                                : title.text.trim(),
+                            totalMinor: total == 0 && parsed.isNotEmpty
+                                ? parsed.fold<int>(
+                                    0,
+                                    (sum, item) => sum + item.amountMinor,
+                                  )
+                                : total,
+                            payerId: payerAmounts.keys.first,
+                            payerAmounts: payerAmounts,
+                            category: store.groupById(groupId).category.name,
+                            splitMode: splitMode,
+                            participantIds: ids,
+                            note: note.text,
+                            equalAmounts: splitMode == SplitMode.equal
+                                ? equalPreview
+                                : null,
+                            customAmounts: custom.map(
+                              (key, value) =>
+                                  MapEntry(key, parseMoneyToMinor(value)),
+                            ),
+                            percentages: percentages.map(
+                              (key, value) =>
+                                  MapEntry(key, double.tryParse(value) ?? 0),
+                            ),
+                            shareUnits: shares.map(
+                              (key, value) =>
+                                  MapEntry(key, int.tryParse(value) ?? 1),
+                            ),
+                            receiptItems: parsed,
+                            itemAssignments: {
+                              for (final entry in itemAssignments.entries)
+                                entry.key: entry.value == 'all'
+                                    ? ids
+                                    : <String>[entry.value],
+                            },
+                          );
+                          Navigator.pop(dialogContext);
+                        } on ArgumentError catch (error) {
+                          showSnack(context, error.message.toString());
+                        }
+                      }
+                    : null,
+                child: const Text('Save expense'),
               ),
             ],
           );
@@ -3031,10 +3411,395 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
       );
     },
   );
+
   title.dispose();
   amount.dispose();
   note.dispose();
   receipt.dispose();
+  for (final payer in payerRows) {
+    payer.dispose();
+  }
+}
+
+class _PayerDraft {
+  _PayerDraft({this.userId, String amountText = ''})
+    : amount = TextEditingController(text: amountText);
+
+  String? userId;
+  final TextEditingController amount;
+
+  void dispose() {
+    amount.dispose();
+  }
+}
+
+class _DialogSection extends StatelessWidget {
+  const _DialogSection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
+  }
+}
+
+class _PayerInputRow extends StatelessWidget {
+  const _PayerInputRow({
+    required this.members,
+    required this.payer,
+    required this.selectedByOtherRows,
+    required this.canRemove,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final List<GroupMember> members;
+  final _PayerDraft payer;
+  final Set<String> selectedByOtherRows;
+  final bool canRemove;
+  final VoidCallback onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final available = members
+        .where(
+          (member) =>
+              member.userId == payer.userId ||
+              !selectedByOtherRows.contains(member.userId),
+        )
+        .toList();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 560;
+        final selector = DropdownButtonFormField<String>(
+          initialValue: payer.userId,
+          decoration: const InputDecoration(labelText: 'Who paid?'),
+          items: [
+            for (final member in available)
+              DropdownMenuItem(
+                value: member.userId,
+                child: Text(store.nameOf(member.userId)),
+              ),
+          ],
+          onChanged: (value) {
+            payer.userId = value;
+            onChanged();
+          },
+        );
+        final amount = TextField(
+          controller: payer.amount,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Amount paid',
+            prefixText: 'NPR ',
+          ),
+          onChanged: (_) => onChanged(),
+        );
+        final remove = IconButton(
+          tooltip: 'Remove payer',
+          onPressed: canRemove ? onRemove : null,
+          icon: const Icon(Icons.close),
+        );
+        if (compact) {
+          return Column(
+            children: [
+              selector,
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: amount),
+                  remove,
+                ],
+              ),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: selector),
+            const SizedBox(width: 8),
+            Expanded(child: amount),
+            remove,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ValidationText extends StatelessWidget {
+  const _ValidationText(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      message,
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.error,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+}
+
+class _ExpenseSplitPreview extends StatelessWidget {
+  const _ExpenseSplitPreview({
+    required this.payerAmounts,
+    required this.participantShares,
+  });
+
+  final Map<String, int> payerAmounts;
+  final Map<String, int> participantShares;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final people = <String>{...payerAmounts.keys, ...participantShares.keys};
+    if (people.isEmpty) {
+      return const EmptyState(
+        icon: Icons.receipt_long_outlined,
+        title: 'No preview yet',
+        body: 'Select participants and payer amounts to preview balances.',
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final entry in payerAmounts.entries)
+              Chip(
+                avatar: UserAvatar(
+                  user: store.userById(entry.key),
+                  small: true,
+                ),
+                label: Text(
+                  '${store.nameOf(entry.key)} paid ${statementMoney(entry.value)}',
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final entry in participantShares.entries)
+              Chip(
+                avatar: UserAvatar(
+                  user: store.userById(entry.key),
+                  small: true,
+                ),
+                label: Text(
+                  '${store.nameOf(entry.key)} share ${statementMoney(entry.value)}',
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        for (final id in people)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              _netPreviewLine(store, id, payerAmounts, participantShares),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _SaveSummary extends StatelessWidget {
+  const _SaveSummary({
+    required this.expenseTotal,
+    required this.payerTotal,
+    required this.splitTotal,
+    required this.ready,
+  });
+
+  final int expenseTotal;
+  final int payerTotal;
+  final int splitTotal;
+  final bool ready;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = ready ? Tone.success : Tone.warning;
+    final color = toneColor(context, tone);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Expense total: ${statementMoney(expenseTotal)}'),
+          Text('Total paid by payers: ${statementMoney(payerTotal)}'),
+          Text('Total split among participants: ${statementMoney(splitTotal)}'),
+          Text(
+            ready
+                ? 'Status: Ready to save'
+                : 'Status: Fix totals before saving',
+            style: TextStyle(color: color, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Map<String, int> _splitPreviewFor({
+  required int total,
+  required List<String> participants,
+  required SplitMode splitMode,
+  required Map<String, int> equalPreview,
+  required Map<String, String> custom,
+  required Map<String, String> percentages,
+  required Map<String, String> shares,
+  required List<ParsedReceiptItem> receiptItems,
+  required Map<int, String> itemAssignments,
+}) {
+  if (participants.isEmpty) {
+    return <String, int>{};
+  }
+  try {
+    return switch (splitMode) {
+      SplitMode.equal => {
+        for (final id in participants) id: equalPreview[id] ?? 0,
+      },
+      SplitMode.custom => {
+        for (final id in participants) id: parseMoneyToMinor(custom[id] ?? ''),
+      },
+      SplitMode.percentage => _amountMapFromList(
+        participants,
+        percentageShares(total, [
+          for (final id in participants)
+            double.tryParse(percentages[id] ?? '') ?? 0,
+        ]),
+      ),
+      SplitMode.shares => _amountMapFromList(
+        participants,
+        unitShares(total, [
+          for (final id in participants) int.tryParse(shares[id] ?? '') ?? 1,
+        ]),
+      ),
+      SplitMode.item => _itemSplitPreview(
+        total,
+        participants,
+        receiptItems,
+        itemAssignments,
+      ),
+    };
+  } on ArgumentError {
+    return <String, int>{};
+  }
+}
+
+Map<String, int> _amountMapFromList(List<String> ids, List<int> amounts) {
+  return {
+    for (var index = 0; index < ids.length; index++) ids[index]: amounts[index],
+  };
+}
+
+Map<String, int> _itemSplitPreview(
+  int total,
+  List<String> participants,
+  List<ParsedReceiptItem> receiptItems,
+  Map<int, String> itemAssignments,
+) {
+  final preview = <String, int>{for (final id in participants) id: 0};
+  for (var itemIndex = 0; itemIndex < receiptItems.length; itemIndex++) {
+    final assigned = itemAssignments[itemIndex];
+    final users = assigned == null || assigned == 'all'
+        ? participants
+        : <String>[assigned];
+    final splits = equalShares(receiptItems[itemIndex].amountMinor, users);
+    for (var index = 0; index < users.length; index++) {
+      preview[users[index]] = (preview[users[index]] ?? 0) + splits[index];
+    }
+  }
+  final current = preview.values.fold<int>(0, (sum, value) => sum + value);
+  final delta = total - current;
+  if (delta != 0 && participants.isNotEmpty) {
+    final adjustments = equalShares(delta.abs(), participants);
+    for (var index = 0; index < participants.length; index++) {
+      preview[participants[index]] =
+          (preview[participants[index]] ?? 0) +
+          (delta.isNegative ? -adjustments[index] : adjustments[index]);
+    }
+  }
+  return preview;
+}
+
+String? _payerValidationMessage({
+  required int total,
+  required int payerTotal,
+  required bool hasMissingPayer,
+  required bool hasZeroPayerAmount,
+}) {
+  if (hasMissingPayer) {
+    return 'Please select who paid.';
+  }
+  if (hasZeroPayerAmount) {
+    return 'Enter the amount paid by each payer.';
+  }
+  final delta = total - payerTotal;
+  if (delta > 0) {
+    return 'Paid amount is ${statementMoney(delta)} less than the total expense.';
+  }
+  if (delta < 0) {
+    return 'Paid amount is ${statementMoney(delta.abs())} more than the total expense.';
+  }
+  return null;
+}
+
+String _netPreviewLine(
+  AppStore store,
+  String userId,
+  Map<String, int> payerAmounts,
+  Map<String, int> participantShares,
+) {
+  final paid = payerAmounts[userId] ?? 0;
+  final share = participantShares[userId] ?? 0;
+  final net = paid - share;
+  final name = store.nameOf(userId);
+  if (paid > 0 && share > 0 && net > 0) {
+    return '$name paid ${statementMoney(paid)} and owes ${statementMoney(share)}, so they get back ${statementMoney(net)}.';
+  }
+  if (paid > 0 && share > 0 && net < 0) {
+    return '$name paid ${statementMoney(paid)} and owes ${statementMoney(share)}, so they still owe ${statementMoney(net.abs())}.';
+  }
+  if (paid > 0 && share == 0) {
+    return '$name paid ${statementMoney(paid)} and did not participate, so they get back ${statementMoney(paid)}.';
+  }
+  if (paid == 0 && share > 0) {
+    return '$name participated and owes ${statementMoney(share)}.';
+  }
+  return '$name is balanced for this expense.';
 }
 
 class _AmountGrid extends StatelessWidget {
@@ -3279,24 +4044,509 @@ Future<void> showAdjustmentDialog(
 
 Future<void> showStatementDialog(BuildContext context, String groupId) async {
   final store = StoreScope.of(context);
-  final csv = store.groupStatementCsv(groupId);
+  final group = store.groupById(groupId);
+  final statement = GroupStatementData.fromStore(store, groupId);
   await showDialog<void>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text('${store.groupById(groupId).name} Statement'),
-      content: SizedBox(
-        width: 720,
-        height: 420,
-        child: SingleChildScrollView(child: SelectableText(csv)),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('Close'),
+    builder: (dialogContext) {
+      final size = MediaQuery.sizeOf(dialogContext);
+      return AlertDialog(
+        title: Text('${group.name} Statement'),
+        content: SizedBox(
+          width: math.min(1100, size.width * 0.92),
+          height: math.min(560, size.height * 0.58),
+          child: GroupStatementTable(statement: statement),
         ),
-      ],
-    ),
+        actions: [
+          OutlinedButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: statement.toCsv()));
+              showSnack(context, 'CSV statement copied.');
+            },
+            icon: const Icon(Icons.download_outlined),
+            label: const Text('Download CSV'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () {
+              Clipboard.setData(
+                ClipboardData(text: statement.toPrintableText()),
+              );
+              showSnack(context, 'Printable statement copied for PDF export.');
+            },
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            label: const Text('Download PDF'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      );
+    },
   );
+}
+
+class GroupStatementData {
+  GroupStatementData({
+    required this.rows,
+    required this.totalGroupExpenses,
+    required this.totalPaidByUser,
+    required this.totalUserShare,
+    required this.totalSettled,
+    required this.remainingBalance,
+  });
+
+  final List<GroupStatementRow> rows;
+  final int totalGroupExpenses;
+  final int totalPaidByUser;
+  final int totalUserShare;
+  final int totalSettled;
+  final int remainingBalance;
+
+  factory GroupStatementData.fromStore(AppStore store, String groupId) {
+    final userId = store.currentUserId;
+    final rows = <GroupStatementRow>[];
+    var totalGroupExpenses = 0;
+    var totalPaidByUser = 0;
+    var totalUserShare = 0;
+    var totalSettled = 0;
+
+    for (final expense in store.expenses.where(
+      (item) => item.groupId == groupId,
+    )) {
+      final userShare = expense.shares
+          .where((share) => share.userId == userId)
+          .fold<int>(0, (sum, share) => sum + share.amountMinor);
+      final userPaid = expense.payers.isEmpty
+          ? (expense.payerId == userId ? expense.totalMinor : 0)
+          : expense.payers
+                .where((payer) => payer.userId == userId)
+                .fold<int>(0, (sum, payer) => sum + payer.amountMinor);
+      if (expense.status == ExpenseStatus.active) {
+        totalGroupExpenses += expense.totalMinor;
+        totalPaidByUser += userPaid;
+        totalUserShare += userShare;
+      }
+      rows.add(
+        GroupStatementRow(
+          date: expense.createdAt,
+          type: 'Expense',
+          description: expense.title,
+          paidBy: payerSummary(store, expense),
+          participants: '${expense.shares.length} members',
+          totalAmountMinor: expense.totalMinor,
+          splitMode: enumLabel(expense.splitMode),
+          yourShareMinor: userShare,
+          status: enumLabel(expense.status),
+        ),
+      );
+    }
+
+    for (final settlement in store.settlements.where(
+      (item) => item.groupId == groupId,
+    )) {
+      if (settlement.status == PaymentStatus.paid &&
+          (settlement.payerId == userId || settlement.payeeId == userId)) {
+        totalSettled += settlement.amountMinor;
+      }
+      rows.add(
+        GroupStatementRow(
+          date: settlement.paidAt ?? settlement.createdAt,
+          type: 'Settlement',
+          description:
+              '${store.nameOf(settlement.payerId)} paid ${store.nameOf(settlement.payeeId)}',
+          paidBy: store.nameOf(settlement.payerId),
+          participants: store.nameOf(settlement.payeeId),
+          totalAmountMinor: settlement.amountMinor,
+          splitMode: 'Settlement',
+          yourShareMinor: 0,
+          status: enumLabel(settlement.status),
+        ),
+      );
+    }
+
+    for (final adjustment in store.adjustments.where(
+      (item) => item.groupId == groupId,
+    )) {
+      final amount = adjustment.entries
+          .where((entry) => entry.direction == 'credit')
+          .fold<int>(0, (sum, entry) => sum + entry.amountMinor);
+      final userImpact = adjustment.entries
+          .where((entry) => entry.userId == userId)
+          .fold<int>(
+            0,
+            (sum, entry) =>
+                sum +
+                (entry.direction == 'credit'
+                    ? entry.amountMinor
+                    : -entry.amountMinor),
+          );
+      totalUserShare += userImpact;
+      rows.add(
+        GroupStatementRow(
+          date: adjustment.createdAt,
+          type: 'Adjustment',
+          description: adjustment.reason,
+          paidBy: 'System',
+          participants: '${adjustment.entries.length} members',
+          totalAmountMinor: amount,
+          splitMode: enumLabel(adjustment.adjustmentType),
+          yourShareMinor: userImpact,
+          status: 'Applied',
+        ),
+      );
+    }
+
+    rows.sort((a, b) => b.date.compareTo(a.date));
+    return GroupStatementData(
+      rows: rows,
+      totalGroupExpenses: totalGroupExpenses,
+      totalPaidByUser: totalPaidByUser,
+      totalUserShare: totalUserShare,
+      totalSettled: totalSettled,
+      remainingBalance: store.balanceForUserInGroup(groupId, userId),
+    );
+  }
+
+  String toCsv() {
+    final buffer = StringBuffer();
+    buffer.writeln(
+      'Date,Type,Description,Paid By,Participants,Total Amount,Split Mode,Your Share,Status',
+    );
+    for (final row in rows) {
+      buffer.writeln(
+        [
+          statementDate(row.date),
+          row.type,
+          row.description,
+          row.paidBy,
+          row.participants,
+          statementMoney(row.totalAmountMinor),
+          row.splitMode,
+          statementMoney(row.yourShareMinor),
+          row.status,
+        ].map(_csvCell).join(','),
+      );
+    }
+    buffer
+      ..writeln()
+      ..writeln('Total group expenses,${statementMoney(totalGroupExpenses)}')
+      ..writeln('Total paid by user,${statementMoney(totalPaidByUser)}')
+      ..writeln('Total user share,${statementMoney(totalUserShare)}')
+      ..writeln('Total settled,${statementMoney(totalSettled)}')
+      ..writeln('Remaining balance,${statementMoney(remainingBalance)}');
+    return buffer.toString();
+  }
+
+  String toPrintableText() {
+    final buffer = StringBuffer('Group Statement\n\n');
+    for (final row in rows) {
+      buffer.writeln(
+        '${statementDate(row.date)} | ${row.type} | ${row.description} | ${row.paidBy} | ${row.participants} | ${statementMoney(row.totalAmountMinor)} | ${row.splitMode} | ${statementMoney(row.yourShareMinor)} | ${row.status}',
+      );
+    }
+    buffer
+      ..writeln()
+      ..writeln('Total group expenses: ${statementMoney(totalGroupExpenses)}')
+      ..writeln('Total paid by user: ${statementMoney(totalPaidByUser)}')
+      ..writeln('Total user share: ${statementMoney(totalUserShare)}')
+      ..writeln('Total settled: ${statementMoney(totalSettled)}')
+      ..writeln('Remaining balance: ${statementMoney(remainingBalance)}');
+    return buffer.toString();
+  }
+}
+
+class GroupStatementRow {
+  GroupStatementRow({
+    required this.date,
+    required this.type,
+    required this.description,
+    required this.paidBy,
+    required this.participants,
+    required this.totalAmountMinor,
+    required this.splitMode,
+    required this.yourShareMinor,
+    required this.status,
+  });
+
+  final DateTime date;
+  final String type;
+  final String description;
+  final String paidBy;
+  final String participants;
+  final int totalAmountMinor;
+  final String splitMode;
+  final int yourShareMinor;
+  final String status;
+}
+
+class GroupStatementTable extends StatelessWidget {
+  const GroupStatementTable({required this.statement, super.key});
+
+  static const _columns = [
+    ('Date', 112.0),
+    ('Type', 112.0),
+    ('Description', 220.0),
+    ('Paid By', 180.0),
+    ('Participants', 130.0),
+    ('Total Amount', 140.0),
+    ('Split Mode', 120.0),
+    ('Your Share', 130.0),
+    ('Status', 110.0),
+  ];
+
+  static const _tableWidth = 1254.0;
+
+  final GroupStatementData statement;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        Expanded(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(color: colorScheme.outline),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Scrollbar(
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: _tableWidth,
+                    child: Column(
+                      children: [
+                        _StatementHeader(columns: _columns),
+                        Expanded(
+                          child: statement.rows.isEmpty
+                              ? const EmptyState(
+                                  icon: Icons.description_outlined,
+                                  title: 'No statement rows',
+                                  body:
+                                      'Expenses, settlements, and adjustments appear here.',
+                                )
+                              : ListView.builder(
+                                  itemCount: statement.rows.length,
+                                  itemBuilder: (context, index) {
+                                    final row = statement.rows[index];
+                                    return _StatementTableRow(
+                                      values: [
+                                        statementDate(row.date),
+                                        row.type,
+                                        row.description,
+                                        row.paidBy,
+                                        row.participants,
+                                        statementMoney(row.totalAmountMinor),
+                                        row.splitMode,
+                                        statementMoney(row.yourShareMinor),
+                                        row.status,
+                                      ],
+                                      columns: _columns,
+                                      shaded: index.isOdd,
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _StatementTotals(statement: statement),
+      ],
+    );
+  }
+}
+
+class _StatementHeader extends StatelessWidget {
+  const _StatementHeader({required this.columns});
+
+  final List<(String, double)> columns;
+
+  @override
+  Widget build(BuildContext context) {
+    return _StatementTableRow(
+      values: [for (final column in columns) column.$1],
+      columns: columns,
+      header: true,
+    );
+  }
+}
+
+class _StatementTableRow extends StatelessWidget {
+  const _StatementTableRow({
+    required this.values,
+    required this.columns,
+    this.header = false,
+    this.shaded = false,
+  });
+
+  final List<String> values;
+  final List<(String, double)> columns;
+  final bool header;
+  final bool shaded;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final background = header
+        ? colorScheme.surfaceContainerHighest
+        : shaded
+        ? colorScheme.surfaceContainerLow
+        : colorScheme.surface;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var index = 0; index < columns.length; index++)
+          Container(
+            width: columns[index].$2,
+            constraints: BoxConstraints(minHeight: header ? 44 : 52),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              color: background,
+              border: Border(
+                right: BorderSide(color: colorScheme.outlineVariant),
+                bottom: BorderSide(color: colorScheme.outlineVariant),
+              ),
+            ),
+            child: Text(
+              values[index],
+              style: header
+                  ? Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    )
+                  : Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _StatementTotals extends StatelessWidget {
+  const _StatementTotals({required this.statement});
+
+  final GroupStatementData statement;
+
+  @override
+  Widget build(BuildContext context) {
+    final totals = [
+      ('Total group expenses', statement.totalGroupExpenses),
+      ('Total paid by user', statement.totalPaidByUser),
+      ('Total user share', statement.totalUserShare),
+      ('Total settled', statement.totalSettled),
+      ('Remaining balance', statement.remainingBalance),
+    ];
+    return SizedBox(
+      height: 104,
+      child: Scrollbar(
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (var index = 0; index < totals.length; index++) ...[
+                if (index > 0) const SizedBox(width: 8),
+                SizedBox(
+                  width: 210,
+                  child: StatementTotalTile(
+                    label: totals[index].$1,
+                    value: statementMoney(totals[index].$2),
+                    tone: totals[index].$2 < 0 ? Tone.warning : Tone.neutral,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class StatementTotalTile extends StatelessWidget {
+  const StatementTotalTile({
+    required this.label,
+    required this.value,
+    required this.tone,
+    super.key,
+  });
+
+  final String label;
+  final String value;
+  final Tone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = toneColor(context, tone);
+    return Container(
+      height: 94,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.summarize_outlined, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: Theme.of(context).textTheme.labelMedium),
+                Text(
+                  value,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String statementDate(DateTime date) {
+  return '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+}
+
+String dateTimeLabel(DateTime date) {
+  final hour = date.hour.toString().padLeft(2, '0');
+  final minute = date.minute.toString().padLeft(2, '0');
+  return '${statementDate(date)} $hour:$minute';
+}
+
+String statementMoney(int minor) {
+  final sign = minor < 0 ? '-' : '';
+  final absolute = minor.abs();
+  final rupees = absolute ~/ 100;
+  final paisa = absolute % 100;
+  final rupeeText = rupees.toString().replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => ',',
+  );
+  return '${sign}NPR $rupeeText.${paisa.toString().padLeft(2, '0')}';
+}
+
+String _csvCell(String value) {
+  final escaped = value.replaceAll('"', '""');
+  return '"$escaped"';
 }
 
 Future<void> showCreateGiftPoolDialog(BuildContext context) async {
