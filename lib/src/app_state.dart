@@ -1018,7 +1018,7 @@ class AppStore extends ChangeNotifier {
         entityType: 'settlement',
         entityId: settlement.id,
         title: 'Settlement failed',
-        body: 'Mock eSewa marked the payment as failed.',
+        body: 'The mock payment was marked as failed.',
       );
     } else {
       settlement
@@ -1043,7 +1043,7 @@ class AppStore extends ChangeNotifier {
         entityId: settlement.id,
         title: 'Settlement paid',
         body:
-            '${nameOf(settlement.payerId)} paid ${nameOf(settlement.payeeId)} ${money(settlement.amountMinor)} via mock eSewa.',
+            '${nameOf(settlement.payerId)} paid ${nameOf(settlement.payeeId)} ${money(settlement.amountMinor)} via Sangai Pay.',
       );
     }
     notifyListeners();
@@ -1165,7 +1165,7 @@ class AppStore extends ChangeNotifier {
   }
 
   // A gift sent to the wrong recipient can be cancelled only while it is still
-  // unopened. Cancelling reverses the eSewa payment that delivered it.
+  // unopened. Cancelling reverses the Sangai Pay payment that delivered it.
   String cancelGift(String giftId) {
     final gift = gifts.firstWhere((item) => item.id == giftId);
     if (gift.senderId != currentUserId) {
@@ -1193,7 +1193,7 @@ class AppStore extends ChangeNotifier {
       'A ${gift.template} gift was cancelled by the sender.',
     );
     notifyListeners();
-    return 'Gift cancelled and the eSewa payment was reversed.';
+    return 'Gift cancelled and the Sangai Pay payment was reversed.';
   }
 
   // Sent gifts cannot be silently deleted; they require a refund. A refund may
@@ -1226,7 +1226,7 @@ class AppStore extends ChangeNotifier {
       'The ${gift.template} gift was refunded by the sender.',
     );
     notifyListeners();
-    return 'Gift refunded through eSewa.';
+    return 'Gift refunded through Sangai Pay.';
   }
 
   void _reverseGiftPayment(GiftCard gift) {
@@ -1671,8 +1671,8 @@ class AppStore extends ChangeNotifier {
   }) {
     final payment = PaymentTransaction(
       id: _id('payment'),
-      paymentProvider: 'mock_esewa',
-      paymentReference: 'ESEWA-${_sequence + 777}',
+      paymentProvider: 'sangai_pay',
+      paymentReference: 'TXN-${_sequence + 777}',
       operationType: operationType,
       entityType: entityType,
       entityId: entityId,
@@ -1684,7 +1684,7 @@ class AppStore extends ChangeNotifier {
       confirmedAt: status == PaymentStatus.paid ? _now : null,
       failedAt: status == PaymentStatus.failed ? _now : null,
       rawPayload:
-          '{"provider":"mock_esewa","entity":"$entityType","amount_minor":$amountMinor}',
+          '{"provider":"sangai_pay","entity":"$entityType","amount_minor":$amountMinor}',
     );
     payments.add(payment);
     return payment;
