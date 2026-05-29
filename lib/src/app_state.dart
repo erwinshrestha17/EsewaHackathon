@@ -1299,81 +1299,6 @@ class AppStore extends ChangeNotifier {
     return false;
   }
 
-  // A gift sent to the wrong recipient can be cancelled only while it is still
-  // unopened. Cancelling reverses the Sangai Pay payment that delivered it.
-  String cancelGift(String giftId) {
-    final gift = gifts.firstWhere((item) => item.id == giftId);
-    if (gift.senderId != currentUserId) {
-      return 'Only the sender can cancel a gift.';
-    }
-    if (gift.status != GiftStatus.sent) {
-      return 'Only an unopened gift can be cancelled.';
-    }
-    gift
-      ..status = GiftStatus.cancelled
-      ..refundedAt = _now;
-    _reverseGiftPayment(gift);
-    _activity(
-      actorId: currentUserId,
-      eventType: 'gift_cancelled',
-      entityType: 'gift_card',
-      entityId: giftId,
-      title: 'Gift cancelled',
-      body: 'The ${gift.template} gift was cancelled before it was opened.',
-    );
-    _notify(
-      gift.recipientId,
-      'gift',
-      'Gift cancelled',
-      'A ${gift.template} gift was cancelled by the sender.',
-    );
-    notifyListeners();
-    return 'Gift cancelled and the Sangai Pay payment was reversed.';
-  }
-
-  // Sent gifts cannot be silently deleted; they require a refund. A refund may
-  // happen after the recipient has opened the card, in which case the card
-  // stays visible with a refunded status and no success celebration.
-  String refundGift(String giftId) {
-    final gift = gifts.firstWhere((item) => item.id == giftId);
-    if (gift.senderId != currentUserId) {
-      return 'Only the sender can refund a gift.';
-    }
-    if (gift.status != GiftStatus.sent && gift.status != GiftStatus.opened) {
-      return 'Only a delivered gift can be refunded.';
-    }
-    gift
-      ..status = GiftStatus.refunded
-      ..refundedAt = _now;
-    _reverseGiftPayment(gift);
-    _activity(
-      actorId: currentUserId,
-      eventType: 'gift_refunded',
-      entityType: 'gift_card',
-      entityId: giftId,
-      title: 'Gift refunded',
-      body: 'The ${gift.template} gift was refunded.',
-    );
-    _notify(
-      gift.recipientId,
-      'gift',
-      'Gift refunded',
-      'The ${gift.template} gift was refunded by the sender.',
-    );
-    notifyListeners();
-    return 'Gift refunded through Sangai Pay.';
-  }
-
-  void _reverseGiftPayment(GiftCard gift) {
-    final payment = payments.firstWhere(
-      (item) => item.id == gift.paymentTransactionId,
-    );
-    payment
-      ..status = PaymentStatus.refunded
-      ..refundedAt = _now
-      ..updatedAt = _now;
-  }
-
   String createGiftPool({
     required String groupId,
     required String recipientId,
@@ -1408,8 +1333,19 @@ class AppStore extends ChangeNotifier {
     return pool.id;
   }
 
-  void contributeToGiftPool(String giftPoolId, int amountMinor) {
+  String contributeToGiftPool(String giftPoolId, int amountMinor) {
     final pool = giftPools.firstWhere((item) => item.id == giftPoolId);
+    final remaining = pool.targetAmountMinor - giftPoolTotal(giftPoolId);
+    if (amountMinor <= 0) {
+      return 'Enter a contribution amount greater than zero.';
+    }
+    // A pool can never collect more than its target.
+    if (remaining <= 0) {
+      return 'This gift pool has already reached its target.';
+    }
+    if (amountMinor > remaining) {
+      return 'Contribution cannot exceed the ${money(remaining)} remaining.';
+    }
     final contribution = GiftPoolContribution(
       id: _id('gift-pool-contribution'),
       giftPoolId: giftPoolId,
@@ -1446,6 +1382,7 @@ class AppStore extends ChangeNotifier {
           '${nameOf(currentUserId)} added ${money(amountMinor)} to ${pool.title}.',
     );
     notifyListeners();
+    return 'Added ${money(amountMinor)} to ${pool.title}.';
   }
 
   int giftPoolTotal(String giftPoolId) {
@@ -1456,6 +1393,14 @@ class AppStore extends ChangeNotifier {
               item.status == PaymentStatus.paid,
         )
         .fold<int>(0, (sum, item) => sum + item.amountMinor);
+  }
+
+  /// All contributions to a pool, newest first, for the contribution history.
+  List<GiftPoolContribution> contributionsForGiftPool(String giftPoolId) {
+    return giftPoolContributions
+        .where((item) => item.giftPoolId == giftPoolId)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void cancelGiftPool(String giftPoolId) {

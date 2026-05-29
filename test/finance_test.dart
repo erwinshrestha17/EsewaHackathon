@@ -213,7 +213,7 @@ void main() {
     expect(store.gifts.where((g) => g.amountMinor == 0), isEmpty);
   });
 
-  test('a gift can be cancelled only while unopened and reverses payment', () {
+  test('a sent gift is final and can only be opened by the recipient', () {
     final store = AppStore();
     store.sendGift(
       recipientId: 'u-maya',
@@ -222,36 +222,17 @@ void main() {
       message: 'Happy birthday',
     );
     final gift = store.gifts.firstWhere((g) => g.template == 'Birthday');
+    expect(gift.status, GiftStatus.sent);
 
-    expect(store.cancelGift(gift.id), contains('reversed'));
-    expect(gift.status, GiftStatus.cancelled);
-    final payment = store.payments.firstWhere(
-      (p) => p.id == gift.paymentTransactionId,
-    );
-    expect(payment.status, PaymentStatus.refunded);
-  });
+    // The sender cannot open their own gift.
+    expect(store.openGift(gift.id), isFalse);
+    expect(gift.status, GiftStatus.sent);
 
-  test('an opened gift cannot be cancelled but can be refunded', () {
-    final store = AppStore();
-    store.sendGift(
-      recipientId: 'u-maya',
-      template: 'Wedding',
-      amountMinor: npr(300),
-      message: 'Congrats',
-    );
-    final gift = store.gifts.firstWhere((g) => g.template == 'Wedding');
-
-    // Recipient opens the gift.
+    // The recipient can open it once.
     store.switchUser('u-maya');
     expect(store.openGift(gift.id), isTrue);
     expect(gift.status, GiftStatus.opened);
-
-    // Sender can no longer cancel, but can refund after opening.
-    store.switchUser('u-sita');
-    expect(store.cancelGift(gift.id), contains('unopened'));
-    expect(gift.status, GiftStatus.opened);
-    expect(store.refundGift(gift.id), contains('refunded'));
-    expect(gift.status, GiftStatus.refunded);
+    expect(store.openGift(gift.id), isFalse);
   });
 
   test('QR invites preserve hyphenated user IDs', () {

@@ -1422,6 +1422,8 @@ class _GiftsScreenState extends State<GiftsScreen> {
                         for (final pool in store.giftPools)
                           ListTile(
                             contentPadding: EdgeInsets.zero,
+                            onTap: () =>
+                                showGiftPoolDetailsDialog(context, pool),
                             leading: const CircleAvatar(
                               child: Icon(Icons.redeem),
                             ),
@@ -1431,6 +1433,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
                             ),
                             trailing: Wrap(
                               spacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 StatusPill(
                                   label: enumLabel(pool.status),
@@ -1438,15 +1441,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
                                       ? Tone.success
                                       : Tone.neutral,
                                 ),
-                                FilledButton(
-                                  onPressed: pool.status == GiftPoolStatus.open
-                                      ? () => showContributeToGiftPoolDialog(
-                                          context,
-                                          pool,
-                                        )
-                                      : null,
-                                  child: const Text('Contribute'),
-                                ),
+                                const Icon(Icons.chevron_right),
                               ],
                             ),
                           ),
@@ -1471,7 +1466,6 @@ class _GiftsScreenState extends State<GiftsScreen> {
                         padding: const EdgeInsets.only(bottom: 14),
                         child: GiftEnvelopeCard(
                           gift: gift,
-                          isSender: gift.senderId == store.currentUserId,
                           isRecipient: gift.recipientId == store.currentUserId,
                           senderName: store.nameOf(gift.senderId),
                           recipientName: store.nameOf(gift.recipientId),
@@ -1485,10 +1479,6 @@ class _GiftsScreenState extends State<GiftsScreen> {
                               );
                             }
                           },
-                          onCancel: () =>
-                              showSnack(context, store.cancelGift(gift.id)),
-                          onRefund: () =>
-                              showSnack(context, store.refundGift(gift.id)),
                         ),
                       ),
                   ],
@@ -1564,7 +1554,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
             labelText: 'Add a message…',
             helperText: 'Visible only to you and the recipient.',
             suffixIcon: IconButton(
-              tooltip: 'Stickers & GIFs',
+              tooltip: 'Stickers',
               icon: const Icon(Icons.emoji_emotions_outlined),
               onPressed: _openStickerPicker,
             ),
@@ -1796,8 +1786,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
     );
   }
 
-  // Inserts text (an emoji sticker or a GIF shortcode) into the message at the
-  // current cursor position, falling back to appending at the end.
+  // Inserts an emoji sticker into the message at the cursor (or appends it).
   void _insertIntoMessage(String insert) {
     final text = _message.text;
     final selection = _message.selection;
@@ -1816,25 +1805,38 @@ class _GiftsScreenState extends State<GiftsScreen> {
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {
-        return DefaultTabController(
-          length: 2,
-          child: SizedBox(
-            height: 400,
-            child: Column(
-              children: [
-                const TabBar(
-                  tabs: [
-                    Tab(text: 'Stickers'),
-                    Tab(text: 'GIFs'),
+        return SizedBox(
+          height: 360,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'Stickers',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+              ),
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: 8,
+                  padding: const EdgeInsets.all(12),
+                  children: [
+                    for (final emoji in giftStickerEmojis)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => _insertIntoMessage(emoji),
+                        child: Center(
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 26),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-                Expanded(
-                  child: TabBarView(
-                    children: [_buildStickerGrid(), _buildGifGrid()],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -2121,9 +2123,8 @@ class GiftCardVisual extends StatelessWidget {
                   ),
                   if (message.trim().isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    GiftMessageText(
-                      message: message.trim(),
-                      stickerSize: big ? 26 : 20,
+                    Text(
+                      '“${message.trim()}”',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.95),
                         fontSize: 13,
@@ -2247,196 +2248,29 @@ const giftStickerEmojis = <String>[
   '💫',
 ];
 
-/// Animation styles used to bring a [GifSticker] to life without bundled
-/// binary GIF assets — they are rendered live with Flutter animations.
-enum StickerMotion { pulse, bounce, float, flicker, spin }
-
-/// An in-app "GIF": a named animated sticker referenced from a gift message by
-/// the shortcode `:id:` (e.g. `:fireworks:`).
-class GifSticker {
-  const GifSticker(this.id, this.emoji, this.label, this.motion);
-
-  final String id;
-  final String emoji;
-  final String label;
-  final StickerMotion motion;
-}
-
-const giftGifStickers = <GifSticker>[
-  GifSticker('celebrate', '🎉', 'Celebrate', StickerMotion.pulse),
-  GifSticker('fireworks', '🎆', 'Fireworks', StickerMotion.bounce),
-  GifSticker('hearts', '💖', 'Hearts', StickerMotion.float),
-  GifSticker('diya', '🪔', 'Diya', StickerMotion.flicker),
-  GifSticker('balloon', '🎈', 'Balloons', StickerMotion.float),
-  GifSticker('dance', '💃', 'Dance', StickerMotion.bounce),
-  GifSticker('clap', '👏', 'Clap', StickerMotion.bounce),
-  GifSticker('sparkle', '✨', 'Sparkle', StickerMotion.spin),
-];
-
-GifSticker? gifStickerById(String id) {
-  for (final sticker in giftGifStickers) {
-    if (sticker.id == id) return sticker;
-  }
-  return null;
-}
-
-/// Renders the looping animation for a single [GifSticker].
-class AnimatedSticker extends StatefulWidget {
-  const AnimatedSticker({required this.sticker, this.size = 22, super.key});
-
-  final GifSticker sticker;
-  final double size;
-
-  @override
-  State<AnimatedSticker> createState() => _AnimatedStickerState();
-}
-
-class _AnimatedStickerState extends State<AnimatedSticker>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
-  )..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final glyph = Text(
-      widget.sticker.emoji,
-      style: TextStyle(fontSize: widget.size),
-    );
-    return AnimatedBuilder(
-      animation: _controller,
-      child: glyph,
-      builder: (context, child) {
-        final t = _controller.value;
-        switch (widget.sticker.motion) {
-          case StickerMotion.pulse:
-            return Transform.scale(
-              scale: 0.82 + 0.36 * Curves.easeInOut.transform(t),
-              child: child,
-            );
-          case StickerMotion.bounce:
-            return Transform.translate(
-              offset: Offset(0, -8 * math.sin(t * math.pi)),
-              child: child,
-            );
-          case StickerMotion.float:
-            return Opacity(
-              opacity: (0.7 + 0.3 * (1 - (t - 0.5).abs() * 2)).clamp(0.0, 1.0),
-              child: Transform.translate(
-                offset: Offset(0, -6 * math.sin(t * math.pi * 2)),
-                child: child,
-              ),
-            );
-          case StickerMotion.flicker:
-            final op = (0.6 + 0.4 * (0.5 + 0.5 * math.sin(t * math.pi * 4)))
-                .clamp(0.0, 1.0);
-            return Opacity(
-              opacity: op,
-              child: Transform.scale(scale: 0.95 + 0.1 * op, child: child),
-            );
-          case StickerMotion.spin:
-            return Transform.rotate(angle: t * 2 * math.pi, child: child);
-        }
-      },
-    );
-  }
-}
-
-/// Renders a gift message, replacing any `:id:` GIF shortcodes with live
-/// [AnimatedSticker]s while leaving emoji and plain text intact.
-class GiftMessageText extends StatelessWidget {
-  const GiftMessageText({
-    required this.message,
-    required this.style,
-    this.stickerSize = 22,
-    this.quoted = true,
-    super.key,
-  });
-
-  final String message;
-  final TextStyle style;
-  final double stickerSize;
-  final bool quoted;
-
-  static final _shortcode = RegExp(r':([a-z]+):');
-
-  @override
-  Widget build(BuildContext context) {
-    final hasGif = giftGifStickers.any(
-      (sticker) => message.contains(':${sticker.id}:'),
-    );
-    if (!hasGif) {
-      return Text(quoted ? '“$message”' : message, style: style);
-    }
-
-    final pieces = <Widget>[];
-    if (quoted) pieces.add(Text('“', style: style));
-    var index = 0;
-    for (final match in _shortcode.allMatches(message)) {
-      final sticker = gifStickerById(match.group(1)!);
-      if (sticker == null) continue;
-      if (match.start > index) {
-        pieces.add(Text(message.substring(index, match.start), style: style));
-      }
-      pieces.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 1),
-          child: AnimatedSticker(sticker: sticker, size: stickerSize),
-        ),
-      );
-      index = match.end;
-    }
-    if (index < message.length) {
-      pieces.add(Text(message.substring(index), style: style));
-    }
-    if (quoted) pieces.add(Text('”', style: style));
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      runSpacing: 2,
-      children: pieces,
-    );
-  }
-}
-
 /// A ledger entry: the themed gift card plus sender/recipient actions.
 class GiftEnvelopeCard extends StatelessWidget {
   const GiftEnvelopeCard({
     required this.gift,
-    required this.isSender,
     required this.isRecipient,
     required this.senderName,
     required this.recipientName,
     required this.onOpen,
-    required this.onCancel,
-    required this.onRefund,
     super.key,
   });
 
   final GiftCard gift;
-  final bool isSender;
   final bool isRecipient;
   final String senderName;
   final String recipientName;
   final VoidCallback onOpen;
-  final VoidCallback onCancel;
-  final VoidCallback onRefund;
 
   @override
   Widget build(BuildContext context) {
     final theme = giftThemeFor(gift.template);
-    final reversed =
-        gift.status == GiftStatus.refunded ||
-        gift.status == GiftStatus.cancelled;
+    // Gifts are final once sent: the recipient can open a sent gift, but it
+    // can no longer be cancelled or refunded.
     final canOpen = isRecipient && gift.status == GiftStatus.sent;
-    final canCancel = isSender && gift.status == GiftStatus.sent;
-    final canRefund = isSender && gift.status == GiftStatus.opened;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2447,7 +2281,6 @@ class GiftEnvelopeCard extends StatelessWidget {
           fromName: senderName.split(' ').first,
           toName: recipientName.split(' ').first,
           message: gift.message,
-          faded: reversed,
         ),
         const SizedBox(height: 10),
         Row(
@@ -2463,23 +2296,8 @@ class GiftEnvelopeCard extends StatelessWidget {
                 icon: const Icon(Icons.drafts_outlined, size: 18),
                 label: const Text('Open'),
               ),
-            if (canCancel)
-              OutlinedButton(onPressed: onCancel, child: const Text('Cancel')),
-            if (canRefund)
-              OutlinedButton(onPressed: onRefund, child: const Text('Refund')),
           ],
         ),
-        if (reversed) ...[
-          const SizedBox(height: 6),
-          Text(
-            gift.status == GiftStatus.cancelled
-                ? 'Cancelled before opening • Sangai Pay payment reversed.'
-                : 'Refunded • Sangai Pay payment reversed.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -8445,6 +8263,9 @@ Future<void> showContributeToGiftPoolDialog(
           final raised = store.giftPoolTotal(pool.id);
           final remaining = pool.targetAmountMinor - raised;
           final amountMinor = parseMoneyToMinor(amount.text);
+          final exceedsRemaining = amountMinor > remaining;
+          final canContribute =
+              remaining > 0 && amountMinor > 0 && !exceedsRemaining;
           return AlertDialog(
             title: const Text('Contribute to gift pool'),
             content: SizedBox(
@@ -8473,12 +8294,16 @@ Future<void> showContributeToGiftPoolDialog(
                   TextField(
                     controller: amount,
                     autofocus: true,
+                    enabled: remaining > 0,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Amount',
                       prefixText: 'NPR ',
+                      errorText: exceedsRemaining
+                          ? 'Cannot exceed the ${money(remaining)} remaining.'
+                          : null,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -8487,11 +8312,12 @@ Future<void> showContributeToGiftPoolDialog(
                     runSpacing: 8,
                     children: [
                       for (final preset in const [251, 500, 1100])
-                        ActionChip(
-                          label: Text('Rs $preset'),
-                          onPressed: () =>
-                              setState(() => amount.text = preset.toString()),
-                        ),
+                        if (npr(preset) <= remaining)
+                          ActionChip(
+                            label: Text('Rs $preset'),
+                            onPressed: () =>
+                                setState(() => amount.text = preset.toString()),
+                          ),
                       if (remaining > 0)
                         ActionChip(
                           label: Text('Remaining ${money(remaining)}'),
@@ -8510,7 +8336,7 @@ Future<void> showContributeToGiftPoolDialog(
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: amountMinor > 0
+                onPressed: canContribute
                     ? () {
                         Navigator.pop(dialogContext);
                         unawaited(
@@ -8580,6 +8406,112 @@ Future<void> showContributeToGiftPoolDialog(
     },
   );
   amount.dispose();
+}
+
+Future<void> showGiftPoolDetailsDialog(
+  BuildContext context,
+  GiftPool pool,
+) async {
+  final store = StoreScope.of(context);
+  final contributions = store.contributionsForGiftPool(pool.id);
+  final raised = store.giftPoolTotal(pool.id);
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Gift pool details'),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                pool.title,
+                style: Theme.of(
+                  dialogContext,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'For ${store.nameOf(pool.recipientId)} • '
+                '${money(raised)} of ${money(pool.targetAmountMinor)} raised '
+                'from ${contributions.length} '
+                '${contributions.length == 1 ? 'contribution' : 'contributions'}',
+                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (contributions.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text('No contributions yet.'),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: contributions.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final contribution = contributions[index];
+                      final paid =
+                          contribution.status == PaymentStatus.paid;
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: UserAvatar(
+                          user: store.userById(contribution.contributorId),
+                        ),
+                        title: Text(
+                          store.nameOf(contribution.contributorId),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: Text(dateTimeLabel(contribution.createdAt)),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              money(contribution.amountMinor),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            StatusPill(
+                              label: enumLabel(contribution.status),
+                              tone: paid ? Tone.success : Tone.neutral,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+          if (pool.status == GiftPoolStatus.open)
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                showContributeToGiftPoolDialog(context, pool);
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Contribute'),
+            ),
+        ],
+      );
+    },
+  );
 }
 
 Future<void> showCreateDhukutiDialog(BuildContext context) async {
