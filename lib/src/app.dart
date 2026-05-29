@@ -1222,6 +1222,8 @@ class _GiftsScreenState extends State<GiftsScreen> {
                         for (final pool in store.giftPools)
                           ListTile(
                             contentPadding: EdgeInsets.zero,
+                            onTap: () =>
+                                showGiftPoolDetailsDialog(context, pool),
                             leading: const CircleAvatar(
                               child: Icon(Icons.redeem),
                             ),
@@ -1231,6 +1233,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
                             ),
                             trailing: Wrap(
                               spacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 StatusPill(
                                   label: enumLabel(pool.status),
@@ -1238,15 +1241,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
                                       ? Tone.success
                                       : Tone.neutral,
                                 ),
-                                FilledButton(
-                                  onPressed: pool.status == GiftPoolStatus.open
-                                      ? () => showContributeToGiftPoolDialog(
-                                          context,
-                                          pool,
-                                        )
-                                      : null,
-                                  child: const Text('Contribute'),
-                                ),
+                                const Icon(Icons.chevron_right),
                               ],
                             ),
                           ),
@@ -7930,6 +7925,112 @@ Future<void> showContributeToGiftPoolDialog(
     },
   );
   amount.dispose();
+}
+
+Future<void> showGiftPoolDetailsDialog(
+  BuildContext context,
+  GiftPool pool,
+) async {
+  final store = StoreScope.of(context);
+  final contributions = store.contributionsForGiftPool(pool.id);
+  final raised = store.giftPoolTotal(pool.id);
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Gift pool details'),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                pool.title,
+                style: Theme.of(
+                  dialogContext,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'For ${store.nameOf(pool.recipientId)} • '
+                '${money(raised)} of ${money(pool.targetAmountMinor)} raised '
+                'from ${contributions.length} '
+                '${contributions.length == 1 ? 'contribution' : 'contributions'}',
+                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (contributions.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text('No contributions yet.'),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: contributions.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final contribution = contributions[index];
+                      final paid =
+                          contribution.status == PaymentStatus.paid;
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: UserAvatar(
+                          user: store.userById(contribution.contributorId),
+                        ),
+                        title: Text(
+                          store.nameOf(contribution.contributorId),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: Text(dateTimeLabel(contribution.createdAt)),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              money(contribution.amountMinor),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            StatusPill(
+                              label: enumLabel(contribution.status),
+                              tone: paid ? Tone.success : Tone.neutral,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+          if (pool.status == GiftPoolStatus.open)
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                showContributeToGiftPoolDialog(context, pool);
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Contribute'),
+            ),
+        ],
+      );
+    },
+  );
 }
 
 Future<void> showCreateDhukutiDialog(BuildContext context) async {

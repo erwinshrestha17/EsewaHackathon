@@ -1359,6 +1359,14 @@ class AppStore extends ChangeNotifier {
         .fold<int>(0, (sum, item) => sum + item.amountMinor);
   }
 
+  /// All contributions to a pool, newest first, for the contribution history.
+  List<GiftPoolContribution> contributionsForGiftPool(String giftPoolId) {
+    return giftPoolContributions
+        .where((item) => item.giftPoolId == giftPoolId)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
   void cancelGiftPool(String giftPoolId) {
     final pool = giftPools.firstWhere((item) => item.id == giftPoolId);
     pool.status = GiftPoolStatus.cancelled;
