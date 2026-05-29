@@ -739,12 +739,13 @@ class GroupDetail extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final members = store.membersForGroup(group.id);
+    final activeMembers = store.membersForGroup(group.id, activeOnly: true);
+    final currentMember = store.memberForGroup(group.id, store.currentUserId);
+    final isCurrentMember = currentMember?.status == MemberStatus.active;
+    final isAdmin = store.isGroupAdmin(group.id, store.currentUserId);
     final balances = store.balancesForGroup(group.id);
     final suggestions = store.suggestionsForGroup(group.id);
-    final canAddExpense = store.isActiveGroupMember(
-      group.id,
-      store.currentUserId,
-    );
+    final canAddExpense = isCurrentMember && !group.isDisbanded;
     final groupExpenses =
         store.expenses.where((expense) => expense.groupId == group.id).toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -771,6 +772,19 @@ class GroupDetail extends StatelessWidget {
               icon: const Icon(Icons.description_outlined),
               label: const Text('Statement'),
             ),
+            OutlinedButton.icon(
+              onPressed: isCurrentMember
+                  ? () => showLeaveGroupDialog(context, group.id)
+                  : null,
+              icon: const Icon(Icons.logout),
+              label: const Text('Leave group'),
+            ),
+            if (isAdmin)
+              FilledButton.tonalIcon(
+                onPressed: () => showDisbandGroupDialog(context, group.id),
+                icon: const Icon(Icons.delete_forever_outlined),
+                label: const Text('Disband'),
+              ),
           ],
         ),
       ),
@@ -796,6 +810,12 @@ class GroupDetail extends StatelessWidget {
                 : Tone.warning,
           ),
           StatTile(
+            label: 'Active members',
+            value: '${activeMembers.length}',
+            icon: Icons.group_outlined,
+            tone: Tone.neutral,
+          ),
+          StatTile(
             label: 'Suggestions',
             value: '${suggestions.length}',
             icon: Icons.route_outlined,
@@ -814,7 +834,9 @@ class GroupDetail extends StatelessWidget {
       SectionPanel(
         title: 'Members and Roles',
         action: OutlinedButton.icon(
-          onPressed: () => showAddMemberDialog(context, group.id),
+          onPressed: isAdmin && !group.isDisbanded
+              ? () => showAddMemberDialog(context, group.id)
+              : null,
           icon: const Icon(Icons.person_add_alt_1),
           label: const Text('Add'),
         ),
@@ -833,11 +855,14 @@ class GroupDetail extends StatelessWidget {
                   '${member.status == MemberStatus.removed ? ' • inactive' : ''}',
                 ),
                 onDeleted:
-                    member.userId == store.currentUserId ||
-                        member.status == MemberStatus.removed
-                    ? null
-                    : () => store.removeGroupMember(group.id, member.userId),
-                onPressed: () => showRoleDialog(context, group.id, member),
+                    isAdmin &&
+                        member.userId != store.currentUserId &&
+                        member.status == MemberStatus.active
+                    ? () => showRemoveMemberDialog(context, group.id, member)
+                    : null,
+                onPressed: isAdmin && member.status == MemberStatus.active
+                    ? () => showRoleDialog(context, group.id, member)
+                    : null,
               ),
           ],
         ),
@@ -1717,7 +1742,7 @@ class ScreenHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 620;
+        final compact = constraints.maxWidth < 840;
         final titleBlock = Row(
           children: [
             CircleAvatar(child: Icon(icon)),
@@ -1752,7 +1777,9 @@ class ScreenHeader extends StatelessWidget {
           children: [
             Expanded(child: titleBlock),
             const SizedBox(width: 16),
-            action!,
+            Flexible(
+              child: Align(alignment: Alignment.topRight, child: action!),
+            ),
           ],
         );
       },
@@ -4640,6 +4667,10 @@ Future<void> showCreateGroupDialog(BuildContext context) async {
 
 Future<void> showAddMemberDialog(BuildContext context, String groupId) async {
   final store = StoreScope.of(context);
+  if (!store.isGroupAdmin(groupId, store.currentUserId)) {
+    showSnack(context, 'Only group admins can add members.');
+    return;
+  }
   final existing = store
       .membersForGroup(groupId, activeOnly: true)
       .map((member) => member.userId)
@@ -4722,12 +4753,113 @@ Future<void> showAddMemberDialog(BuildContext context, String groupId) async {
   );
 }
 
+Future<void> showLeaveGroupDialog(BuildContext context, String groupId) async {
+  final store = StoreScope.of(context);
+  final group = store.groupById(groupId);
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Leave group?'),
+        content: Text(
+          'You will stop participating in new expenses for ${group.name}. Existing history remains available to the group.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final error = store.leaveGroup(groupId);
+              Navigator.pop(dialogContext);
+              showSnack(context, error ?? 'You left ${group.name}.');
+            },
+            child: const Text('Leave group'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Future<void> showDisbandGroupDialog(
+  BuildContext context,
+  String groupId,
+) async {
+  final store = StoreScope.of(context);
+  final group = store.groupById(groupId);
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Disband group?'),
+        content: Text(
+          'This removes all active members from ${group.name} and hides the group from active group lists. Existing expense history is preserved.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final error = store.disbandGroup(groupId);
+              Navigator.pop(dialogContext);
+              showSnack(context, error ?? '${group.name} was disbanded.');
+            },
+            child: const Text('Disband'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Future<void> showRemoveMemberDialog(
+  BuildContext context,
+  String groupId,
+  GroupMember member,
+) async {
+  final store = StoreScope.of(context);
+  final name = store.nameOf(member.userId);
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: Text('Remove $name?'),
+        content: Text(
+          '$name will be inactive for new expenses. Existing balances and history are preserved.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              store.removeGroupMember(groupId, member.userId);
+              Navigator.pop(dialogContext);
+              showSnack(context, '$name was removed from the group.');
+            },
+            child: const Text('Remove'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 Future<void> showRoleDialog(
   BuildContext context,
   String groupId,
   GroupMember member,
 ) async {
   final store = StoreScope.of(context);
+  if (!store.isGroupAdmin(groupId, store.currentUserId)) {
+    showSnack(context, 'Only group admins can change roles.');
+    return;
+  }
   var role = member.role;
   await showDialog<void>(
     context: context,

@@ -105,6 +105,44 @@ void main() {
     },
   );
 
+  test('members can leave active groups without deleting history', () {
+    final store = AppStore();
+    final groupId = store.createGroup(
+      name: 'Leave test',
+      category: GroupCategory.custom,
+      memberIds: const ['u-arjun'],
+    );
+
+    store.switchUser('u-arjun');
+    expect(store.visibleGroups.map((group) => group.id), contains(groupId));
+    expect(store.leaveGroup(groupId), isNull);
+
+    expect(store.isActiveGroupMember(groupId, 'u-arjun'), isFalse);
+    expect(
+      store.visibleGroups.map((group) => group.id),
+      isNot(contains(groupId)),
+    );
+    expect(store.groupById(groupId).isDisbanded, isFalse);
+  });
+
+  test('admins can disband groups and deactivate all members', () {
+    final store = AppStore();
+    final groupId = store.createGroup(
+      name: 'Disband test',
+      category: GroupCategory.custom,
+      memberIds: const ['u-arjun', 'u-rina'],
+    );
+
+    expect(store.disbandGroup(groupId), isNull);
+
+    expect(store.groupById(groupId).isDisbanded, isTrue);
+    expect(store.membersForGroup(groupId, activeOnly: true), isEmpty);
+    expect(
+      store.visibleGroups.map((group) => group.id),
+      isNot(contains(groupId)),
+    );
+  });
+
   test('seeded store keeps group balances zero-sum after settlement', () {
     final store = AppStore();
     final balances = store.balancesForGroup('g-dashain');

@@ -77,10 +77,16 @@ class AppStore extends ChangeNotifier {
 
   List<Group> get visibleGroups {
     final ids = groupMembers
-        .where((member) => member.userId == currentUserId)
+        .where(
+          (member) =>
+              member.userId == currentUserId &&
+              member.status == MemberStatus.active,
+        )
         .map((member) => member.groupId)
         .toSet();
-    return groups.where((group) => ids.contains(group.id)).toList()
+    return groups
+        .where((group) => ids.contains(group.id) && !group.isDisbanded)
+        .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
@@ -504,6 +510,23 @@ class AppStore extends ChangeNotifier {
     );
   }
 
+  bool isGroupAdmin(String groupId, String userId) {
+    return groupMembers.any(
+      (member) =>
+          member.groupId == groupId &&
+          member.userId == userId &&
+          member.role == MemberRole.admin &&
+          member.status == MemberStatus.active,
+    );
+  }
+
+  List<GroupMember> activeAdminsForGroup(String groupId) {
+    return membersForGroup(
+      groupId,
+      activeOnly: true,
+    ).where((member) => member.role == MemberRole.admin).toList();
+  }
+
   void addGroupMember(String groupId, String userId, MemberRole role) {
     if (!canInviteOrGift(currentUserId, userId)) {
       return;
@@ -541,6 +564,13 @@ class AppStore extends ChangeNotifier {
   }
 
   void removeGroupMember(String groupId, String userId) {
+    if (!isGroupAdmin(groupId, currentUserId) && userId != currentUserId) {
+      return;
+    }
+    if (memberForGroup(groupId, userId)?.role == MemberRole.admin &&
+        activeAdminsForGroup(groupId).length <= 1) {
+      return;
+    }
     final member =
         groupMembers
             .where(
@@ -571,9 +601,76 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? leaveGroup(String groupId) {
+    final group = groupByIdOrNull(groupId);
+    if (group == null || group.isDisbanded) {
+      return 'Group is no longer available.';
+    }
+    final member = memberForGroup(groupId, currentUserId);
+    if (member == null || member.status != MemberStatus.active) {
+      return 'You are not an active member of this group.';
+    }
+    if (member.role == MemberRole.admin &&
+        activeAdminsForGroup(groupId).length <= 1) {
+      return 'Assign another admin or disband the group before leaving.';
+    }
+    removeGroupMember(groupId, currentUserId);
+    if (selectedGroupId == groupId) {
+      selectedGroupId = visibleGroups.isEmpty ? null : visibleGroups.first.id;
+    }
+    notifyListeners();
+    return null;
+  }
+
+  String? disbandGroup(String groupId) {
+    final group = groupByIdOrNull(groupId);
+    if (group == null) {
+      return 'Group is no longer available.';
+    }
+    if (group.isDisbanded) {
+      return 'Group is already disbanded.';
+    }
+    if (!isGroupAdmin(groupId, currentUserId)) {
+      return 'Only group admins can disband this group.';
+    }
+    group
+      ..disbandedAt = _now
+      ..disbandedBy = currentUserId;
+    for (final member in groupMembers.where(
+      (member) =>
+          member.groupId == groupId && member.status == MemberStatus.active,
+    )) {
+      member
+        ..status = MemberStatus.removed
+        ..removedAt = _now;
+    }
+    _activity(
+      actorId: currentUserId,
+      groupId: groupId,
+      eventType: 'group_disbanded',
+      entityType: 'group',
+      entityId: groupId,
+      title: 'Group disbanded',
+      body: '${group.name} was disbanded by ${nameOf(currentUserId)}.',
+    );
+    if (selectedGroupId == groupId) {
+      selectedGroupId = visibleGroups.isEmpty ? null : visibleGroups.first.id;
+    }
+    notifyListeners();
+    return null;
+  }
+
   void updateMemberRole(String groupId, String userId, MemberRole role) {
+    if (!isGroupAdmin(groupId, currentUserId)) {
+      return;
+    }
     final member = memberForGroup(groupId, userId);
     if (member == null) {
+      return;
+    }
+    if (member.role == MemberRole.admin &&
+        role != MemberRole.admin &&
+        activeAdminsForGroup(groupId).length <= 1) {
       return;
     }
     member.role = role;

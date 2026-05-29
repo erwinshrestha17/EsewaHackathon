@@ -222,6 +222,8 @@ class Group {
     required this.createdBy,
     required this.createdAt,
     this.latestSettlementLockAt,
+    this.disbandedAt,
+    this.disbandedBy,
   });
 
   final String id;
@@ -231,6 +233,10 @@ class Group {
   final String createdBy;
   final DateTime createdAt;
   DateTime? latestSettlementLockAt;
+  DateTime? disbandedAt;
+  String? disbandedBy;
+
+  bool get isDisbanded => disbandedAt != null;
 }
 
 class GroupMember {

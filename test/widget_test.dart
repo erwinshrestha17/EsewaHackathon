@@ -59,11 +59,12 @@ void main() {
     expect(find.text('Select a group'), findsNothing);
   });
 
-  testWidgets('inactive current member cannot open add expense flow', (
+  testWidgets('inactive current member no longer sees group detail', (
     tester,
   ) async {
     final store = AppStore()
-      ..removeGroupMember('g-dashain', 'u-sita')
+      ..switchUser('u-rina')
+      ..removeGroupMember('g-dashain', 'u-rina')
       ..selectedGroupId = 'g-dashain';
 
     await tester.pumpWidget(
@@ -73,10 +74,8 @@ void main() {
       ),
     );
 
-    final addExpense = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Add expense'),
-    );
-    expect(addExpense.onPressed, isNull);
+    expect(find.widgetWithText(FilledButton, 'Add expense'), findsNothing);
+    expect(find.text('Dashain Khasi Split'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
