@@ -236,6 +236,40 @@ void main() {
     );
   });
 
+  test('admins can rename groups after creation', () {
+    final store = AppStore();
+    final groupId = store.createGroup(
+      name: 'Old trip name',
+      category: GroupCategory.custom,
+      memberIds: const ['u-arjun'],
+    );
+
+    expect(store.renameGroup(groupId, 'Pokhara Trip'), isNull);
+
+    expect(store.groupById(groupId).name, 'Pokhara Trip');
+    expect(
+      store.activityForGroup(groupId).map((item) => item.eventType),
+      contains('group_renamed'),
+    );
+  });
+
+  test('non-admin members cannot rename groups', () {
+    final store = AppStore();
+    final groupId = store.createGroup(
+      name: 'Admin only name',
+      category: GroupCategory.custom,
+      memberIds: const ['u-arjun'],
+    );
+
+    store.switchUser('u-arjun');
+    expect(
+      store.renameGroup(groupId, 'Member renamed'),
+      'Only group admins can rename this group.',
+    );
+
+    expect(store.groupById(groupId).name, 'Admin only name');
+  });
+
   test('seeded store keeps group balances zero-sum after settlement', () {
     final store = AppStore();
     final balances = store.balancesForGroup('g-dashain');

@@ -72,6 +72,7 @@ void main() {
     WidgetTester tester,
     AppStore store,
   ) async {
+    store.selectedGroupId = 'g-dashain';
     tester.view.physicalSize = const Size(1000, 3200);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
@@ -119,6 +120,36 @@ void main() {
     expect(find.text('Fast Demo Flow'), findsOneWidget);
   });
 
+  testWidgets('Scan/Add sheet opens without vertical overflow', (tester) async {
+    tester.view.physicalSize = const Size(800, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    SharedPreferences.setMockInitialValues({
+      'auth.hasSeenIntro': true,
+      'auth.isLoggedIn': true,
+      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
+    });
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(),
+        child: StoreScope(notifier: AppStore(), child: const SangaiApp()),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Scan/Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Scan or add'), findsOneWidget);
+    expect(find.text('Scan Receipt'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Groups screen tolerates a stale selected group', (tester) async {
     final store = AppStore()..selectedGroupId = 'missing-group';
 
@@ -132,6 +163,61 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Expense Groups'), findsWidgets);
     expect(find.text('Select a group'), findsNothing);
+    expect(find.text('Groups overview'), findsOneWidget);
+  });
+
+  testWidgets('Groups screen does not open an expense group by default', (
+    tester,
+  ) async {
+    final store = AppStore();
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: const MaterialApp(home: GroupsScreen()),
+      ),
+    );
+
+    expect(store.selectedGroupId, isNull);
+    expect(find.text('Groups overview'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Add expense'), findsNothing);
+  });
+
+  testWidgets('create group dialog starts with members unselected', (
+    tester,
+  ) async {
+    final store = AppStore();
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: FilledButton(
+                  onPressed: () => showCreateGroupDialog(context),
+                  child: const Text('Open create'),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Open create'));
+    await tester.pumpAndSettle();
+
+    final memberChips = tester.widgetList<FilterChip>(find.byType(FilterChip));
+    expect(memberChips, isNotEmpty);
+    expect(memberChips.every((chip) => !chip.selected), isTrue);
+    expect(
+      find.text(
+        'You will be added automatically as admin. Select only the people you want to invite.',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Groups screen separates expense and Dhukuti groups', (
@@ -146,6 +232,11 @@ void main() {
       ),
     );
 
+    await tester.scrollUntilVisible(
+      find.text('Dashain Khasi Split'),
+      320,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.text('Dashain Khasi Split'), findsOneWidget);
     expect(find.text('Shrestha Family'), findsNothing);
 
@@ -188,7 +279,7 @@ void main() {
   testWidgets('Groups screen uses general flow and table statement', (
     tester,
   ) async {
-    final store = AppStore();
+    final store = AppStore()..selectedGroupId = 'g-dashain';
 
     await tester.pumpWidget(
       StoreScope(
@@ -198,8 +289,6 @@ void main() {
     );
 
     expect(find.text('Festival Mode'), findsNothing);
-    expect(find.text('Dashain Khasi Split'), findsOneWidget);
-
     await tester.tap(find.widgetWithText(OutlinedButton, 'Statement'));
     await tester.pumpAndSettle();
 
@@ -210,10 +299,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('admin sees rename action in group detail', (tester) async {
+    final store = AppStore()..selectedGroupId = 'g-dashain';
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: const MaterialApp(home: GroupsScreen()),
+      ),
+    );
+
+    expect(find.widgetWithText(OutlinedButton, 'Rename'), findsOneWidget);
+  });
+
   testWidgets('Add expense starts with participants and supports payer rows', (
     tester,
   ) async {
-    final store = AppStore();
+    final store = AppStore()..selectedGroupId = 'g-dashain';
 
     await pumpGroupsForAddExpense(tester, store);
     await openManualEntry(tester);
@@ -258,7 +360,7 @@ void main() {
   testWidgets('Add expense participant cards toggle split preview', (
     tester,
   ) async {
-    final store = AppStore();
+    final store = AppStore()..selectedGroupId = 'g-dashain';
 
     await pumpGroupsForAddExpense(tester, store);
     await openManualEntry(tester);
@@ -284,7 +386,7 @@ void main() {
   testWidgets('Add expense percentage split rejects values above 100', (
     tester,
   ) async {
-    final store = AppStore();
+    final store = AppStore()..selectedGroupId = 'g-dashain';
 
     await pumpGroupsForAddExpense(tester, store);
     await openManualEntry(tester);
@@ -318,7 +420,7 @@ void main() {
   testWidgets('Group detail shows latest activity summary with full view', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1000, 4200);
+    tester.view.physicalSize = const Size(1000, 9000);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -329,7 +431,12 @@ void main() {
     await tester.pumpWidget(
       StoreScope(
         notifier: store,
-        child: const MaterialApp(home: GroupsScreen()),
+        child: MaterialApp(
+          home: GroupDetail(
+            group: store.groupById('g-dashain'),
+            activityTimelineLimit: 5,
+          ),
+        ),
       ),
     );
 

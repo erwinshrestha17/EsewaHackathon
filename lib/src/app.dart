@@ -527,81 +527,92 @@ class _SangaiShellState extends State<SangaiShell> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (sheetContext) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Scan or add',
-                  style: Theme.of(
-                    sheetContext,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: constraints.maxHeight * 0.88,
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Start the main Sajha Kharcha flows from one place.',
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Scan or add',
+                        style: Theme.of(sheetContext).textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Start the main Sajha Kharcha flows from one place.',
+                      ),
+                      const SizedBox(height: 12),
+                      _ActionSheetTile(
+                        icon: Icons.document_scanner_outlined,
+                        title: 'Scan Receipt',
+                        subtitle: 'Capture OCR items, VAT, and service charge',
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _openScanBillFromHome();
+                        },
+                      ),
+                      _ActionSheetTile(
+                        icon: Icons.receipt_long_outlined,
+                        title: 'Add Expense',
+                        subtitle:
+                            'Enter amount, payers, participants, and split',
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _openAddExpenseFromHome();
+                        },
+                      ),
+                      _ActionSheetTile(
+                        icon: Icons.groups_outlined,
+                        title: 'Create Group',
+                        subtitle: 'Expense group or Dhukuti setup',
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          showCreateGroupDialog(context);
+                        },
+                      ),
+                      _ActionSheetTile(
+                        icon: Icons.card_giftcard_outlined,
+                        title: 'Send Gift',
+                        subtitle: 'Choose a connected friend and gift card',
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _openStandaloneScreen(const GiftsScreen());
+                        },
+                      ),
+                      _ActionSheetTile(
+                        icon: Icons.account_balance_wallet_outlined,
+                        title: 'Dhukuti',
+                        subtitle:
+                            'View dues or create a rotating savings group',
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _openDhukutiScreen();
+                        },
+                      ),
+                      _ActionSheetTile(
+                        icon: Icons.person_add_alt_1_outlined,
+                        title: 'Friends',
+                        subtitle: 'Search, accept requests, or show your QR',
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _openStandaloneScreen(const ConnectionsScreen());
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                _ActionSheetTile(
-                  icon: Icons.document_scanner_outlined,
-                  title: 'Scan Receipt',
-                  subtitle: 'Capture OCR items, VAT, and service charge',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _openScanBillFromHome();
-                  },
-                ),
-                _ActionSheetTile(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'Add Expense',
-                  subtitle: 'Enter amount, payers, participants, and split',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _openAddExpenseFromHome();
-                  },
-                ),
-                _ActionSheetTile(
-                  icon: Icons.groups_outlined,
-                  title: 'Create Group',
-                  subtitle: 'Expense group or Dhukuti setup',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    showCreateGroupDialog(context);
-                  },
-                ),
-                _ActionSheetTile(
-                  icon: Icons.card_giftcard_outlined,
-                  title: 'Send Gift',
-                  subtitle: 'Choose a connected friend and gift card',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _openStandaloneScreen(const GiftsScreen());
-                  },
-                ),
-                _ActionSheetTile(
-                  icon: Icons.account_balance_wallet_outlined,
-                  title: 'Dhukuti',
-                  subtitle: 'View dues or create a rotating savings group',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _openDhukutiScreen();
-                  },
-                ),
-                _ActionSheetTile(
-                  icon: Icons.person_add_alt_1_outlined,
-                  title: 'Friends',
-                  subtitle: 'Search, accept requests, or show your QR',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _openStandaloneScreen(const ConnectionsScreen());
-                  },
-                ),
-              ],
-            ),
+              );
+            },
           ),
         );
       },
@@ -1036,9 +1047,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
         final list = AppScrollView(
           children: [
             ScreenHeader(
-              title: 'Expense Groups',
+              title: 'Groups overview',
               subtitle:
-                  'Create groups from accepted connections, add split expenses, settle, export statements, and keep history visible.',
+                  'Expense groups stay separate from Dhukuti commitments. Open a group when you want its expenses, balances, members, and activity.',
               icon: Icons.groups,
               action: FilledButton.icon(
                 onPressed: () => showCreateGroupDialog(
@@ -1049,8 +1060,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 label: const Text('New group'),
               ),
             ),
+            _ExpenseGroupsSnapshot(store: store, groups: groups),
             SectionPanel(
-              title: 'Your Groups',
+              title: 'Expense groups',
               child: groups.isEmpty
                   ? const EmptyState(
                       icon: Icons.group_off_outlined,
@@ -1087,12 +1099,15 @@ class _GroupsScreenState extends State<GroupsScreen> {
         );
 
         final detail = selected == null
-            ? const Center(
-                child: EmptyState(
-                  icon: Icons.groups_2_outlined,
-                  title: 'Select a group',
-                  body: 'Pick a group from the list or create a new group.',
+            ? _ExpenseGroupsOverview(
+                store: store,
+                groups: groups,
+                onCreateGroup: () => showCreateGroupDialog(
+                  context,
+                  onCreated: (kind) => setState(() => _tab = kind),
                 ),
+                onSelectGroup: (groupId) =>
+                    setState(() => store.selectedGroupId = groupId),
               )
             : GroupDetail(
                 group: selected,
@@ -1137,6 +1152,160 @@ class _GroupsScreenState extends State<GroupsScreen> {
           ],
         );
       },
+    );
+  }
+}
+
+class _ExpenseGroupsSnapshot extends StatelessWidget {
+  const _ExpenseGroupsSnapshot({required this.store, required this.groups});
+
+  final AppStore store;
+  final List<Group> groups;
+
+  @override
+  Widget build(BuildContext context) {
+    return ResponsiveWrap(
+      children: [
+        StatTile(
+          label: 'Expense groups',
+          value: groups.length.toString(),
+          icon: Icons.groups_2_outlined,
+          tone: Tone.info,
+        ),
+        StatTile(
+          label: 'You owe',
+          value: money(store.totalOwedByCurrentUser),
+          icon: Icons.call_made_outlined,
+          tone: store.totalOwedByCurrentUser == 0 ? Tone.neutral : Tone.warning,
+        ),
+        StatTile(
+          label: 'You are owed',
+          value: money(store.totalOwedToCurrentUser),
+          icon: Icons.call_received_outlined,
+          tone: store.totalOwedToCurrentUser == 0 ? Tone.neutral : Tone.success,
+        ),
+        StatTile(
+          label: 'Pending settlements',
+          value: store.pendingSettlementsForCurrentUser.length.toString(),
+          icon: Icons.schedule_send_outlined,
+          tone: store.pendingSettlementsForCurrentUser.isEmpty
+              ? Tone.neutral
+              : Tone.warning,
+        ),
+      ],
+    );
+  }
+}
+
+class _ExpenseGroupsOverview extends StatelessWidget {
+  const _ExpenseGroupsOverview({
+    required this.store,
+    required this.groups,
+    required this.onCreateGroup,
+    required this.onSelectGroup,
+  });
+
+  final AppStore store;
+  final List<Group> groups;
+  final VoidCallback onCreateGroup;
+  final ValueChanged<String> onSelectGroup;
+
+  @override
+  Widget build(BuildContext context) {
+    final latestGroups = groups.take(4).toList();
+    final pendingSettlements = store.pendingSettlementsForCurrentUser.length;
+    final recentActivity = store.activity
+        .where((item) => item.groupId != null)
+        .take(4)
+        .toList();
+
+    return AppScrollView(
+      children: [
+        ScreenHeader(
+          title: 'Groups overview',
+          subtitle:
+              'A calm starting point for shared balances, pending settlements, and recent group movement.',
+          icon: Icons.dashboard_customize_outlined,
+          action: FilledButton.icon(
+            onPressed: onCreateGroup,
+            icon: const Icon(Icons.add),
+            label: const Text('New group'),
+          ),
+        ),
+        _ExpenseGroupsSnapshot(store: store, groups: groups),
+        SectionPanel(
+          title: 'Today',
+          child: Column(
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  child: Icon(Icons.payments_outlined),
+                ),
+                title: Text(
+                  pendingSettlements == 0
+                      ? 'No pending settlements'
+                      : '$pendingSettlements settlement request(s) pending',
+                ),
+                subtitle: Text(
+                  pendingSettlements == 0
+                      ? 'Shared balances are ready when a group is opened.'
+                      : 'Open the related group to review the exact split before paying.',
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  child: Icon(Icons.receipt_long_outlined),
+                ),
+                title: const Text('Expense records remain transparent'),
+                subtitle: Text(
+                  groups.isEmpty
+                      ? 'Create an expense group from accepted friends first.'
+                      : 'Each group keeps expenses, payments, members, former members, and activity together.',
+                ),
+              ),
+            ],
+          ),
+        ),
+        SectionPanel(
+          title: 'Recent expense groups',
+          child: latestGroups.isEmpty
+              ? const EmptyState(
+                  icon: Icons.group_add_outlined,
+                  title: 'No expense groups',
+                  body: 'Create a group with connected friends to start.',
+                )
+              : Column(
+                  children: [
+                    for (final group in latestGroups)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          child: Icon(iconForCategory(group.category)),
+                        ),
+                        title: Text(group.name),
+                        subtitle: Text(
+                          '${store.membersForGroup(group.id, activeOnly: true).length} active members',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => onSelectGroup(group.id),
+                      ),
+                  ],
+                ),
+        ),
+        SectionPanel(
+          title: 'Recent activity',
+          child: recentActivity.isEmpty
+              ? const EmptyState(
+                  icon: Icons.history_toggle_off,
+                  title: 'No group activity',
+                  body: 'New expenses and settlements will appear here.',
+                )
+              : ActivityList(items: recentActivity),
+        ),
+      ],
     );
   }
 }
@@ -1197,6 +1366,12 @@ class GroupDetail extends StatelessWidget {
               icon: const Icon(Icons.logout),
               label: const Text('Leave group'),
             ),
+            if (isAdmin)
+              OutlinedButton.icon(
+                onPressed: () => showRenameGroupDialog(context, group.id),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Rename'),
+              ),
             if (isAdmin)
               FilledButton.tonalIcon(
                 onPressed: () => showDisbandGroupDialog(context, group.id),
@@ -6041,9 +6216,7 @@ Future<void> showCreateGroupDialog(
   final name = TextEditingController(text: 'Office Bhoj');
   var category = GroupCategory.bhoj;
   var dhukutiGroup = initialKind == GroupKind.dhukuti;
-  final selected = <String>{
-    for (final user in store.activeConnectionUsers()) user.id,
-  };
+  final selected = <String>{};
   await showDialog<void>(
     context: context,
     builder: (dialogContext) {
@@ -6112,6 +6285,14 @@ Future<void> showCreateGroupDialog(
                       child: Text(
                         'Members',
                         style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'You will be added automatically as admin. Select only the people you want to invite.',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -6439,6 +6620,65 @@ Future<void> showDisbandGroupDialog(
       );
     },
   );
+}
+
+Future<void> showRenameGroupDialog(BuildContext context, String groupId) async {
+  final store = StoreScope.of(context);
+  final group = store.groupById(groupId);
+  if (!store.isGroupAdmin(groupId, store.currentUserId)) {
+    showSnack(context, 'Only group admins can rename this group.');
+    return;
+  }
+  final name = TextEditingController(text: group.name);
+  String? errorText;
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Rename group'),
+            content: SizedBox(
+              width: 420,
+              child: TextField(
+                controller: name,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  labelText: 'Group name',
+                  errorText: errorText,
+                ),
+                onChanged: (_) {
+                  if (errorText != null) {
+                    setState(() => errorText = null);
+                  }
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final error = store.renameGroup(groupId, name.text);
+                  if (error != null) {
+                    setState(() => errorText = error);
+                    return;
+                  }
+                  Navigator.pop(dialogContext);
+                  showSnack(context, '${store.groupById(groupId).name} saved.');
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+  name.dispose();
 }
 
 Future<void> showRemoveMemberDialog(

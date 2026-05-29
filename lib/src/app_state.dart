@@ -72,9 +72,7 @@ class AppStore extends ChangeNotifier {
       users[index] = updated;
     }
     currentUserId = profile.id;
-    selectedGroupId = visibleExpenseGroups.isEmpty
-        ? null
-        : visibleExpenseGroups.first.id;
+    selectedGroupId = null;
     selectedDhukutiPoolId = visibleDhukutiPools.isEmpty
         ? null
         : visibleDhukutiPools.first.id;
@@ -106,9 +104,7 @@ class AppStore extends ChangeNotifier {
 
   void switchUser(String userId) {
     currentUserId = userId;
-    selectedGroupId = visibleExpenseGroups.isEmpty
-        ? null
-        : visibleExpenseGroups.first.id;
+    selectedGroupId = null;
     selectedDhukutiPoolId = visibleDhukutiPools.isEmpty
         ? null
         : visibleDhukutiPools.first.id;
@@ -576,6 +572,36 @@ class AppStore extends ChangeNotifier {
     );
   }
 
+  String? renameGroup(String groupId, String name) {
+    final group = groupByIdOrNull(groupId);
+    if (group == null || group.isDisbanded) {
+      return 'Group is no longer available.';
+    }
+    if (!isGroupAdmin(groupId, currentUserId)) {
+      return 'Only group admins can rename this group.';
+    }
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return 'Group name cannot be empty.';
+    }
+    if (trimmed == group.name) {
+      return null;
+    }
+    final previousName = group.name;
+    group.name = trimmed;
+    _activity(
+      actorId: currentUserId,
+      groupId: group.id,
+      eventType: 'group_renamed',
+      entityType: 'group',
+      entityId: group.id,
+      title: 'Group renamed',
+      body: '${nameOf(currentUserId)} renamed $previousName to ${group.name}.',
+    );
+    notifyListeners();
+    return null;
+  }
+
   List<GroupMember> activeAdminsForGroup(String groupId) {
     return membersForGroup(
       groupId,
@@ -664,9 +690,7 @@ class AppStore extends ChangeNotifier {
     }
     removeGroupMember(groupId, currentUserId);
     if (selectedGroupId == groupId) {
-      selectedGroupId = visibleExpenseGroups.isEmpty
-          ? null
-          : visibleExpenseGroups.first.id;
+      selectedGroupId = null;
     }
     notifyListeners();
     return null;
@@ -764,9 +788,7 @@ class AppStore extends ChangeNotifier {
       body: '${group.name} was disbanded by ${nameOf(currentUserId)}.',
     );
     if (selectedGroupId == groupId) {
-      selectedGroupId = visibleExpenseGroups.isEmpty
-          ? null
-          : visibleExpenseGroups.first.id;
+      selectedGroupId = null;
     }
     notifyListeners();
     return null;
@@ -2480,7 +2502,7 @@ class AppStore extends ChangeNotifier {
       createdAt: DateTime(2026, 5, 16),
     );
     groups.addAll(<Group>[dashain, trek, apartment, family, college, office]);
-    selectedGroupId = dashain.id;
+    selectedGroupId = null;
 
     void member(String groupId, String userId, MemberRole role) {
       groupMembers.add(
