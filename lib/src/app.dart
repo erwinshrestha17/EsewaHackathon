@@ -107,7 +107,6 @@ class _SangaiShellState extends State<SangaiShell> {
       Icons.account_balance_wallet_outlined,
       Icons.account_balance_wallet,
     ),
-    _Destination('Activity', Icons.history_outlined, Icons.history),
   ];
 
   @override
@@ -136,7 +135,7 @@ class _SangaiShellState extends State<SangaiShell> {
       2 => const ConnectionsScreen(),
       3 => const GiftsScreen(),
       4 => DigitalDhukutiScreen(store: store),
-      _ => const ActivityScreen(),
+      _ => HomeScreen(onNavigate: _go),
     };
 
     return LayoutBuilder(
@@ -185,8 +184,8 @@ class _SangaiShellState extends State<SangaiShell> {
               ),
               const SizedBox(width: 4),
               IconButton(
-                tooltip: 'Activity',
-                onPressed: () => _go(5),
+                tooltip: 'Notifications',
+                onPressed: _openNotifications,
                 icon: Badge(
                   isLabelVisible: store.currentNotifications
                       .where((item) => !item.read)
@@ -252,6 +251,12 @@ class _SangaiShellState extends State<SangaiShell> {
       MaterialPageRoute<void>(
         builder: (_) => SettingsScreen(controller: _settingsController),
       ),
+    );
+  }
+
+  void _openNotifications() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
     );
   }
 }
@@ -413,11 +418,6 @@ class HomeScreen extends StatelessWidget {
         ),
         SectionPanel(
           title: 'Recent Activity',
-          action: TextButton.icon(
-            onPressed: () => onNavigate(5),
-            icon: const Icon(Icons.arrow_forward),
-            label: const Text('All'),
-          ),
           child: ActivityList(items: store.visibleActivity.take(6).toList()),
         ),
       ],
@@ -2541,146 +2541,59 @@ class DhukutiDetail extends StatelessWidget {
   }
 }
 
-class ActivityScreen extends StatelessWidget {
-  const ActivityScreen({super.key});
+class NotificationsScreen extends StatelessWidget {
+  const NotificationsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    final reports = store.connections.expand((item) => item.reports).toList();
-    final failedReview = store.payments
-        .where((payment) => payment.status == PaymentStatus.failedReview)
-        .toList();
 
-    return AppScrollView(
-      children: [
-        ScreenHeader(
-          title: 'Activity and Ops',
-          subtitle:
-              'Audit timeline, reminders, simulated push notifications, cache status, analytics, and lightweight admin review surfaces.',
-          icon: Icons.history,
-        ),
-        ResponsiveWrap(
-          children: [
-            SectionPanel(
-              title: 'Notifications',
-              action: TextButton.icon(
-                onPressed: store.markNotificationsRead,
-                icon: const Icon(Icons.done_all),
-                label: const Text('Mark read'),
-              ),
-              child: store.currentNotifications.isEmpty
-                  ? const EmptyState(
-                      icon: Icons.notifications_none,
-                      title: 'No notifications',
-                      body: 'Settlement nudges and Dhukuti dues appear here.',
-                    )
-                  : Column(
-                      children: [
-                        for (final notification
-                            in store.currentNotifications.take(6))
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(
-                              notification.read
-                                  ? Icons.notifications_none
-                                  : Icons.notifications_active_outlined,
-                            ),
-                            title: Text(notification.title),
-                            subtitle: Text(notification.body),
-                            trailing: StatusPill(
-                              label: notification.read ? 'Read' : 'Unread',
-                              tone: notification.read
-                                  ? Tone.neutral
-                                  : Tone.info,
-                            ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Notifications')),
+      body: AppScrollView(
+        children: [
+          ScreenHeader(
+            title: 'Notifications',
+            subtitle: 'Review Sangai reminders and status updates.',
+            icon: Icons.notifications_outlined,
+            action: TextButton.icon(
+              onPressed: store.currentNotifications.isEmpty
+                  ? null
+                  : store.markNotificationsRead,
+              icon: const Icon(Icons.done_all),
+              label: const Text('Mark read'),
+            ),
+          ),
+          SectionPanel(
+            title: 'Notifications',
+            child: store.currentNotifications.isEmpty
+                ? const EmptyState(
+                    icon: Icons.notifications_none,
+                    title: 'No notifications',
+                    body: 'Settlement nudges and Dhukuti dues appear here.',
+                  )
+                : Column(
+                    children: [
+                      for (final notification in store.currentNotifications)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            notification.read
+                                ? Icons.notifications_none
+                                : Icons.notifications_active_outlined,
                           ),
-                      ],
-                    ),
-            ),
-            SectionPanel(
-              title: 'Prototype Controls',
-              child: Column(
-                children: [
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: store.pushPreviewEnabled,
-                    onChanged: (_) => store.togglePushPreview(),
-                    title: const Text('Push notification preview'),
-                    subtitle: const Text(
-                      'P2 push UX is simulated inside the Flutter app.',
-                    ),
+                          title: Text(notification.title),
+                          subtitle: Text(notification.body),
+                          trailing: StatusPill(
+                            label: notification.read ? 'Read' : 'Unread',
+                            tone: notification.read ? Tone.neutral : Tone.info,
+                          ),
+                        ),
+                    ],
                   ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: store.cacheWarm,
-                    onChanged: (_) => store.refreshCache(),
-                    title: const Text('Local cache projection'),
-                    subtitle: const Text(
-                      'Frontend cache mirrors the Redis-backed shape without backend infrastructure.',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        SectionPanel(
-          title: 'Analytics Dashboard',
-          child: ResponsiveWrap(
-            children: [
-              for (final entry in store.analytics.entries)
-                StatTile(
-                  label: enumLabel(entry.key),
-                  value: '${entry.value}',
-                  icon: Icons.query_stats,
-                  tone: Tone.info,
-                ),
-            ],
           ),
-        ),
-        SectionPanel(
-          title: 'Admin Review Queue',
-          child: Column(
-            children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.flag_outlined),
-                title: const Text('Connection reports'),
-                subtitle: Text('${reports.length} open lightweight report(s)'),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.warning_amber_outlined),
-                title: const Text('Payment manual review'),
-                subtitle: Text(
-                  '${failedReview.length} failed_review transaction(s)',
-                ),
-              ),
-              for (final request in store.emergencyExitRequests)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.exit_to_app),
-                  title: Text(
-                    '${store.nameOf(request.userId)} exit request • ${store.poolById(request.poolId).name}',
-                  ),
-                  subtitle: Text('${request.reason} • ${request.status}'),
-                  trailing: request.status == 'requested'
-                      ? FilledButton(
-                          onPressed: () =>
-                              store.approveEmergencyExit(request.id),
-                          child: const Text('Approve'),
-                        )
-                      : StatusPill(label: request.status, tone: Tone.success),
-                ),
-            ],
-          ),
-        ),
-        SectionPanel(
-          title: 'Full Activity Log',
-          child: ActivityList(items: store.visibleActivity),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

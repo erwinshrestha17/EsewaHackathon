@@ -71,7 +71,9 @@ class _DhukutiPaymentSheetState extends State<_DhukutiPaymentSheet> {
           ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 6),
-        const Text('Mock confirmation only. No real money movement occurs.'),
+        const Text(
+          'Payment confirmation is simulated. No real money movement occurs.',
+        ),
         const SizedBox(height: 16),
         _PaymentRow(
           label: 'Amount',
@@ -123,7 +125,7 @@ class _DhukutiPaymentSheetState extends State<_DhukutiPaymentSheet> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Your mock ${money(widget.contribution.amountMinor)} contribution was recorded in the transparent ledger.',
+          'Your ${money(widget.contribution.amountMinor)} contribution was recorded in the transparent ledger.',
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 16),
