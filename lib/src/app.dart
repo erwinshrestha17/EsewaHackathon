@@ -9,6 +9,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../features/dhukuti/dhukuti_list_screen.dart';
+import '../features/settings/settings_controller.dart';
+import '../features/settings/settings_models.dart';
+import '../features/settings/settings_screen.dart';
 import 'app_state.dart';
 import 'finance.dart';
 import 'models.dart';
@@ -88,6 +91,7 @@ class SangaiShell extends StatefulWidget {
 
 class _SangaiShellState extends State<SangaiShell> {
   var _index = 0;
+  final _settingsController = SettingsController();
 
   static const _destinations = <_Destination>[
     _Destination('Home', Icons.dashboard_outlined, Icons.dashboard),
@@ -107,11 +111,28 @@ class _SangaiShellState extends State<SangaiShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _settingsController.addListener(_handleSettingsChanged);
+  }
+
+  @override
+  void dispose() {
+    _settingsController
+      ..removeListener(_handleSettingsChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final body = switch (_index) {
       0 => HomeScreen(onNavigate: _go),
-      1 => const GroupsScreen(),
+      1 => GroupsScreen(
+        activityTimelineLimit:
+            _settingsController.state.activityTimelineLimit.count,
+      ),
       2 => const ConnectionsScreen(),
       3 => const GiftsScreen(),
       4 => DigitalDhukutiScreen(store: store),
@@ -157,6 +178,12 @@ class _SangaiShellState extends State<SangaiShell> {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'Settings',
+                onPressed: _openSettings,
+                icon: const Icon(Icons.settings_outlined),
+              ),
+              const SizedBox(width: 4),
               IconButton(
                 tooltip: 'Activity',
                 onPressed: () => _go(5),
@@ -212,6 +239,20 @@ class _SangaiShellState extends State<SangaiShell> {
 
   void _go(int index) {
     setState(() => _index = index);
+  }
+
+  void _handleSettingsChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsScreen(controller: _settingsController),
+      ),
+    );
   }
 }
 
@@ -624,7 +665,9 @@ class _ConnectionTile extends StatelessWidget {
 }
 
 class GroupsScreen extends StatefulWidget {
-  const GroupsScreen({super.key});
+  const GroupsScreen({this.activityTimelineLimit = 5, super.key});
+
+  final int activityTimelineLimit;
 
   @override
   State<GroupsScreen> createState() => _GroupsScreenState();
@@ -701,7 +744,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   body: 'Pick a group from the list or create a new group.',
                 ),
               )
-            : GroupDetail(group: selected, scrollable: twoPane);
+            : GroupDetail(
+                group: selected,
+                scrollable: twoPane,
+                activityTimelineLimit: widget.activityTimelineLimit,
+              );
 
         if (twoPane) {
           return Row(
@@ -731,10 +778,16 @@ class _GroupsScreenState extends State<GroupsScreen> {
 }
 
 class GroupDetail extends StatelessWidget {
-  const GroupDetail({required this.group, this.scrollable = true, super.key});
+  const GroupDetail({
+    required this.group,
+    this.scrollable = true,
+    this.activityTimelineLimit = 5,
+    super.key,
+  });
 
   final Group group;
   final bool scrollable;
+  final int activityTimelineLimit;
 
   @override
   Widget build(BuildContext context) {
@@ -1052,7 +1105,10 @@ class GroupDetail extends StatelessWidget {
         title: 'Activity Timeline',
         child: GroupActivitySummary(
           groupId: group.id,
-          items: store.activityForGroup(group.id).take(5).toList(),
+          items: store
+              .activityForGroup(group.id)
+              .take(activityTimelineLimit)
+              .toList(),
         ),
       ),
     ];
