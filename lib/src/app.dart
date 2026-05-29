@@ -1843,60 +1843,6 @@ class _GiftsScreenState extends State<GiftsScreen> {
     );
   }
 
-  Widget _buildStickerGrid() {
-    return GridView.count(
-      crossAxisCount: 8,
-      padding: const EdgeInsets.all(12),
-      children: [
-        for (final emoji in giftStickerEmojis)
-          InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => _insertIntoMessage(emoji),
-            child: Center(
-              child: Text(emoji, style: const TextStyle(fontSize: 26)),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildGifGrid() {
-    return GridView.count(
-      crossAxisCount: 4,
-      padding: const EdgeInsets.all(12),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      children: [
-        for (final sticker in giftGifStickers)
-          InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => _insertIntoMessage(' :${sticker.id}: '),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AnimatedSticker(sticker: sticker, size: 34),
-                  const SizedBox(height: 6),
-                  Text(
-                    sticker.label,
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
 }
 
 /// A small uppercase section label used between gift compose sections.
