@@ -4662,7 +4662,6 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
     }
     final store = StoreScope.of(context);
     final members = store.membersForGroup(widget.groupId, activeOnly: true);
-    _participants.addAll(members.map((member) => member.userId));
     _payerRows.add(
       _PayerDraft(userId: store.currentUserId, amountText: _amount.text),
     );
@@ -5205,7 +5204,6 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: _amount,
-                        enabled: !itemModeActive,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
                           labelText: 'Total amount',
@@ -5991,27 +5989,6 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
                 ),
               ),
               SizedBox(
-                width: 86,
-                child: TextField(
-                  controller: item.quantity,
-                  decoration: const InputDecoration(labelText: 'Qty'),
-                  keyboardType: TextInputType.number,
-                  onChanged: (_) => widget.onChanged(),
-                ),
-              ),
-              SizedBox(
-                width: 132,
-                child: TextField(
-                  controller: item.unitPrice,
-                  decoration: const InputDecoration(
-                    labelText: 'Unit price',
-                    prefixText: 'NPR ',
-                  ),
-                  keyboardType: TextInputType.number,
-                  onChanged: (_) => widget.onChanged(),
-                ),
-              ),
-              SizedBox(
                 width: 132,
                 child: TextField(
                   controller: item.amount,
@@ -6020,7 +5997,11 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
                     prefixText: 'NPR ',
                   ),
                   keyboardType: TextInputType.number,
-                  onChanged: (_) => widget.onChanged(),
+                  onChanged: (_) {
+                    item.quantity.text = '1';
+                    item.unitPrice.text = item.amount.text;
+                    widget.onChanged();
+                  },
                 ),
               ),
               IconButton(
@@ -6041,6 +6022,7 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
               SizedBox(
                 width: 190,
                 child: DropdownButtonFormField<_BillLineKind>(
+                  isExpanded: true,
                   initialValue: item.kind,
                   decoration: const InputDecoration(labelText: 'Line type'),
                   items: [
@@ -6097,16 +6079,19 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
           ),
           if (safeShareUsers.length > 1) ...[
             const SizedBox(height: 10),
-            SwitchListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              value: item.splitByShares,
-              title: const Text('Split this item by shares'),
-              subtitle: const Text('Use this when one person had more.'),
-              onChanged: (value) {
-                setState(() => item.splitByShares = value);
-                widget.onChanged();
-              },
+            Material(
+              type: MaterialType.transparency,
+              child: SwitchListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                value: item.splitByShares,
+                title: const Text('Split this item by shares'),
+                subtitle: const Text('Use this when one person had more.'),
+                onChanged: (value) {
+                  setState(() => item.splitByShares = value);
+                  widget.onChanged();
+                },
+              ),
             ),
             if (item.splitByShares)
               Wrap(
@@ -7898,13 +7883,12 @@ class ParticipantSelectorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final accent = toneColor(context, Tone.success);
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 210, maxWidth: 260),
       child: Material(
-        color: selected ? accent.withValues(alpha: 0.08) : scheme.surface,
+        color: selected ? scheme.primary : scheme.surface,
         borderRadius: BorderRadius.circular(12),
-        elevation: selected ? 1 : 0,
+        elevation: selected ? 2 : 0,
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
@@ -7915,7 +7899,7 @@ class ParticipantSelectorCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: selected
-                    ? accent.withValues(alpha: 0.70)
+                    ? scheme.primary
                     : scheme.outlineVariant,
                 width: selected ? 1.4 : 1,
               ),
@@ -7930,13 +7914,13 @@ class ParticipantSelectorCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                      color: selected ? accent : scheme.onSurface,
+                      color: selected ? scheme.onPrimary : scheme.onSurface,
                     ),
                   ),
                 ),
                 if (selected) ...[
                   const SizedBox(width: 8),
-                  Icon(Icons.check_circle, size: 18, color: accent),
+                  Icon(Icons.check_circle, size: 18, color: scheme.onPrimary),
                 ],
               ],
             ),

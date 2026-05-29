@@ -385,6 +385,15 @@ void main() {
     await pumpGroupsForAddExpense(tester, store);
     await openManualEntry(tester);
 
+    // Select all participants to make split ready
+    final participantCards = find.byType(ParticipantSelectorCard);
+    final cardCount = participantCards.evaluate().length;
+    for (var index = 0; index < cardCount; index++) {
+      await tester.ensureVisible(participantCards.at(index));
+      await tester.tap(participantCards.at(index));
+      await tester.pumpAndSettle();
+    }
+
     expect(find.text('Participants'), findsOneWidget);
     expect(find.text('Expense details'), findsOneWidget);
     expect(find.text('Who paid?'), findsWidgets);
@@ -430,16 +439,31 @@ void main() {
     await pumpGroupsForAddExpense(tester, store);
     await openManualEntry(tester);
 
+    // Initially, no participants are selected
+    expect(find.text('Please select participants.'), findsWidgets);
+
     final participantCards = find.byType(ParticipantSelectorCard);
     final cardCount = participantCards.evaluate().length;
     expect(cardCount, greaterThan(0));
 
+    // Select all participants
     for (var index = 0; index < cardCount; index++) {
       await tester.ensureVisible(participantCards.at(index));
       await tester.tap(participantCards.at(index));
-      await tester.pump();
+      await tester.pumpAndSettle();
     }
 
+    // Now they are selected, error should disappear
+    expect(find.text('Please select participants.'), findsNothing);
+
+    // Deselect all participants
+    for (var index = 0; index < cardCount; index++) {
+      await tester.ensureVisible(participantCards.at(index));
+      await tester.tap(participantCards.at(index));
+      await tester.pumpAndSettle();
+    }
+
+    // Error should show again
     expect(find.text('Please select participants.'), findsWidgets);
     final save = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Save expense'),
@@ -455,6 +479,15 @@ void main() {
 
     await pumpGroupsForAddExpense(tester, store);
     await openManualEntry(tester);
+
+    // Select all participants first
+    final participantCards = find.byType(ParticipantSelectorCard);
+    final cardCount = participantCards.evaluate().length;
+    for (var index = 0; index < cardCount; index++) {
+      await tester.ensureVisible(participantCards.at(index));
+      await tester.tap(participantCards.at(index));
+      await tester.pumpAndSettle();
+    }
 
     final splitModeDropdown = find.byWidgetPredicate(
       (widget) =>
@@ -518,4 +551,105 @@ void main() {
     expect(find.text('Members'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('Add expense item list row has only Name and Amount fields', (
+    tester,
+  ) async {
+    final store = AppStore()..selectedGroupId = 'g-dashain';
+
+    await pumpGroupsForAddExpense(tester, store);
+    await openManualEntry(tester);
+
+    final skipItemSplitSwitch = find.widgetWithText(
+      SwitchListTile,
+      'Skip item split and use total amount',
+    );
+    await tester.ensureVisible(skipItemSplitSwitch);
+    await tester.tap(skipItemSplitSwitch);
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(OutlinedButton, '+ Add item'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '+ Add item'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'Item name',
+      ),
+      findsWidgets,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'Amount',
+      ),
+      findsWidgets,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'Qty',
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == 'Unit price',
+      ),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Add expense total amount and paid fields are editable in item split mode',
+    (tester) async {
+      final store = AppStore()..selectedGroupId = 'g-dashain';
+
+      await pumpGroupsForAddExpense(tester, store);
+      await openManualEntry(tester);
+
+      // Toggle skip item split off to activate item split mode
+      final skipItemSplitSwitch = find.widgetWithText(
+        SwitchListTile,
+        'Skip item split and use total amount',
+      );
+      await tester.ensureVisible(skipItemSplitSwitch);
+      await tester.tap(skipItemSplitSwitch);
+      await tester.pumpAndSettle();
+
+      // Verify total amount field is editable in item split mode
+      final totalAmountField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Total amount',
+      );
+      expect(totalAmountField, findsOneWidget);
+
+      await tester.enterText(totalAmountField, '1500');
+      await tester.pump();
+
+      final totalTextField = tester.widget<TextField>(totalAmountField);
+      expect(totalTextField.controller?.text, '1500');
+
+      // Verify paid amount field is editable
+      final payerAmountField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Amount paid',
+      );
+      expect(payerAmountField, findsOneWidget);
+
+      await tester.enterText(payerAmountField, '1000');
+      await tester.pump();
+
+      final payerTextField = tester.widget<TextField>(payerAmountField);
+      expect(payerTextField.controller?.text, '1000');
+
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
