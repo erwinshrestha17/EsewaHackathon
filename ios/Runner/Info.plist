@@ -18,6 +18,8 @@
 	<string>Sajha Kharcha</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Sajha Kharcha uses the camera to scan QR invite codes and itemized bills.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Sajha Kharcha lets you upload a photo of a bill to scan its items.</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

@@ -5,6 +5,7 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -24,6 +25,7 @@ import '../shared/design_system/app_spacing.dart';
 import '../shared/design_system/app_text_styles.dart';
 import '../shared/design_system/app_theme.dart';
 import '../shared/localization/app_localizations.dart';
+import '../shared/ocr/receipt_ocr_service.dart';
 import '../shared/payments/esewa_payment_service.dart';
 import '../shared/spending/spending_habits.dart';
 import '../shared/transactions/transaction_confirmation_controller.dart';
@@ -4875,27 +4877,18 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
       DraggableScrollableController();
   late final MobileScannerController _cameraController =
       MobileScannerController(detectionSpeed: DetectionSpeed.noDuplicates);
+  final ReceiptOcrService _ocrService = ReceiptOcrService();
+  final ImagePicker _imagePicker = ImagePicker();
 
   var _cameraReady = false;
   var _runningOcr = false;
-  var _autoOcrStarted = false;
+  var _scanFailed = false;
   var _flashOn = false;
   var _scanVersion = 0;
   String? _cameraIssue;
   String? _scanMessage;
+  String? _scannedTitle;
   List<_ExpenseItemDraft> _scannedItems = <_ExpenseItemDraft>[];
-
-  bool get _desktopWeb {
-    if (!kIsWeb) {
-      return false;
-    }
-    return switch (defaultTargetPlatform) {
-      TargetPlatform.macOS ||
-      TargetPlatform.windows ||
-      TargetPlatform.linux => true,
-      _ => false,
-    };
-  }
 
   @override
   void initState() {
@@ -4958,24 +4951,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
     setState(() {
       _cameraReady = true;
       _cameraIssue = null;
-    });
-    _scheduleAutoBillDetection();
-  }
-
-  void _scheduleAutoBillDetection() {
-    if (_autoOcrStarted || !_cameraReady) {
-      return;
-    }
-    _autoOcrStarted = true;
-    setState(() => _scanMessage = 'Preparing split preview...');
-    Timer(const Duration(milliseconds: 700), () {
-      if (!mounted ||
-          !_cameraReady ||
-          _runningOcr ||
-          _scannedItems.isNotEmpty) {
-        return;
-      }
-      unawaited(_runOcr());
+      _scanMessage ??= 'Capture the bill or upload a photo to scan it.';
     });
   }
 
@@ -5004,35 +4980,80 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
     });
   }
 
-  Future<void> _runOcr({bool fromUpload = false}) async {
+  Future<void> _scanBill(ImageSource source) async {
     if (_runningOcr) {
       return;
     }
+
+    // Release the live viewfinder so the system camera/picker has the sensor.
+    if (_flashOn) {
+      unawaited(_cameraController.toggleTorch().catchError((_) {}));
+      _flashOn = false;
+    }
+    if (_cameraReady) {
+      try {
+        await _cameraController.stop();
+      } catch (_) {
+        // Already stopped while the picker opens.
+      }
+    }
+
+    final XFile? file;
+    try {
+      file = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 92,
+        maxWidth: 2200,
+      );
+    } catch (_) {
+      await _restoreViewfinder();
+      if (mounted) {
+        setState(() {
+          _scanFailed = true;
+          _scanMessage = source == ImageSource.camera
+              ? 'Couldn’t open the camera. Try Upload or Manual Entry.'
+              : 'Couldn’t open the gallery. Try again or use Manual Entry.';
+        });
+      }
+      return;
+    }
+
+    if (file == null) {
+      await _restoreViewfinder();
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
       _runningOcr = true;
-      _scanMessage = 'Preparing split preview...';
+      _scanFailed = false;
+      _scanMessage = 'Preparing PaddleOCR…';
     });
+
     try {
-      await Future<void>.delayed(const Duration(milliseconds: 900));
+      final bytes = await file.readAsBytes();
+      final result = await _ocrService.scanReceipt(
+        bytes,
+        onStatus: (message) {
+          if (mounted && _runningOcr) {
+            setState(() => _scanMessage = message);
+          }
+        },
+      );
       if (!mounted) {
         return;
       }
-
-      for (final item in _scannedItems) {
-        item.dispose();
+      _applyScanResult(result);
+    } on ReceiptOcrException catch (error) {
+      if (mounted) {
+        setState(() {
+          _runningOcr = false;
+          _scanFailed = true;
+          _scanMessage = error.message;
+        });
       }
-      _scannedItems = <_ExpenseItemDraft>[];
-      setState(() {
-        _runningOcr = false;
-        _scanVersion += 1;
-        _scanMessage =
-            'No bill items were detected. Use Manual Entry to add real items.';
-      });
-      await _sheetController.animateTo(
-        0.92,
-        duration: const Duration(milliseconds: 360),
-        curve: Curves.easeOutCubic,
-      );
     } catch (_) {
       if (mounted) {
         _showOcrFailure();
@@ -5040,9 +5061,98 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
     }
   }
 
+  Future<void> _restoreViewfinder() async {
+    if (!_cameraReady) {
+      return;
+    }
+    try {
+      await _cameraController.start();
+    } catch (_) {
+      // The viewfinder will recover on next prepare.
+    }
+  }
+
+  void _applyScanResult(ReceiptScanResult result) {
+    for (final item in _scannedItems) {
+      item.dispose();
+    }
+    _scannedItems = _draftsFromScan(result);
+
+    setState(() {
+      _runningOcr = false;
+      _scannedTitle = result.merchant;
+      _scanVersion += 1;
+      // No items -> mark as failed so the recovery actions surface.
+      _scanFailed = _scannedItems.isEmpty;
+      if (_scannedItems.isEmpty) {
+        _scanMessage =
+            'No bill items were detected. Try again or use Manual Entry.';
+      } else {
+        final count = result.items.length;
+        _scanMessage =
+            'Detected $count item${count == 1 ? '' : 's'}. Review them below.';
+      }
+    });
+
+    if (_scannedItems.isNotEmpty) {
+      unawaited(
+        _sheetController.animateTo(
+          _ManualEntrySheet.expandedExtent,
+          duration: const Duration(milliseconds: 360),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    }
+  }
+
+  List<_ExpenseItemDraft> _draftsFromScan(ReceiptScanResult result) {
+    final drafts = <_ExpenseItemDraft>[
+      for (final item in result.items)
+        _ExpenseItemDraft(
+          name: item.label,
+          amountMinor: item.amountMinor,
+          quantity: item.quantity,
+          unitAmountMinor: item.unitAmountMinor,
+          confidence: item.confidence,
+        ),
+    ];
+    if (drafts.isEmpty) {
+      return drafts;
+    }
+    if (result.serviceChargeMinor != 0) {
+      drafts.add(
+        _ExpenseItemDraft(
+          name: 'Service charge',
+          amountMinor: result.serviceChargeMinor,
+          kind: _BillLineKind.serviceCharge,
+        ),
+      );
+    }
+    if (result.taxMinor != 0) {
+      drafts.add(
+        _ExpenseItemDraft(
+          name: 'VAT',
+          amountMinor: result.taxMinor,
+          kind: _BillLineKind.tax,
+        ),
+      );
+    }
+    if (result.discountMinor != 0) {
+      drafts.add(
+        _ExpenseItemDraft(
+          name: 'Discount',
+          amountMinor: result.discountMinor,
+          kind: _BillLineKind.discount,
+        ),
+      );
+    }
+    return drafts;
+  }
+
   void _showOcrFailure() {
     setState(() {
       _runningOcr = false;
+      _scanFailed = true;
       _scanMessage =
           'Couldn’t read the bill clearly. Try again or use Manual Entry.';
     });
@@ -5204,31 +5314,54 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
             Positioned(
               left: 24,
               right: 24,
-              bottom: 126,
+              bottom:
+                  MediaQuery.sizeOf(context).height *
+                      _ManualEntrySheet.collapsedExtent +
+                  16,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_scanMessage != null)
+                  if (_scanMessage != null) ...[
                     _ScanStatusPill(
                       message: _scanMessage!,
                       loading: _runningOcr,
-                      failed: _scanMessage!.startsWith('Couldn’t'),
-                      onScanAgain: () => _runOcr(),
+                      failed: _scanFailed,
+                      onScanAgain: () => _scanBill(ImageSource.camera),
                       onUseManual: () => _sheetController.animateTo(
-                        0.92,
+                        _ManualEntrySheet.expandedExtent,
                         duration: const Duration(milliseconds: 320),
                         curve: Curves.easeOutCubic,
                       ),
                     ),
-                  if (_scanMessage != null) const SizedBox(height: 12),
-                  if (_desktopWeb)
-                    FilledButton.icon(
-                      onPressed: _runningOcr
-                          ? null
-                          : () => _runOcr(fromUpload: true),
-                      icon: const Icon(Icons.upload_file_outlined),
-                      label: const Text('Upload bill image'),
-                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _runningOcr
+                              ? null
+                              : () => _scanBill(ImageSource.camera),
+                          icon: const Icon(Icons.camera_alt_outlined),
+                          label: const Text('Capture bill'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _runningOcr
+                              ? null
+                              : () => _scanBill(ImageSource.gallery),
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: const Text('Upload'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white70),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -5253,6 +5386,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
                     sheetController: _sheetController,
                     scrollController: scrollController,
                     scannedItems: _scannedItems,
+                    scannedTitle: _scannedTitle,
                     reviewMessage: _scannedItems.isEmpty
                         ? null
                         : 'Review scanned items before saving.',
@@ -5477,6 +5611,7 @@ class _ManualEntrySheet extends StatefulWidget {
     required this.scrollController,
     required this.scannedItems,
     required this.onSaved,
+    this.scannedTitle,
     this.reviewMessage,
     super.key,
   });
@@ -5489,6 +5624,7 @@ class _ManualEntrySheet extends StatefulWidget {
   final DraggableScrollableController sheetController;
   final ScrollController scrollController;
   final List<_ExpenseItemDraft> scannedItems;
+  final String? scannedTitle;
   final String? reviewMessage;
   final VoidCallback onSaved;
 
@@ -5528,6 +5664,10 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
       _skipItemSplit = false;
       _ensureFixedBillAdjustments();
       _syncTotalFromItems();
+      final merchant = widget.scannedTitle?.trim() ?? '';
+      if (merchant.isNotEmpty && _title.text.trim().isEmpty) {
+        _title.text = merchant;
+      }
     }
     _refreshEqualPreview();
     _initialized = true;
