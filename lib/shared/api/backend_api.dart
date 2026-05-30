@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -71,6 +72,7 @@ class BackendApi {
 
   final http.Client _client;
   final String _baseUrl;
+  static const _requestTimeout = Duration(seconds: 12);
 
   bool get isConfigured => _baseUrl.trim().isNotEmpty;
 
@@ -169,9 +171,8 @@ class BackendApi {
   }
 
   Future<Map<String, dynamic>> get(String path, {String? accessToken}) async {
-    final response = await _client.get(
-      _uri(path),
-      headers: _headers(accessToken),
+    final response = await _send(
+      () => _client.get(_uri(path), headers: _headers(accessToken)),
     );
     return _decode(response);
   }
@@ -181,10 +182,12 @@ class BackendApi {
     Map<String, Object?> body, {
     String? accessToken,
   }) async {
-    final response = await _client.post(
-      _uri(path),
-      headers: _headers(accessToken),
-      body: jsonEncode(body),
+    final response = await _send(
+      () => _client.post(
+        _uri(path),
+        headers: _headers(accessToken),
+        body: jsonEncode(body),
+      ),
     );
     return _decode(response);
   }
@@ -199,13 +202,41 @@ class BackendApi {
     };
   }
 
+  Future<http.Response> _send(Future<http.Response> Function() request) async {
+    try {
+      return await request().timeout(_requestTimeout);
+    } on TimeoutException {
+      throw const BackendApiException(
+        'Backend is taking too long to respond. Check that the API server is running.',
+      );
+    } on BackendApiException {
+      rethrow;
+    } on Object {
+      throw const BackendApiException(
+        'Unable to reach backend. Check BACKEND_API_BASE_URL and the API server.',
+      );
+    }
+  }
+
   Map<String, dynamic> _decode(http.Response response) {
-    final decoded = response.body.isEmpty
-        ? <String, dynamic>{}
-        : jsonDecode(response.body) as Map<String, dynamic>;
+    final Map<String, dynamic> decoded;
+    try {
+      final parsed = response.body.isEmpty
+          ? <String, dynamic>{}
+          : jsonDecode(response.body);
+      decoded = parsed is Map<String, dynamic> ? parsed : <String, dynamic>{};
+    } on FormatException {
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw BackendApiException(
+          'Backend request failed (${response.statusCode}).',
+        );
+      }
+      throw const BackendApiException('Backend returned an invalid response.');
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw BackendApiException(
-        decoded['error']?.toString() ?? 'Backend request failed.',
+        decoded['error']?.toString() ??
+            'Backend request failed (${response.statusCode}).',
       );
     }
     return decoded;
