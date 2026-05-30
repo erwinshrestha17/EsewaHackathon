@@ -48,6 +48,17 @@ class AppStore extends ChangeNotifier {
 
   AppUser userById(String id) => users.firstWhere((user) => user.id == id);
 
+  AppUser? userByIdOrNull(String id) {
+    for (final user in users) {
+      if (user.id == id) {
+        return user;
+      }
+    }
+    return null;
+  }
+
+  bool get hasCurrentUser => userByIdOrNull(currentUserId) != null;
+
   void applyActiveUserProfile(UserProfile profile, {bool notify = true}) {
     final index = users.indexWhere((user) => user.id == profile.id);
     final existing = index == -1 ? null : users[index];

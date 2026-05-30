@@ -476,6 +476,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   AppStore? _store;
   final _backendApi = BackendApi();
   var _loadingBackendSnapshot = false;
+  var _initializingAuth = false;
   String? _loadedBackendSnapshotToken;
 
   SettingsController get _settingsController => widget.settingsController;
@@ -524,12 +525,20 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
       _authController = nextAuth..addListener(_handleAuthChanged);
     }
     _store = nextStore;
-    _syncActiveProfile();
+    if (!nextAuth.state.initialized) {
+      unawaited(_initializeAuthForShell());
+    } else {
+      _syncActiveProfile();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
+    final auth = AuthScope.of(context);
+    if (!auth.state.initialized || !store.hasCurrentUser) {
+      return const _MainLoadingScaffold();
+    }
     final body = switch (_index) {
       0 => HomeScreen(
         store: store,
@@ -730,9 +739,44 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
 
   void _handleAuthChanged() {
     _syncActiveProfile();
+    final state = _authController?.state;
+    if (state?.initialized == true && state?.isLoggedIn != true && mounted) {
+      Navigator.of(
+        context,
+      ).pushReplacementNamed(state?.hasSeenIntro == true ? '/auth' : '/intro');
+      return;
+    }
     if (mounted) {
       setState(() {});
     }
+  }
+
+  Future<void> _initializeAuthForShell() async {
+    if (_initializingAuth) {
+      return;
+    }
+    final auth = _authController;
+    if (auth == null || auth.state.initialized) {
+      return;
+    }
+    _initializingAuth = true;
+    try {
+      await auth.initialize();
+    } finally {
+      _initializingAuth = false;
+    }
+    if (!mounted) {
+      return;
+    }
+    final state = auth.state;
+    if (!state.isLoggedIn) {
+      Navigator.of(
+        context,
+      ).pushReplacementNamed(state.hasSeenIntro ? '/auth' : '/intro');
+      return;
+    }
+    _syncActiveProfile();
+    setState(() {});
   }
 
   void _syncActiveProfile() {
@@ -796,7 +840,8 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   Connection? _incomingConnection(AppStore store) {
     for (final connection in store.connectionsFor(store.currentUserId)) {
       if (connection.recipientId == store.currentUserId &&
-          connection.status == ConnectionStatus.pending) {
+          connection.status == ConnectionStatus.pending &&
+          store.userByIdOrNull(connection.requesterId) != null) {
         return connection;
       }
     }
@@ -867,6 +912,28 @@ class _Destination {
   final String label;
   final IconData icon;
   final IconData selectedIcon;
+}
+
+class _MainLoadingScaffold extends StatelessWidget {
+  const _MainLoadingScaffold();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: Center(
+        child: SizedBox(
+          width: 30,
+          height: 30,
+          child: CircularProgressIndicator(
+            strokeWidth: 3,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class ActivityScreen extends StatelessWidget {

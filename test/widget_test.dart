@@ -9,6 +9,7 @@ import 'package:sajha_kharcha/features/auth/screens/login_form.dart';
 import 'package:sajha_kharcha/features/auth/screens/register_form.dart';
 import 'package:sajha_kharcha/shared/api/backend_api.dart';
 import 'package:sajha_kharcha/features/home/home_controller.dart';
+import 'package:sajha_kharcha/features/settings/settings_controller.dart';
 import 'package:sajha_kharcha/features/settings/settings_screen.dart';
 import 'package:sajha_kharcha/shared/design_system/app_components.dart' as ds;
 import 'package:sajha_kharcha/shared/design_system/app_colors.dart';
@@ -694,6 +695,39 @@ void main() {
     expect(find.text('Incoming Requests'), findsOneWidget);
     expect(find.text('Kabir Lama'), findsWidgets);
   });
+
+  testWidgets(
+    'main route initializes auth before rendering store-backed home',
+    (tester) async {
+      _mockLoggedInStorage();
+      final settings = SettingsController();
+      addTearDown(settings.dispose);
+
+      await tester.pumpWidget(
+        AuthScope(
+          notifier: AuthController(backendApi: _FakeBackendApi()),
+          child: StoreScope(
+            notifier: AppStore(),
+            child: MaterialApp(
+              routes: {
+                '/auth': (_) => const AuthScreen(),
+                '/intro': (_) => const Scaffold(body: Text('Intro')),
+              },
+              home: SajhaKharchaShell(settingsController: settings),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Namaste, Sita'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('connection report dialog requires note and blocks duplicates', (
     tester,
