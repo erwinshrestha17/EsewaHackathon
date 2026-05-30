@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../src/app_state.dart';
 import '../../../src/finance.dart';
 import '../../../src/models.dart';
-import 'dhukuti_status_badge.dart';
-import 'dhukuti_tokens.dart';
+import 'savings_circle_status_badge.dart';
+import 'savings_circle_tokens.dart';
 
-enum DhukutiLedgerFilter { all, contributions, payouts, statusUpdates }
+enum SavingsCircleLedgerFilter { all, contributions, payouts, statusUpdates }
 
-class DhukutiLedgerItem extends StatelessWidget {
-  const DhukutiLedgerItem({
+class SavingsCircleLedgerItem extends StatelessWidget {
+  const SavingsCircleLedgerItem({
     required this.store,
     required this.event,
     super.key,
@@ -24,7 +24,7 @@ class DhukutiLedgerItem extends StatelessWidget {
         ? 'System'
         : store.nameOf(event.actorId!);
     final tone = _toneForEvent(event);
-    final color = dhukutiToneColor(context, tone);
+    final color = savingsCircleToneColor(context, tone);
     final amount = _amountForEvent(store, event);
 
     return ListTile(
@@ -47,24 +47,24 @@ class DhukutiLedgerItem extends StatelessWidget {
                 context,
               ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
-          DhukutiStatusBadge(label: _statusForEvent(event), tone: tone),
+          SavingsCircleStatusBadge(label: _statusForEvent(event), tone: tone),
         ],
       ),
     );
   }
 }
 
-bool ledgerEventMatches(ActivityLog event, DhukutiLedgerFilter filter) {
-  if (!event.eventType.startsWith('dhukuti_')) {
+bool ledgerEventMatches(ActivityLog event, SavingsCircleLedgerFilter filter) {
+  if (!event.eventType.startsWith('savings_circle_')) {
     return false;
   }
   return switch (filter) {
-    DhukutiLedgerFilter.all => true,
-    DhukutiLedgerFilter.contributions => event.eventType.contains(
+    SavingsCircleLedgerFilter.all => true,
+    SavingsCircleLedgerFilter.contributions => event.eventType.contains(
       'contribution',
     ),
-    DhukutiLedgerFilter.payouts => event.eventType.contains('payout'),
-    DhukutiLedgerFilter.statusUpdates =>
+    SavingsCircleLedgerFilter.payouts => event.eventType.contains('payout'),
+    SavingsCircleLedgerFilter.statusUpdates =>
       event.eventType.contains('opened') ||
           event.eventType.contains('seeded') ||
           event.eventType.contains('recipient') ||
@@ -90,15 +90,15 @@ IconData _iconForEvent(ActivityLog event) {
   return Icons.timeline;
 }
 
-DhukutiTone _toneForEvent(ActivityLog event) {
+SavingsCircleTone _toneForEvent(ActivityLog event) {
   if (event.eventType.contains('late') || event.eventType.contains('risk')) {
-    return DhukutiTone.warning;
+    return SavingsCircleTone.warning;
   }
   if (event.eventType.contains('contribution') ||
       event.eventType.contains('payout')) {
-    return DhukutiTone.success;
+    return SavingsCircleTone.success;
   }
-  return DhukutiTone.neutral;
+  return SavingsCircleTone.neutral;
 }
 
 String _statusForEvent(ActivityLog event) {
@@ -115,15 +115,15 @@ String _statusForEvent(ActivityLog event) {
 }
 
 int? _amountForEvent(AppStore store, ActivityLog event) {
-  if (event.entityType == 'dhukuti_contribution') {
-    for (final contribution in store.dhukutiContributions) {
+  if (event.entityType == 'savings_circle_contribution') {
+    for (final contribution in store.savingsCircleContributions) {
       if (contribution.id == event.entityId) {
         return contribution.amountMinor;
       }
     }
   }
-  if (event.entityType == 'dhukuti_payout') {
-    for (final payout in store.dhukutiPayouts) {
+  if (event.entityType == 'savings_circle_payout') {
+    for (final payout in store.savingsCirclePayouts) {
       if (payout.id == event.entityId) {
         return payout.amountMinor;
       }

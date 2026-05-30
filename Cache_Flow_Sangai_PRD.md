@@ -11,9 +11,9 @@ Date: 2026-05-28
 
 Sangai is a mobile-first social finance module for eSewa that helps users manage shared spending with people they know. It lets users connect with friends, family, and colleagues, create expense groups, split bills, view transparent balances, settle dues through eSewa P2P payments, and send gift cards with money.
 
-The current selected idea, Digital Dhukuti, is strong because it is culturally native to Nepal. The refined product keeps Digital Dhukuti as a flagship differentiator, but expands the core product around the full Challenge 10 requirement set: social connections, group expenses, balance transparency, settlement, and gifting.
+The current selected idea, Savings Circle, is strong because it is culturally native to Nepal. The refined product keeps Savings Circle as a flagship differentiator, but expands the core product around the full Challenge 10 requirement set: social connections, group expenses, balance transparency, settlement, and gifting.
 
-For the hackathon, the recommended build is a responsive React web app with a Node.js Express backend, PostgreSQL database, local eSewa payment simulation, and optional OCR/ML services. The core prototype should prove the required Challenge 10 loop first: connect, create group, add expense, split, view balance, settle, and send a gift. Digital Dhukuti should be shown as a polished differentiator through a seeded or lightweight interactive flow only after the core loop is stable.
+For the hackathon, the recommended build is a responsive React web app with a Node.js Express backend, PostgreSQL database, local eSewa payment simulation, and optional OCR/ML services. The core prototype should prove the required Challenge 10 loop first: connect, create group, add expense, split, view balance, settle, and send a gift. Savings Circle should be shown as a polished differentiator through a seeded or lightweight interactive flow only after the core loop is stable.
 
 ## 2. Product Name
 
@@ -23,7 +23,7 @@ Why this name works:
 
 - It means "together" in a Nepali cultural context.
 - It covers all use cases: friends splitting food, colleagues running a fund, families sending gifts, and groups managing recurring contributions.
-- It is broader than Digital Dhukuti, so the product does not feel limited to rotating savings pools.
+- It is broader than Savings Circle, so the product does not feel limited to rotating savings pools.
 - It can be positioned as an eSewa-native social settlement layer.
 
 Feature naming:
@@ -31,7 +31,7 @@ Feature naming:
 - Sangai Groups: group expense management
 - Sangai Settle: one-tap settlement and debt simplification
 - Sangai Gifts: gift cards and group gifting
-- Digital Dhukuti: rotating contribution ledger inside Sangai
+- Savings Circle: rotating contribution ledger inside Sangai
 - Festival Mode: Dashain, Tihar, trek, bhoj, picnic, and apartment templates
 
 ## 3. Source Requirement Review
@@ -50,8 +50,8 @@ Feature naming:
 | Track outstanding settlements | Outstanding dues are shown by group and across all groups. Settlement status can be pending, paid, failed, failed_review, expired, or cancelled. | P0 |
 | Settlement reminders and payment prompts | In-app nudges show due reminders at configurable intervals. | P1 |
 | Send gift cards with a monetary amount | Connected users can send themed money envelopes; group gift pools are P1. | P0 |
-| Improve transparency in shared financial coordination | Every P0 expense, split, gift, and settlement has an activity log and timestamp. Seeded Dhukuti demo contributions can appear in activity; interactive Dhukuti contribution activity is P1. | P0 |
-| Increase peer-to-peer transactions | Settlements and gifts trigger eSewa P2P payment intents in MVP; Dhukuti contribution payments are shown through seeded demo data or P1 interactive flow. | P0 |
+| Improve transparency in shared financial coordination | Every P0 expense, split, gift, and settlement has an activity log and timestamp. Seeded Savings Circle demo contributions can appear in activity; interactive Savings Circle contribution activity is P1. | P0 |
+| Increase peer-to-peer transactions | Settlements and gifts trigger eSewa P2P payment intents in MVP; Savings Circle contribution payments are shown through seeded demo data or P1 interactive flow. | P0 |
 
 ### 3.2 Submission Guideline Coverage
 
@@ -60,7 +60,7 @@ Feature naming:
 | Team name | Cache Flow |
 | Challenge | Challenge 10 |
 | Problem understanding | PRD and deck should clearly explain current reliance on messaging apps, manual calculation, forgotten dues, and social discomfort around asking for money. |
-| Proposed solution | Sangai: social connections, groups, expense splitting, balance tracking, settlement, gifts, and Digital Dhukuti. |
+| Proposed solution | Sangai: social connections, groups, expense splitting, balance tracking, settlement, gifts, and Savings Circle. |
 | In-scope and out-of-scope | Defined in this PRD and should be added to the final deck. |
 | User journey or flow | Dashain Khasi split journey is recommended for the demo story. |
 | Technology stack | React.js, Node.js/Express, PostgreSQL, optional Python/scikit-learn, GitHub, local payment simulation. |
@@ -74,27 +74,27 @@ Feature naming:
 
 | Criteria | Weight | How Sangai should score |
 | --- | ---: | --- |
-| Problem Understanding | 10% | Shows Nepal-specific shared expense behavior, festival spending, trekking, office bhoj, apartment expenses, and Dhukuti coordination. |
-| Innovation and Creativity | 20% | Digital Dhukuti, Festival Mode, group gifting, receipt-assisted split, and culturally native templates. |
+| Problem Understanding | 10% | Shows Nepal-specific shared expense behavior, festival spending, trekking, office bhoj, apartment expenses, and Savings Circle coordination. |
+| Innovation and Creativity | 20% | Savings Circle, Festival Mode, group gifting, receipt-assisted split, and culturally native templates. |
 | Technical Implementation | 25% | Demonstrable API, relational data model, balance engine, settlement simulation, and clear service boundaries. |
 | UX/UI | 20% | Mobile-first group flow, one-tap templates, transparent balances, clear owed/owing language, and low-friction settlement. |
 | Scalability and Feasibility | 15% | Uses allowed stack, local simulation, simple algorithms, and a production-friendly architecture. |
-| Demo and Presentation | 10% | Single story arc: connect, create Dashain group, add bill, split, settle, send gift, show Dhukuti. |
+| Demo and Presentation | 10% | Single story arc: connect, create Dashain group, add bill, split, settle, send gift, show Savings Circle. |
 
 ## 4. Refined Product Positioning
 
 ### 4.1 Current Idea Strengths
 
-- Strong cultural insight through Dhukuti, Dashain, Tihar, bhoj, and trekking use cases.
+- Strong cultural insight through Savings Circle, Dashain, Tihar, bhoj, and trekking use cases.
 - Goes beyond a Splitwise clone by connecting settlement to eSewa P2P payments.
 - Has a compelling business case for eSewa: more P2P transactions, repeat engagement, and group network effects.
 - Festival Mode gives the demo emotional recall and local relevance.
 
 ### 4.2 Refinements Needed
 
-1. Make Sangai the main product and Digital Dhukuti a flagship module.
+1. Make Sangai the main product and Savings Circle a flagship module.
    - Challenge 10 is primarily about group expenses, connections, balances, settlement, and gifts.
-   - Digital Dhukuti is a differentiator, but it should not make the product feel like only a savings pool app.
+   - Savings Circle is a differentiator, but it should not make the product feel like only a savings pool app.
 
 2. Correct the debt simplification explanation.
    - The deck currently says minimum spanning tree.
@@ -105,8 +105,8 @@ Feature naming:
    - Treat Flutter mobile, Redis, advanced OCR, and ML as stretch goals.
    - Use a mock eSewa payment adapter unless a real sandbox is provided.
 
-4. Treat Dhukuti carefully.
-   - For MVP, Digital Dhukuti should be a contribution schedule and transparent ledger, not a regulated deposit, investment, loan, or credit product.
+4. Treat Savings Circle carefully.
+   - For MVP, Savings Circle should be a contribution schedule and transparent ledger, not a regulated deposit, investment, loan, or credit product.
    - Production use should require compliance review, KYC limits, AML checks, participant consent, and dispute handling.
 
 5. Avoid unsupported statistics unless sourced.
@@ -122,11 +122,11 @@ Feature naming:
 - See who owes whom without confusion.
 - Settle dues through eSewa in one tap.
 - Send gifts or pooled money during festivals and group occasions.
-- Track recurring Dhukuti-style contributions transparently through a seeded MVP ledger or interactive P1 flow.
+- Track recurring Savings Circle-style contributions transparently through a seeded MVP ledger or interactive P1 flow.
 
 ### 5.2 Business Goals
 
-- Increase eSewa P2P transaction volume through MVP settlements and gifts, with Dhukuti contribution payments as a clear phase-2 expansion.
+- Increase eSewa P2P transaction volume through MVP settlements and gifts, with Savings Circle contribution payments as a clear phase-2 expansion.
 - Increase user engagement by turning one-off payments into group workflows.
 - Reduce off-platform coordination currently happening on messaging apps.
 - Create a roadmap-ready product module that could be piloted with students, office teams, families, and travel groups.
@@ -135,7 +135,7 @@ Feature naming:
 
 - Deliver a working prototype that demonstrates the end-to-end group expense lifecycle.
 - Show a clear architecture and data model.
-- Include at least one culturally differentiated flow: Dashain gift pool or Digital Dhukuti.
+- Include at least one culturally differentiated flow: Dashain gift pool or Savings Circle.
 - Demonstrate settlement simulation through an eSewa-style payment confirmation flow.
 - Use seeded accepted connections for the demo so the 6-member group can be created without spending stage time approving every participant.
 - Prepare a concise 3 to 5 minute demo video and final pitch deck.
@@ -177,7 +177,7 @@ Primary features:
 
 - Festival Mode, group gift pool, gift card templates, eSewa transfer.
 
-### 6.4 Dhukuti Coordinator
+### 6.4 Savings Circle Coordinator
 
 Needs:
 
@@ -187,7 +187,7 @@ Needs:
 
 Primary features:
 
-- Digital Dhukuti ledger, contribution schedule, payout rotation, reminders, activity log.
+- Savings Circle ledger, contribution schedule, payout rotation, reminders, activity log.
 
 ## 7. Scope
 
@@ -205,7 +205,7 @@ P0 core loop to build:
 - Simulate eSewa P2P settlement with idempotent payment confirmation.
 - Send a themed gift card with a monetary amount to an active connection.
 - Show an activity timeline for connections, expenses, settlements, and gifts.
-- Show a seeded Digital Dhukuti detail screen with contribution schedule and payout recipient.
+- Show a seeded Savings Circle detail screen with contribution schedule and payout recipient.
 
 P0 demo guardrails:
 
@@ -217,7 +217,7 @@ P0 demo guardrails:
 P1 features if time allows:
 
 - Percentage and shares-based split modes.
-- Interactive Digital Dhukuti creation, participation acceptance, and contribution payment simulation.
+- Interactive Savings Circle creation, participation acceptance, and contribution payment simulation.
 - Full block/report moderation workflow with review queue.
 - Production-grade payment webhook retry history and manual-review dashboard.
 - Receipt OCR for printed English bills using Tesseract or a controlled sample receipt parser.
@@ -242,7 +242,7 @@ P2 stretch features:
 - Real money custody by the prototype.
 - Direct bank debit.
 - Credit scoring, lending, investment, or interest-bearing products.
-- Public Dhukuti marketplaces.
+- Public Savings Circle marketplaces.
 - Nepali language OCR.
 - Handwritten receipt scanning.
 - Multi-currency support.
@@ -261,7 +261,7 @@ P2 stretch features:
 3. User sends a connection request.
 4. Recipient sees incoming request with requester name and mutual group context where available.
 5. Recipient approves or declines.
-6. Once approved, both users can create groups, split expenses, send gifts, and join Dhukuti pools.
+6. Once approved, both users can create groups, split expenses, send gifts, and join Savings Circle pools.
 7. Either user can remove the connection later.
 
 Acceptance criteria:
@@ -308,18 +308,18 @@ Acceptance criteria:
 - Gifts can only be sent to accepted connections.
 - Gift is logged separately from expense settlements.
 
-### 8.4 Digital Dhukuti Journey
+### 8.4 Savings Circle Journey
 
 MVP demo journey:
 
-1. User opens a seeded Digital Dhukuti pool.
+1. User opens a seeded Savings Circle pool.
 2. App shows contribution amount, frequency, payout order, current cycle, and member statuses.
 3. User views contribution history and current payout recipient.
 4. App highlights whether the cycle is on track or at-risk.
 
 P1 interactive journey:
 
-1. Organizer creates a Dhukuti pool.
+1. Organizer creates a Savings Circle pool.
 2. Organizer sets contribution amount, frequency, start date, payout order, and member list.
 3. Members accept participation.
 4. App generates contribution schedule and cycles.
@@ -330,7 +330,7 @@ P1 interactive journey:
 
 Acceptance criteria:
 
-- Prototype clearly shows that Digital Dhukuti is a transparent ledger and payment scheduler.
+- Prototype clearly shows that Savings Circle is a transparent ledger and payment scheduler.
 - Prototype does not claim to provide credit, interest, investment return, or guaranteed payouts.
 
 ## 9. Functional Requirements
@@ -393,8 +393,8 @@ FR-009: Group admins shall be able to add or remove connected members.
 FR-010: Groups shall have an activity timeline.
 
 - Priority: P0
-- Events: member added, member removed, expense added, expense voided, split edited, settlement pending, settlement paid, settlement expired, gift sent, gift cancelled, gift refunded, and seeded Dhukuti contribution activity for demo data.
-- P1 events: interactive Dhukuti contribution payment, Dhukuti payout payment, gift pool contribution, receipt OCR parse, and item assignment.
+- Events: member added, member removed, expense added, expense voided, split edited, settlement pending, settlement paid, settlement expired, gift sent, gift cancelled, gift refunded, and seeded Savings Circle contribution activity for demo data.
+- P1 events: interactive Savings Circle contribution payment, Savings Circle payout payment, gift pool contribution, receipt OCR parse, and item assignment.
 
 ### 9.4 Expenses and Splits
 
@@ -506,19 +506,19 @@ FR-028: Users shall be able to create a group gift pool.
 - Acceptance: Multiple contributors can add money toward one recipient.
 - Edge cases: gift pool contributions must show contributor, amount, payment status, and refund/cancel state.
 
-### 9.8 Digital Dhukuti
+### 9.8 Savings Circle
 
-FR-029: Users shall be able to view a Digital Dhukuti pool and ledger.
+FR-029: Users shall be able to view a Savings Circle pool and ledger.
 
 - Priority: P0
 - Acceptance: Seeded demo pool shows contribution amount, frequency, members, payout order, cycle status, contribution statuses, and current payout recipient.
 
-FR-030: Users shall be able to create a Digital Dhukuti pool.
+FR-030: Users shall be able to create a Savings Circle pool.
 
 - Priority: P1
 - Fields: name, contribution amount, frequency, start date, members, payout order.
 
-FR-031: Members shall accept or decline Dhukuti participation.
+FR-031: Members shall accept or decline Savings Circle participation.
 
 - Priority: P1
 - Acceptance: No member is added as active until they accept.
@@ -555,7 +555,7 @@ FR-036: Users shall be able to export group statements.
 FR-037: Users shall be able to view personal activity across all groups.
 
 - Priority: P1
-- Acceptance: Dashboard summarizes owed, owed to user, pending gifts, and Dhukuti dues.
+- Acceptance: Dashboard summarizes owed, owed to user, pending gifts, and Savings Circle dues.
 
 ## 10. Non-Functional Requirements
 
@@ -571,7 +571,7 @@ FR-037: Users shall be able to view personal activity across all groups.
 - Expense creation must be transactional: expense, shares, balance event, and activity log should succeed or fail together.
 - Failed payment simulation should not mark settlement as paid.
 - Pending payment records should expire or refresh rather than remain actionable forever.
-- Domain payment records reference `payment_transactions`; provider callback state is not duplicated as separate provider/reference fields on settlement, gift, or Dhukuti tables.
+- Domain payment records reference `payment_transactions`; provider callback state is not duplicated as separate provider/reference fields on settlement, gift, or Savings Circle tables.
 - A payment-like domain record may have a null `payment_transaction_id` only before a provider intent is created. Any payment-derived success, opened, refunded, or failed_review domain state must reference a `payment_transactions` row.
 - Payment status changes should preserve audit timestamps and transition history for callback debugging.
 
@@ -590,7 +590,7 @@ FR-037: Users shall be able to view personal activity across all groups.
 - Use role-based authorization for group actions.
 - Do not trust client-calculated balances as final.
 - Store payment simulation references and settlement IDs.
-- Require idempotency keys for settlement, gift, and Dhukuti payment simulation endpoints.
+- Require idempotency keys for settlement, gift, and Savings Circle payment simulation endpoints.
 - Scope idempotency uniqueness by actor user, idempotency scope, operation type, and idempotency key.
 - Enforce payment provider reference uniqueness across payment-like records; a repeated provider reference for a different operation is routed to failed_review/manual review.
 - Enforce domain/payment consistency: records cannot enter payment-derived success, opened, refunded, or failed_review states without a linked payment transaction.
@@ -704,7 +704,7 @@ Primary tabs:
 - Groups
 - Connections
 - Gifts
-- Dhukuti
+- Savings Circle
 - Activity
 
 ### 12.2 MVP Screens
@@ -713,7 +713,7 @@ Primary tabs:
    - Total you owe
    - Total owed to you
    - Pending settlements
-   - Upcoming Dhukuti dues from seeded read-only ledger in MVP
+   - Upcoming Savings Circle dues from seeded read-only ledger in MVP
    - Recent activity
 
 2. Connections
@@ -748,7 +748,7 @@ Primary tabs:
    - Amount
    - Message
 
-8. Digital Dhukuti detail
+8. Savings Circle detail
    - Pool amount
    - Members
    - Contribution schedule
@@ -818,7 +818,7 @@ Node.js Express API
   |-- Ledger and Adjustments
   |-- Settlement Adapter
   |-- Gifts
-  |-- Digital Dhukuti
+  |-- Savings Circle
   |
   | SQL
   v
@@ -1056,7 +1056,7 @@ payment_transaction_events:
 
 Payment record rules:
 
-- `payment_transactions` is the payment audit anchor for settlements, gifts, gift pool contributions, Dhukuti contributions, and Dhukuti payouts.
+- `payment_transactions` is the payment audit anchor for settlements, gifts, gift pool contributions, Savings Circle contributions, and Savings Circle payouts.
 - Domain rows may be created before a provider intent and temporarily keep `payment_transaction_id` null while status is draft-like or pending without provider reference.
 - Domain rows in `paid`, `sent`, `opened`, `refunded`, or `failed_review` payment-derived states must have `payment_transaction_id` populated.
 - Domain rows in `failed`, `expired`, or `cancelled` must also have `payment_transaction_id` populated when that state came from a provider intent, callback, or provider reconciliation.
@@ -1154,7 +1154,7 @@ gift_pool_contributions:
 - paid_at
 - constraints: unique(contributor_id, idempotency_scope, operation_type, idempotency_key)
 
-dhukuti_pools:
+savings_circle_pools:
 
 - id
 - group_id
@@ -1166,7 +1166,7 @@ dhukuti_pools:
 - status: draft, active, completed, cancelled
 - created_at
 
-dhukuti_members:
+savings_circle_members:
 
 - id
 - pool_id
@@ -1174,7 +1174,7 @@ dhukuti_members:
 - payout_order
 - status: invited, active, declined, exited
 
-dhukuti_cycles:
+savings_circle_cycles:
 
 - id
 - pool_id
@@ -1185,7 +1185,7 @@ dhukuti_cycles:
 - paid_contribution_total_minor
 - status: upcoming, open, at_risk, ready_for_payout, paid_out, closed, cancelled
 
-dhukuti_contributions:
+savings_circle_contributions:
 
 - id
 - pool_id
@@ -1202,7 +1202,7 @@ dhukuti_contributions:
 - paid_at
 - constraints: unique(user_id, idempotency_scope, operation_type, idempotency_key)
 
-dhukuti_payouts:
+savings_circle_payouts:
 
 - id
 - pool_id
@@ -1305,20 +1305,20 @@ Settlement API rules:
 - POST /gift-pools/:id/cancel
 - POST /gift-pools/:id/refund
 
-### 15.5 Digital Dhukuti
+### 15.5 Savings Circle
 
 P0 read-only seeded endpoints:
 
-- GET /dhukuti/pools
-- GET /dhukuti/pools/:id
-- GET /dhukuti/pools/:id/ledger
+- GET /savings-circle/pools
+- GET /savings-circle/pools/:id
+- GET /savings-circle/pools/:id/ledger
 
 P1 mutating endpoints:
 
-- POST /dhukuti/pools
-- POST /dhukuti/pools/:id/invitations/:invitationId/respond
-- POST /dhukuti/pools/:id/contributions/:contributionId/pay
-- POST /dhukuti/pools/:id/payouts/:payoutId/pay
+- POST /savings-circle/pools
+- POST /savings-circle/pools/:id/invitations/:invitationId/respond
+- POST /savings-circle/pools/:id/contributions/:contributionId/pay
+- POST /savings-circle/pools/:id/payouts/:payoutId/pay
 
 ## 16. Recommended Tech Stack
 
@@ -1384,13 +1384,13 @@ Version control:
 - Percentage of expenses settled within 7 days.
 - Number of P2P settlement intents generated.
 - Number of gift payments sent.
-- Number of Dhukuti contributions recorded in seeded MVP ledger or P1 interactive flow.
+- Number of Savings Circle contributions recorded in seeded MVP ledger or P1 interactive flow.
 - Reduction in settlement transactions after simplification.
 
 ### 17.2 Demo Success Metrics
 
 - Complete core demo flow in under 3 minutes.
-- Create one group, add one expense, show balance, settle payment, send gift, and show Dhukuti ledger without switching tools.
+- Create one group, add one expense, show balance, settle payment, send gift, and show Savings Circle ledger without switching tools.
 - No manual database changes during demo.
 - Seed data supports fallback if OCR or payment sandbox fails.
 
@@ -1453,9 +1453,9 @@ Version control:
 - If a gift payment succeeds after the recipient connection was removed mid-flow, the gift remains delivered if the payment was already confirmed; no new gift actions are allowed afterward unless the connection is restored.
 - A gift cannot move to sent, opened, refunded, or failed_review unless it links to the payment transaction that produced or reconciled that state.
 
-### 18.5 Digital Dhukuti Edge Cases
+### 18.5 Savings Circle Edge Cases
 
-- A Dhukuti member is not active until they accept participation.
+- A Savings Circle member is not active until they accept participation.
 - If a member misses a contribution before a payout, the cycle is marked at-risk and payout is not displayed as guaranteed.
 - Failed payout attempts remain in the payout ledger with failure reason.
 - Emergency exit is P2 and must not rewrite completed contribution or payout history.
@@ -1464,10 +1464,10 @@ Version control:
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Scope is too large for hackathon | Incomplete prototype | Prioritize P0 web app. Treat Flutter, Redis, OCR, ML, item-level split, and interactive Dhukuti as stretch. |
+| Scope is too large for hackathon | Incomplete prototype | Prioritize P0 web app. Treat Flutter, Redis, OCR, ML, item-level split, and interactive Savings Circle as stretch. |
 | Payment API sandbox unavailable | Demo blocker | Build a mock eSewa payment adapter with realistic confirmation states. |
 | OCR fails during live demo | Demo embarrassment | Use controlled sample receipt and manual item entry fallback. |
-| Dhukuti raises compliance questions | Judge concern | Position MVP as transparent ledger and payment scheduler, not deposit, lending, or investment product. |
+| Savings Circle raises compliance questions | Judge concern | Position MVP as transparent ledger and payment scheduler, not deposit, lending, or investment product. |
 | Unsupported statistics in deck | Credibility issue | Replace with survey-backed or qualitative claims. |
 | Balance math bug | Product trust issue | Unit test split validation, net balance, and settlement simplification. |
 | Privacy concern around social connections | Adoption risk | Require accepted connections, add block/remove, and restrict group invites. |
@@ -1513,8 +1513,8 @@ P1/P2 unit tests:
 
 - Percentage validation.
 - Share-based split calculation.
-- Dhukuti schedule generation.
-- Dhukuti at-risk cycle when a contribution is missed.
+- Savings Circle schedule generation.
+- Savings Circle at-risk cycle when a contribution is missed.
 
 P0 integration tests:
 
@@ -1538,7 +1538,7 @@ P0 integration tests:
 
 P1/P2 integration tests:
 
-- Dhukuti contribution payment.
+- Savings Circle contribution payment.
 
 Manual QA:
 
@@ -1583,13 +1583,13 @@ Manual QA:
 - Implement settlement locks, locked-expense conflict responses, and the minimal admin-only zero-sum adjustment flow.
 - Build gifts module.
 - Build activity timeline.
-- Add seeded Digital Dhukuti ledger screen.
+- Add seeded Savings Circle ledger screen.
 
 ### Day 3
 
 - Polish mobile UI.
 - Add Festival Mode templates.
-- Add P1 features only after the core loop is demo-stable: percentage/share split, interactive Dhukuti, item split, or OCR.
+- Add P1 features only after the core loop is demo-stable: percentage/share split, interactive Savings Circle, item split, or OCR.
 - Write README.
 - Record demo video.
 - Finalize pitch deck with updated app name and corrected technical claims.
@@ -1624,24 +1624,24 @@ Recommended 3-minute story:
 7. Gift:
    - Send a Tihar or Dashain gift card with money.
 
-8. Digital Dhukuti:
+8. Savings Circle:
    - Show a seeded monthly contribution pool, cycle status, payout recipient, and transparent ledger.
 
 9. Close:
-   - "Sangai brings shared expenses, gifts, and Digital Dhukuti into eSewa, where the money already moves."
+   - "Sangai brings shared expenses, gifts, and Savings Circle into eSewa, where the money already moves."
 
 ## 23. Deck Update Recommendations
 
 Update the existing deck as follows:
 
 - Replace placeholder team name with Cache Flow.
-- Rename the product from Digital Dhukuti to Sangai, with Digital Dhukuti as the flagship module.
+- Rename the product from Savings Circle to Sangai, with Savings Circle as the flagship module.
 - Replace "minimum spanning tree algorithm" with "net-balance settlement simplification algorithm."
-- Mark Flutter, Redis, advanced OCR, ML, item-level split, and interactive Dhukuti creation as stretch or phase 2 unless the team is confident.
-- Show Digital Dhukuti as a seeded ledger in the core demo, then mention interactive creation as the next build milestone.
-- Phrase business impact as "MVP creates eSewa transactions through settlements and gifts; Dhukuti contribution payments expand the transaction loop in phase 2."
+- Mark Flutter, Redis, advanced OCR, ML, item-level split, and interactive Savings Circle creation as stretch or phase 2 unless the team is confident.
+- Show Savings Circle as a seeded ledger in the core demo, then mention interactive creation as the next build milestone.
+- Phrase business impact as "MVP creates eSewa transactions through settlements and gifts; Savings Circle contribution payments expand the transaction loop in phase 2."
 - Reframe unsupported statistics unless there is source data.
-- Add a compliance-safe note for Digital Dhukuti:
+- Add a compliance-safe note for Savings Circle:
   - "Hackathon MVP is a transparent contribution ledger and payment scheduler. Production release would require eSewa compliance review."
 - Add one slide or section mapping the product directly to Challenge 10 requirements.
 - Keep the demo story focused on one continuous Dashain group flow.
@@ -1651,7 +1651,7 @@ Update the existing deck as follows:
 - Will eSewa provide a payment API sandbox for hackathon teams?
 - Are eSewa IDs available in test data, or should the prototype use phone numbers only?
 - Are gift card templates allowed to use eSewa branding assets?
-- Is a legal/compliance mentor available to review the Digital Dhukuti framing?
+- Is a legal/compliance mentor available to review the Savings Circle framing?
 - Should the final prototype be hosted, or is local demo acceptable?
 - Does the judging panel prefer mobile app demos, or is responsive web sufficient?
 
@@ -1660,7 +1660,7 @@ Update the existing deck as follows:
 Cache Flow should build Sangai as a focused, working social expense prototype, not a broad concept deck. The winning path is:
 
 1. Nail the required Challenge 10 flows: connect, group, split, balance, settle, gift.
-2. Use Digital Dhukuti as the memorable Nepal-specific differentiator.
+2. Use Savings Circle as the memorable Nepal-specific differentiator.
 3. Keep the MVP technically honest and demo-ready.
-4. Show how every settlement and gift becomes an eSewa transaction in MVP, with Dhukuti contributions as the next expansion.
+4. Show how every settlement and gift becomes an eSewa transaction in MVP, with Savings Circle contributions as the next expansion.
 5. Pitch Sangai as a product eSewa could realistically pilot after the hackathon.

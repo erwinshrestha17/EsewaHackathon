@@ -6,20 +6,21 @@ import '../../shared/design_system/app_text_styles.dart';
 import '../../src/app_state.dart';
 import '../../src/finance.dart';
 import '../../src/models.dart';
-import 'widgets/dhukuti_status_badge.dart';
-import 'widgets/dhukuti_tokens.dart';
+import 'widgets/savings_circle_status_badge.dart';
+import 'widgets/savings_circle_tokens.dart';
 
-class DhukutiCreateScreen extends StatefulWidget {
-  const DhukutiCreateScreen({required this.store, super.key});
+class SavingsCircleCreateScreen extends StatefulWidget {
+  const SavingsCircleCreateScreen({required this.store, super.key});
 
   final AppStore store;
 
   @override
-  State<DhukutiCreateScreen> createState() => _DhukutiCreateScreenState();
+  State<SavingsCircleCreateScreen> createState() =>
+      _SavingsCircleCreateScreenState();
 }
 
-class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
-  final _poolName = TextEditingController(text: 'New Digital Dhukuti');
+class _SavingsCircleCreateScreenState extends State<SavingsCircleCreateScreen> {
+  final _poolName = TextEditingController(text: 'New Savings Circle');
   final _amount = TextEditingController(text: '3000');
   final _serviceFee = TextEditingController(text: '50');
   var _frequency = 'Monthly';
@@ -31,7 +32,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
   @override
   void initState() {
     super.initState();
-    final groups = widget.store.visibleDhukutiGroups;
+    final groups = widget.store.visibleSavingsCircleGroups;
     _groupId = groups.isEmpty ? null : groups.first.id;
     _selectedMembers.addAll(
       widget.store.activeConnectionUsers().take(4).map((user) => user.id),
@@ -49,7 +50,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
-    final groups = store.visibleDhukutiGroups;
+    final groups = store.visibleSavingsCircleGroups;
     final connections = store.activeConnectionUsers();
     final memberCount = _selectedMembers.length + 1;
     final amount = parseMoneyToMinor(_amount.text);
@@ -58,14 +59,14 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
     final netPayout = expected - serviceFee;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Dhukuti Pool')),
-      body: DhukutiScrollView(
+      appBar: AppBar(title: const Text('Create Savings Circle Pool')),
+      body: SavingsCircleScrollView(
         children: [
-          DhukutiHeader(
-            title: 'Create Dhukuti Pool',
+          SavingsCircleHeader(
+            title: 'Create Savings Circle Pool',
             subtitle: 'Set up a trusted contribution circle.',
           ),
-          DhukutiSection(
+          SavingsCircleSection(
             title: 'Pool Details',
             child: Column(
               children: [
@@ -129,17 +130,17 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
               ],
             ),
           ),
-          DhukutiSection(
+          SavingsCircleSection(
             title: 'Members',
-            action: DhukutiStatusBadge(
+            action: SavingsCircleStatusBadge(
               label: '$memberCount people',
-              tone: DhukutiTone.success,
+              tone: SavingsCircleTone.success,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'You are included automatically. Select members who must accept the Dhukuti schedule.',
+                  'You are included automatically. Select members who must accept the Savings Circle schedule.',
                   style: AppTextStyles.bodySecondary,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -147,14 +148,14 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    _DhukutiMemberSelectorCard(
+                    _SavingsCircleMemberSelectorCard(
                       user: store.currentUser,
                       selected: true,
                       enabled: false,
                       onTap: () {},
                     ),
                     for (final user in connections)
-                      _DhukutiMemberSelectorCard(
+                      _SavingsCircleMemberSelectorCard(
                         user: user,
                         selected: _selectedMembers.contains(user.id),
                         onTap: () {
@@ -170,7 +171,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
               ],
             ),
           ),
-          DhukutiSection(
+          SavingsCircleSection(
             title: 'Payout Order',
             child: SegmentedButton<String>(
               selected: {_payoutOrder},
@@ -195,7 +196,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
               ],
             ),
           ),
-          DhukutiSection(
+          SavingsCircleSection(
             title: 'Review',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -227,14 +228,14 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: dhukutiFestival.withValues(alpha: 0.09),
+                    color: savingsCircleFestival.withValues(alpha: 0.09),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: dhukutiFestival.withValues(alpha: 0.24),
+                      color: savingsCircleFestival.withValues(alpha: 0.24),
                     ),
                   ),
                   child: const Text(
-                    'Digital Dhukuti is a contribution schedule and transparent ledger. It does not provide credit, interest, investment return, or guaranteed payout.',
+                    'Savings Circle is a contribution schedule and transparent ledger. It does not provide credit, interest, investment return, or guaranteed payout.',
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -268,10 +269,10 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
   }
 
   void _createPool(BuildContext context) {
-    final id = widget.store.createDhukutiPool(
+    final id = widget.store.createSavingsCirclePool(
       groupId: _groupId!,
       name: _poolName.text.trim().isEmpty
-          ? 'New Digital Dhukuti'
+          ? 'New Savings Circle'
           : _poolName.text.trim(),
       contributionAmountMinor: parseMoneyToMinor(_amount.text),
       frequency: _frequency,
@@ -287,8 +288,8 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
   }
 }
 
-class _DhukutiMemberSelectorCard extends StatelessWidget {
-  const _DhukutiMemberSelectorCard({
+class _SavingsCircleMemberSelectorCard extends StatelessWidget {
+  const _SavingsCircleMemberSelectorCard({
     required this.user,
     required this.selected,
     required this.onTap,
@@ -326,7 +327,7 @@ class _DhukutiMemberSelectorCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                DhukutiAvatar(label: user.avatar, small: true),
+                SavingsCircleAvatar(label: user.avatar, small: true),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(

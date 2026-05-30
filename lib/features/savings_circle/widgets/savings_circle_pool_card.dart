@@ -7,11 +7,11 @@ import '../../../shared/design_system/app_text_styles.dart';
 import '../../../src/app_state.dart';
 import '../../../src/finance.dart';
 import '../../../src/models.dart';
-import 'dhukuti_status_badge.dart';
-import 'dhukuti_tokens.dart';
+import 'savings_circle_status_badge.dart';
+import 'savings_circle_tokens.dart';
 
-class DhukutiPoolCard extends StatelessWidget {
-  const DhukutiPoolCard({
+class SavingsCirclePoolCard extends StatelessWidget {
+  const SavingsCirclePoolCard({
     required this.store,
     required this.pool,
     required this.selected,
@@ -20,7 +20,7 @@ class DhukutiPoolCard extends StatelessWidget {
   });
 
   final AppStore store;
-  final DhukutiPool pool;
+  final SavingsCirclePool pool;
   final bool selected;
   final VoidCallback onTap;
 
@@ -29,10 +29,12 @@ class DhukutiPoolCard extends StatelessWidget {
     final group = store.groupById(pool.groupId);
     final members = store.membersForPool(pool.id);
     final cycles =
-        store.dhukutiCycles.where((cycle) => cycle.poolId == pool.id).toList()
+        store.savingsCircleCycles
+            .where((cycle) => cycle.poolId == pool.id)
+            .toList()
           ..sort((a, b) => a.cycleNumber.compareTo(b.cycleNumber));
     final currentCycle = currentCycleFor(pool, cycles);
-    final contributions = store.dhukutiContributions
+    final contributions = store.savingsCircleContributions
         .where((item) => item.cycleId == currentCycle?.id)
         .toList();
     final paidCount = contributions
@@ -45,7 +47,10 @@ class DhukutiPoolCard extends StatelessWidget {
     final progress = contributions.isEmpty
         ? 0.0
         : paidCount / contributions.length;
-    final color = dhukutiToneColor(context, toneForPoolStatus(statusLabel));
+    final color = savingsCircleToneColor(
+      context,
+      toneForPoolStatus(statusLabel),
+    );
 
     return ds.AppCard(
       onTap: onTap,
@@ -72,7 +77,7 @@ class DhukutiPoolCard extends StatelessWidget {
                   ],
                 ),
               ),
-              DhukutiStatusBadge(
+              SavingsCircleStatusBadge(
                 label: statusLabel,
                 tone: toneForPoolStatus(statusLabel),
               ),
@@ -164,21 +169,24 @@ class _Fact extends StatelessWidget {
   }
 }
 
-DhukutiCycle? currentCycleFor(DhukutiPool pool, List<DhukutiCycle> cycles) {
+SavingsCircleCycle? currentCycleFor(
+  SavingsCirclePool pool,
+  List<SavingsCircleCycle> cycles,
+) {
   if (cycles.isEmpty) {
     return null;
   }
   final active = cycles.where(
     (cycle) =>
-        cycle.status == DhukutiCycleStatus.open ||
-        cycle.status == DhukutiCycleStatus.atRisk ||
-        cycle.status == DhukutiCycleStatus.readyForPayout,
+        cycle.status == SavingsCircleCycleStatus.open ||
+        cycle.status == SavingsCircleCycleStatus.atRisk ||
+        cycle.status == SavingsCircleCycleStatus.readyForPayout,
   );
   if (active.isNotEmpty) {
     return active.first;
   }
   final upcoming = cycles.where(
-    (cycle) => cycle.status == DhukutiCycleStatus.upcoming,
+    (cycle) => cycle.status == SavingsCircleCycleStatus.upcoming,
   );
   if (upcoming.isNotEmpty) {
     return upcoming.first;
@@ -186,21 +194,24 @@ DhukutiCycle? currentCycleFor(DhukutiPool pool, List<DhukutiCycle> cycles) {
   return cycles.last;
 }
 
-String poolDisplayStatus(DhukutiPool pool, DhukutiCycle? currentCycle) {
-  if (pool.status == DhukutiPoolStatus.completed) {
+String poolDisplayStatus(
+  SavingsCirclePool pool,
+  SavingsCircleCycle? currentCycle,
+) {
+  if (pool.status == SavingsCirclePoolStatus.completed) {
     return 'Completed';
   }
   if (currentCycle == null) {
     return 'Upcoming';
   }
-  if (currentCycle.status == DhukutiCycleStatus.atRisk) {
+  if (currentCycle.status == SavingsCircleCycleStatus.atRisk) {
     return 'At Risk';
   }
-  if (currentCycle.status == DhukutiCycleStatus.upcoming) {
+  if (currentCycle.status == SavingsCircleCycleStatus.upcoming) {
     return 'Upcoming';
   }
-  if (pool.status == DhukutiPoolStatus.active) {
+  if (pool.status == SavingsCirclePoolStatus.active) {
     return 'Active';
   }
-  return dhukutiEnumLabel(pool.status);
+  return savingsCircleEnumLabel(pool.status);
 }

@@ -7,7 +7,7 @@ class HomeDashboardData {
     required this.userProfile,
     required this.balanceSummary,
     required this.pendingSettlements,
-    required this.upcomingDhukutiDues,
+    required this.upcomingSavingsCircleDues,
     required this.activeGroups,
     required this.recentActivities,
     required this.suggestedActions,
@@ -16,7 +16,7 @@ class HomeDashboardData {
   final AppUser userProfile;
   final HomeBalanceSummary balanceSummary;
   final List<HomePendingSettlement> pendingSettlements;
-  final List<HomeDhukutiDue> upcomingDhukutiDues;
+  final List<HomeSavingsCircleDue> upcomingSavingsCircleDues;
   final List<HomeGroupSummary> activeGroups;
   final List<HomeActivityItem> recentActivities;
   final List<HomeQuickAction> suggestedActions;
@@ -25,7 +25,7 @@ class HomeDashboardData {
       activeGroups.isEmpty &&
       recentActivities.isEmpty &&
       pendingSettlements.isEmpty &&
-      upcomingDhukutiDues.isEmpty;
+      upcomingSavingsCircleDues.isEmpty;
 }
 
 class HomeBalanceSummary {
@@ -64,8 +64,8 @@ class HomePendingSettlement {
   final String status;
 }
 
-class HomeDhukutiDue {
-  const HomeDhukutiDue({
+class HomeSavingsCircleDue {
+  const HomeSavingsCircleDue({
     required this.contributionId,
     required this.poolId,
     required this.poolName,

@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../src/app_state.dart';
 import '../../../src/finance.dart';
 import '../../../src/models.dart';
-import 'dhukuti_status_badge.dart';
-import 'dhukuti_tokens.dart';
+import 'savings_circle_status_badge.dart';
+import 'savings_circle_tokens.dart';
 
-class DhukutiMemberRow extends StatelessWidget {
-  const DhukutiMemberRow({
+class SavingsCircleMemberRow extends StatelessWidget {
+  const SavingsCircleMemberRow({
     required this.store,
     required this.member,
     required this.contribution,
@@ -17,8 +17,8 @@ class DhukutiMemberRow extends StatelessWidget {
   });
 
   final AppStore store;
-  final DhukutiMember member;
-  final DhukutiContribution? contribution;
+  final SavingsCircleMember member;
+  final SavingsCircleContribution? contribution;
   final int amountMinor;
   final bool isOrganizer;
 
@@ -28,21 +28,21 @@ class DhukutiMemberRow extends StatelessWidget {
     final contributionStatus =
         contribution?.status ?? ContributionStatus.pending;
     final role = isOrganizer ? 'Organizer' : 'Active Member';
-    final memberStatus = member.status == DhukutiMemberStatus.active
+    final memberStatus = member.status == SavingsCircleMemberStatus.active
         ? role
-        : dhukutiEnumLabel(member.status);
+        : savingsCircleEnumLabel(member.status);
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: DhukutiAvatar(label: user.avatar),
+      leading: SavingsCircleAvatar(label: user.avatar),
       title: Text(user.displayName),
       subtitle: Text('$memberStatus • Payout order #${member.payoutOrder}'),
       trailing: Wrap(
         spacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          DhukutiStatusBadge(
-            label: dhukutiEnumLabel(contributionStatus),
+          SavingsCircleStatusBadge(
+            label: savingsCircleEnumLabel(contributionStatus),
             tone: toneForContributionStatus(contributionStatus),
             icon: contributionStatus == ContributionStatus.paid
                 ? Icons.check_circle_outline

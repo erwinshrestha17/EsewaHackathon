@@ -21,7 +21,7 @@ class HomeController {
           pendingAmount: _pendingAmount(),
         ),
         pendingSettlements: _pendingSettlements(),
-        upcomingDhukutiDues: _dhukutiDues(),
+        upcomingSavingsCircleDues: _savingsCircleDues(),
         activeGroups: _activeGroups(),
         recentActivities: _recentActivities(),
         suggestedActions: mockHomeDashboardData().suggestedActions,
@@ -58,11 +58,13 @@ class HomeController {
     ];
   }
 
-  List<HomeDhukutiDue> _dhukutiDues() {
-    final dues = <HomeDhukutiDue>[];
-    for (final pool in store.visibleDhukutiPools) {
+  List<HomeSavingsCircleDue> _savingsCircleDues() {
+    final dues = <HomeSavingsCircleDue>[];
+    for (final pool in store.visibleSavingsCirclePools) {
       final cycles =
-          store.dhukutiCycles.where((cycle) => cycle.poolId == pool.id).toList()
+          store.savingsCircleCycles
+              .where((cycle) => cycle.poolId == pool.id)
+              .toList()
             ..sort((a, b) => a.cycleNumber.compareTo(b.cycleNumber));
       for (final contribution in store.contributionsForPool(pool.id)) {
         if (contribution.userId != store.currentUserId) {
@@ -74,11 +76,11 @@ class HomeController {
         }
         final status = contribution.status == ContributionStatus.paid
             ? 'Paid'
-            : cycle.first.status == DhukutiCycleStatus.atRisk
+            : cycle.first.status == SavingsCircleCycleStatus.atRisk
             ? 'At Risk'
             : 'Due Soon';
         dues.add(
-          HomeDhukutiDue(
+          HomeSavingsCircleDue(
             contributionId: contribution.id,
             poolId: pool.id,
             poolName: pool.name,
@@ -90,10 +92,10 @@ class HomeController {
             isPayable:
                 contribution.status != ContributionStatus.paid &&
                 contribution.status != ContributionStatus.pending &&
-                pool.status == DhukutiPoolStatus.active &&
-                cycle.first.status != DhukutiCycleStatus.cancelled &&
-                cycle.first.status != DhukutiCycleStatus.closed &&
-                cycle.first.status != DhukutiCycleStatus.paidOut,
+                pool.status == SavingsCirclePoolStatus.active &&
+                cycle.first.status != SavingsCircleCycleStatus.cancelled &&
+                cycle.first.status != SavingsCircleCycleStatus.closed &&
+                cycle.first.status != SavingsCircleCycleStatus.paidOut,
           ),
         );
         if (dues.length >= 2) {
@@ -179,8 +181,8 @@ class HomeController {
         }
       }
     }
-    if (item.entityType == 'dhukuti_contribution') {
-      for (final contribution in store.dhukutiContributions) {
+    if (item.entityType == 'savings_circle_contribution') {
+      for (final contribution in store.savingsCircleContributions) {
         if (contribution.id == item.entityId) {
           return contribution.amountMinor;
         }
@@ -264,7 +266,7 @@ IconData _activityIcon(ActivityLog item) {
   if (item.entityType.contains('gift')) {
     return Icons.card_giftcard_outlined;
   }
-  if (item.entityType.contains('dhukuti')) {
+  if (item.entityType.contains('savings_circle')) {
     return Icons.account_balance_wallet_outlined;
   }
   if (item.entityType.contains('connection')) {

@@ -25,12 +25,12 @@ enum NotificationPreference {
   settlementReminders,
   paymentStatusUpdates,
   giftReceived,
-  dhukutiContributionDue,
-  dhukutiCycleAtRisk,
+  savingsCircleContributionDue,
+  savingsCircleCycleAtRisk,
 }
 
-const dhukutiSafetyNoteText =
-    'Digital Dhukuti in this prototype is a transparent contribution ledger '
+const savingsCircleSafetyNoteText =
+    'Savings Circle in this prototype is a transparent contribution ledger '
     'and payment scheduler. It does not provide credit, interest, investment '
     'return, or guaranteed payout.';
 
@@ -53,8 +53,8 @@ class SettingsState {
     required this.confirmBeforePayment,
     required this.settlementNudges,
     required this.mockEsewaMode,
-    required this.dhukutiContributionReminders,
-    required this.dhukutiAtRiskAlerts,
+    required this.savingsCircleContributionReminders,
+    required this.savingsCircleAtRiskAlerts,
     required this.themeMode,
     required this.language,
     required this.notifications,
@@ -79,8 +79,8 @@ class SettingsState {
       confirmBeforePayment: true,
       settlementNudges: true,
       mockEsewaMode: true,
-      dhukutiContributionReminders: true,
-      dhukutiAtRiskAlerts: true,
+      savingsCircleContributionReminders: true,
+      savingsCircleAtRiskAlerts: true,
       themeMode: AppThemeMode.system,
       language: AppLanguage.english,
       notifications: {
@@ -107,8 +107,8 @@ class SettingsState {
   final bool confirmBeforePayment;
   final bool settlementNudges;
   final bool mockEsewaMode;
-  final bool dhukutiContributionReminders;
-  final bool dhukutiAtRiskAlerts;
+  final bool savingsCircleContributionReminders;
+  final bool savingsCircleAtRiskAlerts;
   final AppThemeMode themeMode;
   final AppLanguage language;
   final Map<NotificationPreference, bool> notifications;
@@ -131,8 +131,8 @@ class SettingsState {
     bool? confirmBeforePayment,
     bool? settlementNudges,
     bool? mockEsewaMode,
-    bool? dhukutiContributionReminders,
-    bool? dhukutiAtRiskAlerts,
+    bool? savingsCircleContributionReminders,
+    bool? savingsCircleAtRiskAlerts,
     AppThemeMode? themeMode,
     AppLanguage? language,
     Map<NotificationPreference, bool>? notifications,
@@ -157,9 +157,11 @@ class SettingsState {
       confirmBeforePayment: confirmBeforePayment ?? this.confirmBeforePayment,
       settlementNudges: settlementNudges ?? this.settlementNudges,
       mockEsewaMode: mockEsewaMode ?? this.mockEsewaMode,
-      dhukutiContributionReminders:
-          dhukutiContributionReminders ?? this.dhukutiContributionReminders,
-      dhukutiAtRiskAlerts: dhukutiAtRiskAlerts ?? this.dhukutiAtRiskAlerts,
+      savingsCircleContributionReminders:
+          savingsCircleContributionReminders ??
+          this.savingsCircleContributionReminders,
+      savingsCircleAtRiskAlerts:
+          savingsCircleAtRiskAlerts ?? this.savingsCircleAtRiskAlerts,
       themeMode: themeMode ?? this.themeMode,
       language: language ?? this.language,
       notifications: notifications ?? this.notifications,
@@ -287,9 +289,10 @@ extension NotificationPreferenceLabel on NotificationPreference {
       NotificationPreference.settlementReminders => 'Settlement reminders',
       NotificationPreference.paymentStatusUpdates => 'Payment status updates',
       NotificationPreference.giftReceived => 'Gift received',
-      NotificationPreference.dhukutiContributionDue =>
-        'Dhukuti contribution due',
-      NotificationPreference.dhukutiCycleAtRisk => 'Dhukuti cycle at risk',
+      NotificationPreference.savingsCircleContributionDue =>
+        'Savings Circle contribution due',
+      NotificationPreference.savingsCircleCycleAtRisk =>
+        'Savings Circle cycle at risk',
     };
   }
 
@@ -299,8 +302,8 @@ extension NotificationPreferenceLabel on NotificationPreference {
       NotificationPreference.paymentStatusUpdates => 'Payments',
       NotificationPreference.groupInvitations ||
       NotificationPreference.expenseAdded => 'Groups',
-      NotificationPreference.dhukutiContributionDue ||
-      NotificationPreference.dhukutiCycleAtRisk => 'Dhukuti',
+      NotificationPreference.savingsCircleContributionDue ||
+      NotificationPreference.savingsCircleCycleAtRisk => 'Savings Circle',
       NotificationPreference.connectionRequests => 'Requests',
       NotificationPreference.giftReceived => 'Groups',
     };

@@ -8,23 +8,23 @@ import '../../../shared/transactions/transaction_confirmation_controller.dart';
 import '../../../shared/transactions/transaction_confirmation_data.dart';
 import '../../../shared/transactions/transaction_status.dart';
 import '../../../shared/transactions/transaction_type.dart';
-import 'dhukuti_tokens.dart';
+import 'savings_circle_tokens.dart';
 
-Future<bool> showDhukutiPaymentBottomSheet({
+Future<bool> showSavingsCirclePaymentBottomSheet({
   required BuildContext context,
   required AppStore store,
-  required DhukutiPool pool,
-  required DhukutiContribution contribution,
+  required SavingsCirclePool pool,
+  required SavingsCircleContribution contribution,
 }) async {
-  final cycle = store.dhukutiCycles.firstWhere(
+  final cycle = store.savingsCircleCycles.firstWhere(
     (item) => item.id == contribution.cycleId,
   );
   final result = await openTransactionConfirmation(
     context,
     TransactionConfirmationData(
       id: contribution.id,
-      transactionType: TransactionType.dhukutiContribution,
-      title: 'Confirm Dhukuti Contribution',
+      transactionType: TransactionType.savingsCircleContribution,
+      title: 'Confirm Savings Circle Contribution',
       subtitle: '${pool.name} • Cycle ${contribution.cycleNumber}',
       amount: contribution.amountMinor,
       payerName: store.nameOf(contribution.userId),
@@ -32,7 +32,7 @@ Future<bool> showDhukutiPaymentBottomSheet({
       recipientName: store.nameOf(cycle.payoutRecipientId),
       recipientAvatarUrl: store.userById(cycle.payoutRecipientId).avatar,
       poolName: pool.name,
-      complianceNote: dhukutiSafetyNoteText,
+      complianceNote: savingsCircleSafetyNoteText,
       confirmationButtonText: 'Pay Contribution',
       createdAt: DateTime.now(),
       idempotencyKey: contribution.idempotencyKey,
@@ -47,10 +47,10 @@ Future<bool> showDhukutiPaymentBottomSheet({
       ],
     ),
     () async {
-      store.payDhukutiContribution(contribution.id);
+      store.paySavingsCircleContribution(contribution.id);
       return TransactionResult.success(
         title: 'Contribution Paid',
-        message: 'Your Dhukuti ledger has been updated.',
+        message: 'Your Savings Circle ledger has been updated.',
         amount: contribution.amountMinor,
         transactionReference: contribution.id,
         createdAt: DateTime.now(),
@@ -60,22 +60,24 @@ Future<bool> showDhukutiPaymentBottomSheet({
   return result?.isSuccess ?? false;
 }
 
-class _DhukutiPaymentSheet extends StatefulWidget {
-  const _DhukutiPaymentSheet({
+class _SavingsCirclePaymentSheet extends StatefulWidget {
+  const _SavingsCirclePaymentSheet({
     required this.store,
     required this.pool,
     required this.contribution,
   });
 
   final AppStore store;
-  final DhukutiPool pool;
-  final DhukutiContribution contribution;
+  final SavingsCirclePool pool;
+  final SavingsCircleContribution contribution;
 
   @override
-  State<_DhukutiPaymentSheet> createState() => _DhukutiPaymentSheetState();
+  State<_SavingsCirclePaymentSheet> createState() =>
+      _SavingsCirclePaymentSheetState();
 }
 
-class _DhukutiPaymentSheetState extends State<_DhukutiPaymentSheet> {
+class _SavingsCirclePaymentSheetState
+    extends State<_SavingsCirclePaymentSheet> {
   var _paid = false;
 
   @override
@@ -99,7 +101,7 @@ class _DhukutiPaymentSheetState extends State<_DhukutiPaymentSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Confirm Dhukuti Contribution',
+          'Confirm Savings Circle Contribution',
           style: Theme.of(
             context,
           ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
@@ -122,7 +124,7 @@ class _DhukutiPaymentSheetState extends State<_DhukutiPaymentSheet> {
         const SizedBox(height: 16),
         FilledButton.icon(
           onPressed: () {
-            widget.store.payDhukutiContribution(widget.contribution.id);
+            widget.store.paySavingsCircleContribution(widget.contribution.id);
             setState(() => _paid = true);
           },
           icon: const Icon(Icons.account_balance_wallet_outlined),
@@ -141,13 +143,13 @@ class _DhukutiPaymentSheetState extends State<_DhukutiPaymentSheet> {
           width: 76,
           height: 76,
           decoration: BoxDecoration(
-            color: dhukutiPrimary.withValues(alpha: 0.12),
+            color: savingsCirclePrimary.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
           ),
           child: const Icon(
             Icons.check_circle_outline,
             size: 44,
-            color: dhukutiPrimary,
+            color: savingsCirclePrimary,
           ),
         ),
         const SizedBox(height: 14),

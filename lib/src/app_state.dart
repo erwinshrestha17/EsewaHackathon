@@ -21,12 +21,14 @@ class AppStore extends ChangeNotifier {
   final List<GiftPool> giftPools = <GiftPool>[];
   final List<GiftPoolContribution> giftPoolContributions =
       <GiftPoolContribution>[];
-  final List<DhukutiPool> dhukutiPools = <DhukutiPool>[];
-  final List<DhukutiMember> dhukutiMembers = <DhukutiMember>[];
-  final List<DhukutiCycle> dhukutiCycles = <DhukutiCycle>[];
-  final List<DhukutiContribution> dhukutiContributions =
-      <DhukutiContribution>[];
-  final List<DhukutiPayout> dhukutiPayouts = <DhukutiPayout>[];
+  final List<SavingsCirclePool> savingsCirclePools = <SavingsCirclePool>[];
+  final List<SavingsCircleMember> savingsCircleMembers =
+      <SavingsCircleMember>[];
+  final List<SavingsCircleCycle> savingsCircleCycles = <SavingsCircleCycle>[];
+  final List<SavingsCircleContribution> savingsCircleContributions =
+      <SavingsCircleContribution>[];
+  final List<SavingsCirclePayout> savingsCirclePayouts =
+      <SavingsCirclePayout>[];
   final List<EmergencyExitRequest> emergencyExitRequests =
       <EmergencyExitRequest>[];
   final List<ActivityLog> activity = <ActivityLog>[];
@@ -34,7 +36,7 @@ class AppStore extends ChangeNotifier {
 
   var currentUserId = 'u-sita';
   String? selectedGroupId;
-  String? selectedDhukutiPoolId;
+  String? selectedSavingsCirclePoolId;
   var pushPreviewEnabled = true;
   var cacheWarm = true;
 
@@ -73,9 +75,9 @@ class AppStore extends ChangeNotifier {
     }
     currentUserId = profile.id;
     selectedGroupId = null;
-    selectedDhukutiPoolId = visibleDhukutiPools.isEmpty
+    selectedSavingsCirclePoolId = visibleSavingsCirclePools.isEmpty
         ? null
-        : visibleDhukutiPools.first.id;
+        : visibleSavingsCirclePools.first.id;
     notifyListeners();
   }
 
@@ -93,14 +95,14 @@ class AppStore extends ChangeNotifier {
     return null;
   }
 
-  DhukutiPool poolById(String id) =>
-      dhukutiPools.firstWhere((pool) => pool.id == id);
+  SavingsCirclePool poolById(String id) =>
+      savingsCirclePools.firstWhere((pool) => pool.id == id);
 
-  DhukutiPool? poolByIdOrNull(String? id) {
+  SavingsCirclePool? poolByIdOrNull(String? id) {
     if (id == null) {
       return null;
     }
-    for (final pool in dhukutiPools) {
+    for (final pool in savingsCirclePools) {
       if (pool.id == id) {
         return pool;
       }
@@ -117,9 +119,9 @@ class AppStore extends ChangeNotifier {
   void switchUser(String userId) {
     currentUserId = userId;
     selectedGroupId = null;
-    selectedDhukutiPoolId = visibleDhukutiPools.isEmpty
+    selectedSavingsCirclePoolId = visibleSavingsCirclePools.isEmpty
         ? null
-        : visibleDhukutiPools.first.id;
+        : visibleSavingsCirclePools.first.id;
     notifyListeners();
   }
 
@@ -144,18 +146,18 @@ class AppStore extends ChangeNotifier {
         .toList();
   }
 
-  List<Group> get visibleDhukutiGroups {
+  List<Group> get visibleSavingsCircleGroups {
     return visibleGroups
-        .where((group) => group.kind == GroupKind.dhukuti)
+        .where((group) => group.kind == GroupKind.savingsCircle)
         .toList();
   }
 
-  List<DhukutiPool> get visibleDhukutiPools {
-    final ids = dhukutiMembers
+  List<SavingsCirclePool> get visibleSavingsCirclePools {
+    final ids = savingsCircleMembers
         .where((member) => member.userId == currentUserId)
         .map((member) => member.poolId)
         .toSet();
-    return dhukutiPools.where((pool) => ids.contains(pool.id)).toList()
+    return savingsCirclePools.where((pool) => ids.contains(pool.id)).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
@@ -1555,7 +1557,7 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  String createDhukutiPool({
+  String createSavingsCirclePool({
     required String groupId,
     required String name,
     required int contributionAmountMinor,
@@ -1563,55 +1565,57 @@ class AppStore extends ChangeNotifier {
     required DateTime startDate,
     required List<String> memberIds,
   }) {
-    final pool = DhukutiPool(
-      id: _id('dhukuti'),
+    final pool = SavingsCirclePool(
+      id: _id('savings-circle'),
       groupId: groupId,
       name: name,
       contributionAmountMinor: contributionAmountMinor,
       frequency: frequency,
       startDate: startDate,
       createdBy: currentUserId,
-      status: DhukutiPoolStatus.active,
+      status: SavingsCirclePoolStatus.active,
       createdAt: _now,
     );
-    dhukutiPools.add(pool);
+    savingsCirclePools.add(pool);
     final members = <String>{currentUserId, ...memberIds};
     var order = 1;
     for (final memberId in members) {
-      dhukutiMembers.add(
-        DhukutiMember(
-          id: _id('dhukuti-member'),
+      savingsCircleMembers.add(
+        SavingsCircleMember(
+          id: _id('savings-circle-member'),
           poolId: pool.id,
           userId: memberId,
           payoutOrder: order,
           status: memberId == currentUserId
-              ? DhukutiMemberStatus.active
-              : DhukutiMemberStatus.invited,
+              ? SavingsCircleMemberStatus.active
+              : SavingsCircleMemberStatus.invited,
         ),
       );
       order += 1;
     }
-    _generateDhukutiSchedule(pool.id);
-    selectedDhukutiPoolId = pool.id;
+    _generateSavingsCircleSchedule(pool.id);
+    selectedSavingsCirclePoolId = pool.id;
     _activity(
       actorId: currentUserId,
       groupId: groupId,
-      eventType: 'dhukuti_created',
-      entityType: 'dhukuti_pool',
+      eventType: 'savings_circle_created',
+      entityType: 'savings_circle_pool',
       entityId: pool.id,
-      title: 'Digital Dhukuti created',
+      title: 'Savings Circle created',
       body: '$name now has a transparent schedule and ledger.',
     );
     notifyListeners();
     return pool.id;
   }
 
-  List<DhukutiMember> membersForPool(String poolId) {
-    return dhukutiMembers.where((member) => member.poolId == poolId).toList()
+  List<SavingsCircleMember> membersForPool(String poolId) {
+    return savingsCircleMembers
+        .where((member) => member.poolId == poolId)
+        .toList()
       ..sort((a, b) => a.payoutOrder.compareTo(b.payoutOrder));
   }
 
-  bool canManageDhukutiPool(String poolId, String userId) {
+  bool canManageSavingsCirclePool(String poolId, String userId) {
     final pool = poolByIdOrNull(poolId);
     if (pool == null) {
       return false;
@@ -1619,17 +1623,17 @@ class AppStore extends ChangeNotifier {
     return pool.createdBy == userId || isGroupAdmin(pool.groupId, userId);
   }
 
-  String? renameDhukutiPool(String poolId, String name) {
+  String? renameSavingsCirclePool(String poolId, String name) {
     final pool = poolByIdOrNull(poolId);
     if (pool == null) {
-      return 'Dhukuti group is no longer available.';
+      return 'Savings Circle group is no longer available.';
     }
-    if (!canManageDhukutiPool(poolId, currentUserId)) {
-      return 'Only the Dhukuti admin can rename this group.';
+    if (!canManageSavingsCirclePool(poolId, currentUserId)) {
+      return 'Only the Savings Circle admin can rename this group.';
     }
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
-      return 'Dhukuti group name cannot be empty.';
+      return 'Savings Circle group name cannot be empty.';
     }
     if (trimmed == pool.name) {
       return null;
@@ -1639,52 +1643,52 @@ class AppStore extends ChangeNotifier {
     _activity(
       actorId: currentUserId,
       groupId: pool.groupId,
-      eventType: 'dhukuti_renamed',
-      entityType: 'dhukuti_pool',
+      eventType: 'savings_circle_renamed',
+      entityType: 'savings_circle_pool',
       entityId: pool.id,
-      title: 'Dhukuti group renamed',
+      title: 'Savings Circle group renamed',
       body: '${nameOf(currentUserId)} renamed $previousName to ${pool.name}.',
     );
     notifyListeners();
     return null;
   }
 
-  void acceptDhukuti(String poolId) {
-    final member = dhukutiMembers.firstWhere(
+  void acceptSavingsCircle(String poolId) {
+    final member = savingsCircleMembers.firstWhere(
       (item) => item.poolId == poolId && item.userId == currentUserId,
     );
-    member.status = DhukutiMemberStatus.active;
+    member.status = SavingsCircleMemberStatus.active;
     _activity(
       actorId: currentUserId,
       groupId: poolById(poolId).groupId,
-      eventType: 'dhukuti_accepted',
-      entityType: 'dhukuti_member',
+      eventType: 'savings_circle_accepted',
+      entityType: 'savings_circle_member',
       entityId: member.id,
-      title: 'Dhukuti participation accepted',
-      body: '${nameOf(currentUserId)} accepted the Dhukuti invite.',
+      title: 'Savings Circle participation accepted',
+      body: '${nameOf(currentUserId)} accepted the Savings Circle invite.',
     );
     notifyListeners();
   }
 
-  void declineDhukuti(String poolId) {
-    final member = dhukutiMembers.firstWhere(
+  void declineSavingsCircle(String poolId) {
+    final member = savingsCircleMembers.firstWhere(
       (item) => item.poolId == poolId && item.userId == currentUserId,
     );
-    member.status = DhukutiMemberStatus.declined;
+    member.status = SavingsCircleMemberStatus.declined;
     _activity(
       actorId: currentUserId,
       groupId: poolById(poolId).groupId,
-      eventType: 'dhukuti_declined',
-      entityType: 'dhukuti_member',
+      eventType: 'savings_circle_declined',
+      entityType: 'savings_circle_member',
       entityId: member.id,
-      title: 'Dhukuti invite declined',
-      body: '${nameOf(currentUserId)} declined the Dhukuti invite.',
+      title: 'Savings Circle invite declined',
+      body: '${nameOf(currentUserId)} declined the Savings Circle invite.',
     );
     notifyListeners();
   }
 
-  void payDhukutiContribution(String contributionId) {
-    final contribution = dhukutiContributions.firstWhere(
+  void paySavingsCircleContribution(String contributionId) {
+    final contribution = savingsCircleContributions.firstWhere(
       (item) => item.id == contributionId,
     );
     final existing = payments.where(
@@ -1700,7 +1704,7 @@ class AppStore extends ChangeNotifier {
     final payment = _payment(
       actorId: currentUserId,
       entityId: contribution.id,
-      entityType: 'dhukuti_contribution',
+      entityType: 'savings_circle_contribution',
       operationType: contribution.operationType,
       amountMinor: contribution.amountMinor,
       status: PaymentStatus.paid,
@@ -1709,22 +1713,22 @@ class AppStore extends ChangeNotifier {
       ..status = ContributionStatus.paid
       ..paymentTransactionId = payment.id
       ..paidAt = _now;
-    _refreshDhukutiCycles(contribution.poolId);
+    _refreshSavingsCircleCycles(contribution.poolId);
     _activity(
       actorId: currentUserId,
       groupId: poolById(contribution.poolId).groupId,
-      eventType: 'dhukuti_contribution_paid',
-      entityType: 'dhukuti_contribution',
+      eventType: 'savings_circle_contribution_paid',
+      entityType: 'savings_circle_contribution',
       entityId: contribution.id,
-      title: 'Dhukuti contribution paid',
+      title: 'Savings Circle contribution paid',
       body:
           '${nameOf(currentUserId)} paid ${money(contribution.amountMinor)} for cycle ${contribution.cycleNumber}.',
     );
     notifyListeners();
   }
 
-  int payRemainingDhukutiExitContributions(String poolId) {
-    final contributions = remainingDhukutiExitContributions(poolId);
+  int payRemainingSavingsCircleExitContributions(String poolId) {
+    final contributions = remainingSavingsCircleExitContributions(poolId);
     var total = 0;
     for (final contribution in contributions) {
       final existing = payments.any(
@@ -1740,7 +1744,7 @@ class AppStore extends ChangeNotifier {
       final payment = _payment(
         actorId: currentUserId,
         entityId: contribution.id,
-        entityType: 'dhukuti_contribution',
+        entityType: 'savings_circle_contribution',
         operationType: contribution.operationType,
         amountMinor: contribution.amountMinor,
         status: PaymentStatus.paid,
@@ -1753,34 +1757,36 @@ class AppStore extends ChangeNotifier {
       _activity(
         actorId: currentUserId,
         groupId: poolById(contribution.poolId).groupId,
-        eventType: 'dhukuti_exit_contribution_paid',
-        entityType: 'dhukuti_contribution',
+        eventType: 'savings_circle_exit_contribution_paid',
+        entityType: 'savings_circle_contribution',
         entityId: contribution.id,
-        title: 'Dhukuti exit contribution paid',
+        title: 'Savings Circle exit contribution paid',
         body:
             '${nameOf(currentUserId)} prepaid ${money(contribution.amountMinor)} for cycle ${contribution.cycleNumber} before exit review.',
       );
     }
-    _refreshDhukutiCycles(poolId);
+    _refreshSavingsCircleCycles(poolId);
     notifyListeners();
     return total;
   }
 
-  String confirmDhukutiPayoutReview(String cycleId) {
-    final cycle = dhukutiCycles.firstWhere((item) => item.id == cycleId);
-    final payout = dhukutiPayouts.firstWhere((item) => item.cycleId == cycleId);
-    if (cycle.status == DhukutiCycleStatus.readyForPayout) {
+  String confirmSavingsCirclePayoutReview(String cycleId) {
+    final cycle = savingsCircleCycles.firstWhere((item) => item.id == cycleId);
+    final payout = savingsCirclePayouts.firstWhere(
+      (item) => item.cycleId == cycleId,
+    );
+    if (cycle.status == SavingsCircleCycleStatus.readyForPayout) {
       payout
         ..status = PayoutStatus.paid
         ..paidAt = _now;
-      cycle.status = DhukutiCycleStatus.paidOut;
+      cycle.status = SavingsCircleCycleStatus.paidOut;
       _activity(
         actorId: currentUserId,
         groupId: poolById(cycle.poolId).groupId,
-        eventType: 'dhukuti_payout_completed',
-        entityType: 'dhukuti_payout',
+        eventType: 'savings_circle_payout_completed',
+        entityType: 'savings_circle_payout',
         entityId: payout.id,
-        title: 'Dhukuti payout recorded',
+        title: 'Savings Circle payout recorded',
         body:
             'Cycle ${cycle.cycleNumber} payout was recorded in the transparent ledger.',
       );
@@ -1788,10 +1794,10 @@ class AppStore extends ChangeNotifier {
       _activity(
         actorId: currentUserId,
         groupId: poolById(cycle.poolId).groupId,
-        eventType: 'dhukuti_payout_reviewed',
-        entityType: 'dhukuti_payout',
+        eventType: 'savings_circle_payout_reviewed',
+        entityType: 'savings_circle_payout',
         entityId: payout.id,
-        title: 'Dhukuti payout reviewed',
+        title: 'Savings Circle payout reviewed',
         body:
             'Cycle ${cycle.cycleNumber} payout was reviewed without changing ledger balances.',
       );
@@ -1801,14 +1807,19 @@ class AppStore extends ChangeNotifier {
   }
 
   void requestEmergencyExit(String poolId, String reason) {
-    final decision = dhukutiExitDecision(poolId);
-    if (decision.type == DhukutiExitDecisionType.unavailable) {
-      _notify(currentUserId, 'dhukuti_exit', decision.title, decision.message);
+    final decision = savingsCircleExitDecision(poolId);
+    if (decision.type == SavingsCircleExitDecisionType.unavailable) {
+      _notify(
+        currentUserId,
+        'savings_circle_exit',
+        decision.title,
+        decision.message,
+      );
       notifyListeners();
       return;
     }
     if (decision.canLeaveNow) {
-      leaveDhukutiBeforeStart(poolId);
+      leaveSavingsCircleBeforeStart(poolId);
       return;
     }
     emergencyExitRequests.add(
@@ -1823,8 +1834,8 @@ class AppStore extends ChangeNotifier {
     _activity(
       actorId: currentUserId,
       groupId: poolById(poolId).groupId,
-      eventType: 'dhukuti_exit_requested',
-      entityType: 'dhukuti_exit',
+      eventType: 'savings_circle_exit_requested',
+      entityType: 'savings_circle_exit',
       entityId: poolId,
       title: 'Emergency exit requested',
       body: '${nameOf(currentUserId)} requested organizer review.',
@@ -1832,62 +1843,62 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  String? leaveDhukutiBeforeStart(String poolId) {
-    final decision = dhukutiExitDecision(poolId);
+  String? leaveSavingsCircleBeforeStart(String poolId) {
+    final decision = savingsCircleExitDecision(poolId);
     if (!decision.canLeaveNow) {
       return decision.message;
     }
-    final member = dhukutiMembers.firstWhere(
+    final member = savingsCircleMembers.firstWhere(
       (item) => item.poolId == poolId && item.userId == currentUserId,
     );
-    member.status = DhukutiMemberStatus.exited;
+    member.status = SavingsCircleMemberStatus.exited;
     _activity(
       actorId: currentUserId,
       groupId: poolById(poolId).groupId,
-      eventType: 'dhukuti_left_before_start',
-      entityType: 'dhukuti_member',
+      eventType: 'savings_circle_left_before_start',
+      entityType: 'savings_circle_member',
       entityId: member.id,
-      title: 'Dhukuti member left',
+      title: 'Savings Circle member left',
       body:
-          '${nameOf(currentUserId)} left before the Dhukuti started. The schedule needs member review.',
+          '${nameOf(currentUserId)} left before the Savings Circle started. The schedule needs member review.',
     );
-    _regenerateDhukutiSchedule(poolId);
+    _regenerateSavingsCircleSchedule(poolId);
     notifyListeners();
     return null;
   }
 
-  DhukutiExitDecision dhukutiExitDecision(String poolId) {
-    final pool = dhukutiPools
+  SavingsCircleExitDecision savingsCircleExitDecision(String poolId) {
+    final pool = savingsCirclePools
         .where((item) => item.id == poolId)
-        .cast<DhukutiPool?>()
+        .cast<SavingsCirclePool?>()
         .firstOrNull;
-    if (pool == null || pool.status == DhukutiPoolStatus.cancelled) {
-      return const DhukutiExitDecision(
-        type: DhukutiExitDecisionType.unavailable,
-        title: 'Dhukuti unavailable',
-        message: 'This Dhukuti pool is no longer available.',
+    if (pool == null || pool.status == SavingsCirclePoolStatus.cancelled) {
+      return const SavingsCircleExitDecision(
+        type: SavingsCircleExitDecisionType.unavailable,
+        title: 'Savings Circle unavailable',
+        message: 'This Savings Circle pool is no longer available.',
       );
     }
-    final member = dhukutiMembers
+    final member = savingsCircleMembers
         .where((item) => item.poolId == poolId && item.userId == currentUserId)
-        .cast<DhukutiMember?>()
+        .cast<SavingsCircleMember?>()
         .firstOrNull;
-    if (member == null || member.status == DhukutiMemberStatus.exited) {
-      return const DhukutiExitDecision(
-        type: DhukutiExitDecisionType.unavailable,
+    if (member == null || member.status == SavingsCircleMemberStatus.exited) {
+      return const SavingsCircleExitDecision(
+        type: SavingsCircleExitDecisionType.unavailable,
         title: 'No active participation',
-        message: 'You are not an active participant in this Dhukuti.',
+        message: 'You are not an active participant in this Savings Circle.',
       );
     }
     final members = membersForPool(poolId);
     final contributions =
-        dhukutiContributions
+        savingsCircleContributions
             .where(
               (item) => item.poolId == poolId && item.userId == currentUserId,
             )
             .toList()
           ..sort((a, b) => a.cycleNumber.compareTo(b.cycleNumber));
-    final payouts = dhukutiPayouts
+    final payouts = savingsCirclePayouts
         .where(
           (item) => item.poolId == poolId && item.recipientId == currentUserId,
         )
@@ -1899,19 +1910,19 @@ class AppStore extends ChangeNotifier {
       (item) => item.status == PayoutStatus.paid,
     );
     final hasPendingInvite = members.any(
-      (item) => item.status == DhukutiMemberStatus.invited,
+      (item) => item.status == SavingsCircleMemberStatus.invited,
     );
-    if (pool.status == DhukutiPoolStatus.draft ||
+    if (pool.status == SavingsCirclePoolStatus.draft ||
         (hasPendingInvite && !hasPaidAnyContribution && !hasReceivedPayout)) {
-      return DhukutiExitDecision(
-        type: DhukutiExitDecisionType.canLeaveBeforeStart,
-        title: 'Leave before Dhukuti starts?',
+      return SavingsCircleExitDecision(
+        type: SavingsCircleExitDecisionType.canLeaveBeforeStart,
+        title: 'Leave before Savings Circle starts?',
         message:
             'You can leave before all members accept. Contribution amount and payout schedule will be recalculated.',
-        primaryAction: 'Leave Dhukuti',
+        primaryAction: 'Leave Savings Circle',
       );
     }
-    final remainingExitContributions = remainingDhukutiExitContributions(
+    final remainingExitContributions = remainingSavingsCircleExitContributions(
       poolId,
       userId: currentUserId,
     );
@@ -1920,23 +1931,23 @@ class AppStore extends ChangeNotifier {
       (sum, item) => sum + item.amountMinor,
     );
     if (remainingExitTotal > 0) {
-      final currentCycle = currentDhukutiCycleNumber(poolId);
+      final currentCycle = currentSavingsCircleCycleNumber(poolId);
       final cycleText = remainingExitContributions.length == 1
           ? 'Cycle ${remainingExitContributions.first.cycleNumber}'
           : 'Cycles $currentCycle-${remainingExitContributions.last.cycleNumber}';
-      return DhukutiExitDecision(
-        type: DhukutiExitDecisionType.pendingContribution,
+      return SavingsCircleExitDecision(
+        type: SavingsCircleExitDecisionType.pendingContribution,
         title: 'Remaining contributions required',
         message:
-            'You are in Cycle $currentCycle. To leave this Dhukuti, you must first pay ${money(remainingExitTotal)} for your remaining contribution obligations ($cycleText).',
+            'You are in Cycle $currentCycle. To leave this Savings Circle, you must first pay ${money(remainingExitTotal)} for your remaining contribution obligations ($cycleText).',
         amountMinor: remainingExitTotal,
         primaryAction: 'Pay Remaining Contributions',
         secondaryAction: 'View Agreement',
       );
     }
     if (hasReceivedPayout) {
-      return DhukutiExitDecision(
-        type: DhukutiExitDecisionType.receivedPayout,
+      return SavingsCircleExitDecision(
+        type: SavingsCircleExitDecisionType.receivedPayout,
         title: 'Payout already received',
         message:
             'You already received the community pot. Your remaining cycle contributions are paid, so the exit still needs admin and member approval.',
@@ -1948,8 +1959,8 @@ class AppStore extends ChangeNotifier {
     final paid = contributions
         .where((item) => item.status == ContributionStatus.paid)
         .fold<int>(0, (sum, item) => sum + item.amountMinor);
-    return DhukutiExitDecision(
-      type: DhukutiExitDecisionType.requiresApproval,
+    return SavingsCircleExitDecision(
+      type: SavingsCircleExitDecisionType.requiresApproval,
       title: 'Contributions already paid',
       message:
           'You can request exit, but members must approve the updated payout order, pot amount, service fee, and refund treatment.',
@@ -1959,15 +1970,15 @@ class AppStore extends ChangeNotifier {
     );
   }
 
-  int currentDhukutiCycleNumber(String poolId) {
+  int currentSavingsCircleCycleNumber(String poolId) {
     final active =
-        dhukutiCycles
+        savingsCircleCycles
             .where(
               (item) =>
                   item.poolId == poolId &&
-                  (item.status == DhukutiCycleStatus.open ||
-                      item.status == DhukutiCycleStatus.atRisk ||
-                      item.status == DhukutiCycleStatus.readyForPayout),
+                  (item.status == SavingsCircleCycleStatus.open ||
+                      item.status == SavingsCircleCycleStatus.atRisk ||
+                      item.status == SavingsCircleCycleStatus.readyForPayout),
             )
             .toList()
           ..sort((a, b) => a.cycleNumber.compareTo(b.cycleNumber));
@@ -1975,18 +1986,18 @@ class AppStore extends ChangeNotifier {
       return active.first.cycleNumber;
     }
     final upcoming =
-        dhukutiCycles
+        savingsCircleCycles
             .where(
               (item) =>
                   item.poolId == poolId &&
-                  item.status == DhukutiCycleStatus.upcoming,
+                  item.status == SavingsCircleCycleStatus.upcoming,
             )
             .toList()
           ..sort((a, b) => a.cycleNumber.compareTo(b.cycleNumber));
     if (upcoming.isNotEmpty) {
       return upcoming.first.cycleNumber;
     }
-    final cycles = dhukutiCycles
+    final cycles = savingsCircleCycles
         .where((item) => item.poolId == poolId)
         .map((item) => item.cycleNumber)
         .toList();
@@ -1997,13 +2008,13 @@ class AppStore extends ChangeNotifier {
     return cycles.last;
   }
 
-  List<DhukutiContribution> remainingDhukutiExitContributions(
+  List<SavingsCircleContribution> remainingSavingsCircleExitContributions(
     String poolId, {
     String? userId,
   }) {
     final actorId = userId ?? currentUserId;
-    final currentCycle = currentDhukutiCycleNumber(poolId);
-    return dhukutiContributions
+    final currentCycle = currentSavingsCircleCycleNumber(poolId);
+    return savingsCircleContributions
         .where(
           (item) =>
               item.poolId == poolId &&
@@ -2021,15 +2032,15 @@ class AppStore extends ChangeNotifier {
       (item) => item.id == requestId,
     );
     request.status = 'approved';
-    final member = dhukutiMembers.firstWhere(
+    final member = savingsCircleMembers.firstWhere(
       (item) => item.poolId == request.poolId && item.userId == request.userId,
     );
-    member.status = DhukutiMemberStatus.exited;
+    member.status = SavingsCircleMemberStatus.exited;
     notifyListeners();
   }
 
-  List<DhukutiContribution> contributionsForPool(String poolId) {
-    return dhukutiContributions
+  List<SavingsCircleContribution> contributionsForPool(String poolId) {
+    return savingsCircleContributions
         .where((contribution) => contribution.poolId == poolId)
         .toList()
       ..sort((a, b) {
@@ -2136,7 +2147,7 @@ class AppStore extends ChangeNotifier {
       'expenses': expenses.length,
       'settlements': settlements.length,
       'gifts': gifts.length,
-      'dhukutiContributions': dhukutiContributions
+      'savingsCircleContributions': savingsCircleContributions
           .where((item) => item.status == ContributionStatus.paid)
           .length,
       'paymentIntents': payments.length,
@@ -2255,25 +2266,25 @@ class AppStore extends ChangeNotifier {
     );
   }
 
-  void _generateDhukutiSchedule(String poolId) {
+  void _generateSavingsCircleSchedule(String poolId) {
     final pool = poolById(poolId);
     final activeMembers = membersForPool(poolId)
         .where(
           (member) =>
-              member.status == DhukutiMemberStatus.active ||
-              member.status == DhukutiMemberStatus.invited,
+              member.status == SavingsCircleMemberStatus.active ||
+              member.status == SavingsCircleMemberStatus.invited,
         )
         .toList();
     final memberIds = activeMembers.map((member) => member.userId).toList();
     for (var i = 0; i < memberIds.length; i++) {
-      final cycleId = _id('dhukuti-cycle');
+      final cycleId = _id('savings-circle-cycle');
       final dueDate = DateTime(
         pool.startDate.year,
         pool.startDate.month + i,
         15,
       );
-      dhukutiCycles.add(
-        DhukutiCycle(
+      savingsCircleCycles.add(
+        SavingsCircleCycle(
           id: cycleId,
           poolId: poolId,
           cycleNumber: i + 1,
@@ -2283,14 +2294,14 @@ class AppStore extends ChangeNotifier {
               pool.contributionAmountMinor * memberIds.length,
           paidContributionTotalMinor: 0,
           status: i == 0
-              ? DhukutiCycleStatus.open
-              : DhukutiCycleStatus.upcoming,
+              ? SavingsCircleCycleStatus.open
+              : SavingsCircleCycleStatus.upcoming,
         ),
       );
       for (final memberId in memberIds) {
-        dhukutiContributions.add(
-          DhukutiContribution(
-            id: _id('dhukuti-contribution'),
+        savingsCircleContributions.add(
+          SavingsCircleContribution(
+            id: _id('savings-circle-contribution'),
             poolId: poolId,
             cycleId: cycleId,
             userId: memberId,
@@ -2302,13 +2313,13 @@ class AppStore extends ChangeNotifier {
                 : ContributionStatus.pending,
             idempotencyKey: '$poolId-$memberId-${i + 1}',
             idempotencyScope: poolId,
-            operationType: 'dhukuti_contribution',
+            operationType: 'savings_circle_contribution',
           ),
         );
       }
-      dhukutiPayouts.add(
-        DhukutiPayout(
-          id: _id('dhukuti-payout'),
+      savingsCirclePayouts.add(
+        SavingsCirclePayout(
+          id: _id('savings-circle-payout'),
           poolId: poolId,
           cycleId: cycleId,
           recipientId: memberIds[i],
@@ -2316,29 +2327,29 @@ class AppStore extends ChangeNotifier {
           status: PayoutStatus.pending,
           idempotencyKey: '$poolId-payout-${i + 1}',
           idempotencyScope: poolId,
-          operationType: 'dhukuti_payout',
+          operationType: 'savings_circle_payout',
         ),
       );
     }
   }
 
-  void _regenerateDhukutiSchedule(String poolId) {
-    dhukutiCycles.removeWhere((item) => item.poolId == poolId);
-    dhukutiContributions.removeWhere((item) => item.poolId == poolId);
-    dhukutiPayouts.removeWhere((item) => item.poolId == poolId);
-    _generateDhukutiSchedule(poolId);
+  void _regenerateSavingsCircleSchedule(String poolId) {
+    savingsCircleCycles.removeWhere((item) => item.poolId == poolId);
+    savingsCircleContributions.removeWhere((item) => item.poolId == poolId);
+    savingsCirclePayouts.removeWhere((item) => item.poolId == poolId);
+    _generateSavingsCircleSchedule(poolId);
   }
 
-  void _refreshDhukutiCycles(String poolId) {
-    for (final cycle in dhukutiCycles.where(
+  void _refreshSavingsCircleCycles(String poolId) {
+    for (final cycle in savingsCircleCycles.where(
       (cycle) => cycle.poolId == poolId,
     )) {
-      if (cycle.status == DhukutiCycleStatus.paidOut ||
-          cycle.status == DhukutiCycleStatus.closed ||
-          cycle.status == DhukutiCycleStatus.cancelled) {
+      if (cycle.status == SavingsCircleCycleStatus.paidOut ||
+          cycle.status == SavingsCircleCycleStatus.closed ||
+          cycle.status == SavingsCircleCycleStatus.cancelled) {
         continue;
       }
-      final contributions = dhukutiContributions.where(
+      final contributions = savingsCircleContributions.where(
         (item) => item.cycleId == cycle.id,
       );
       final paid = contributions
@@ -2346,15 +2357,15 @@ class AppStore extends ChangeNotifier {
           .fold<int>(0, (sum, item) => sum + item.amountMinor);
       cycle.paidContributionTotalMinor = paid;
       if (paid == cycle.expectedContributionTotalMinor) {
-        cycle.status = DhukutiCycleStatus.readyForPayout;
+        cycle.status = SavingsCircleCycleStatus.readyForPayout;
       } else if (contributions.any(
         (item) =>
             item.status == ContributionStatus.late ||
             item.status == ContributionStatus.missed,
       )) {
-        cycle.status = DhukutiCycleStatus.atRisk;
+        cycle.status = SavingsCircleCycleStatus.atRisk;
       } else if (!cycle.dueDate.isAfter(_now)) {
-        cycle.status = DhukutiCycleStatus.open;
+        cycle.status = SavingsCircleCycleStatus.open;
       }
     }
   }
@@ -2518,8 +2529,8 @@ class AppStore extends ChangeNotifier {
       id: 'g-shrestha-family',
       name: 'Shrestha Family',
       category: GroupCategory.festival,
-      template: 'Family Dhukuti',
-      kind: GroupKind.dhukuti,
+      template: 'Family Savings Circle',
+      kind: GroupKind.savingsCircle,
       createdBy: 'u-sita',
       createdAt: DateTime(2026, 5, 14),
     );
@@ -2713,7 +2724,7 @@ class AppStore extends ChangeNotifier {
       message: 'A group envelope for Laxmi.',
     );
 
-    DhukutiPool seedDhukutiPool({
+    SavingsCirclePool seedSavingsCirclePool({
       required String id,
       required Group group,
       required String name,
@@ -2722,7 +2733,7 @@ class AppStore extends ChangeNotifier {
       required String createdBy,
       required List<String> memberIds,
     }) {
-      final pool = DhukutiPool(
+      final pool = SavingsCirclePool(
         id: id,
         groupId: group.id,
         name: name,
@@ -2730,34 +2741,34 @@ class AppStore extends ChangeNotifier {
         frequency: 'monthly',
         startDate: startDate,
         createdBy: createdBy,
-        status: DhukutiPoolStatus.active,
+        status: SavingsCirclePoolStatus.active,
         createdAt: startDate,
       );
-      dhukutiPools.add(pool);
+      savingsCirclePools.add(pool);
       for (var i = 0; i < memberIds.length; i++) {
-        dhukutiMembers.add(
-          DhukutiMember(
-            id: _id('dhukuti-member'),
+        savingsCircleMembers.add(
+          SavingsCircleMember(
+            id: _id('savings-circle-member'),
             poolId: pool.id,
             userId: memberIds[i],
             payoutOrder: i + 1,
-            status: DhukutiMemberStatus.active,
+            status: SavingsCircleMemberStatus.active,
           ),
         );
       }
-      _generateDhukutiSchedule(pool.id);
+      _generateSavingsCircleSchedule(pool.id);
       return pool;
     }
 
     void markContributionPaid(
-      DhukutiContribution contribution,
+      SavingsCircleContribution contribution,
       DateTime paidAt,
     ) {
       final payment = _payment(
         actorId: contribution.userId,
         entityId: contribution.id,
-        entityType: 'dhukuti_contribution',
-        operationType: 'dhukuti_contribution',
+        entityType: 'savings_circle_contribution',
+        operationType: 'savings_circle_contribution',
         amountMinor: contribution.amountMinor,
         status: PaymentStatus.paid,
       );
@@ -2770,16 +2781,16 @@ class AppStore extends ChangeNotifier {
     void setCycleState(
       String poolId,
       int cycleNumber,
-      DhukutiCycleStatus status, {
+      SavingsCircleCycleStatus status, {
       List<String> paidMembers = const <String>[],
       List<String> lateMembers = const <String>[],
       List<String> missedMembers = const <String>[],
     }) {
-      final cycle = dhukutiCycles.firstWhere(
+      final cycle = savingsCircleCycles.firstWhere(
         (item) => item.poolId == poolId && item.cycleNumber == cycleNumber,
       );
       cycle.status = status;
-      final contributions = dhukutiContributions.where(
+      final contributions = savingsCircleContributions.where(
         (item) => item.cycleId == cycle.id,
       );
       for (final contribution in contributions) {
@@ -2790,7 +2801,7 @@ class AppStore extends ChangeNotifier {
         } else if (missedMembers.contains(contribution.userId)) {
           contribution.status = ContributionStatus.missed;
         } else {
-          contribution.status = status == DhukutiCycleStatus.upcoming
+          contribution.status = status == SavingsCircleCycleStatus.upcoming
               ? ContributionStatus.pending
               : ContributionStatus.due;
         }
@@ -2798,9 +2809,9 @@ class AppStore extends ChangeNotifier {
       cycle.paidContributionTotalMinor = contributions
           .where((item) => item.status == ContributionStatus.paid)
           .fold<int>(0, (sum, item) => sum + item.amountMinor);
-      if (status == DhukutiCycleStatus.paidOut ||
-          status == DhukutiCycleStatus.closed) {
-        final payout = dhukutiPayouts.firstWhere(
+      if (status == SavingsCircleCycleStatus.paidOut ||
+          status == SavingsCircleCycleStatus.closed) {
+        final payout = savingsCirclePayouts.firstWhere(
           (item) => item.cycleId == cycle.id,
         );
         payout
@@ -2809,8 +2820,8 @@ class AppStore extends ChangeNotifier {
       }
     }
 
-    void addDhukutiLedger({
-      required DhukutiPool pool,
+    void addSavingsCircleLedger({
+      required SavingsCirclePool pool,
       required String eventType,
       required String entityType,
       required String entityId,
@@ -2830,10 +2841,10 @@ class AppStore extends ChangeNotifier {
       );
     }
 
-    final familyDhukuti = seedDhukutiPool(
+    final familySavingsCircle = seedSavingsCirclePool(
       id: 'd-family-dashain',
       group: family,
-      name: 'Family Dashain Dhukuti',
+      name: 'Family Dashain Savings Circle',
       amountMinor: npr(5000),
       startDate: DateTime(2026, 3, 15),
       createdBy: 'u-sita',
@@ -2846,12 +2857,12 @@ class AppStore extends ChangeNotifier {
         'u-rina',
       ],
     );
-    familyDhukuti.createdAt = DateTime(2026, 5, 28);
-    selectedDhukutiPoolId = familyDhukuti.id;
+    familySavingsCircle.createdAt = DateTime(2026, 5, 28);
+    selectedSavingsCirclePoolId = familySavingsCircle.id;
     setCycleState(
-      familyDhukuti.id,
+      familySavingsCircle.id,
       1,
-      DhukutiCycleStatus.paidOut,
+      SavingsCircleCycleStatus.paidOut,
       paidMembers: <String>[
         'u-arjun',
         'u-maya',
@@ -2862,9 +2873,9 @@ class AppStore extends ChangeNotifier {
       ],
     );
     setCycleState(
-      familyDhukuti.id,
+      familySavingsCircle.id,
       2,
-      DhukutiCycleStatus.paidOut,
+      SavingsCircleCycleStatus.paidOut,
       paidMembers: <String>[
         'u-arjun',
         'u-maya',
@@ -2875,20 +2886,20 @@ class AppStore extends ChangeNotifier {
       ],
     );
     setCycleState(
-      familyDhukuti.id,
+      familySavingsCircle.id,
       3,
-      DhukutiCycleStatus.open,
+      SavingsCircleCycleStatus.open,
       paidMembers: <String>['u-arjun', 'u-maya', 'u-nabin', 'u-rina'],
     );
-    addDhukutiLedger(
-      pool: familyDhukuti,
+    addSavingsCircleLedger(
+      pool: familySavingsCircle,
       actorId: 'u-arjun',
-      eventType: 'dhukuti_contribution_paid',
-      entityType: 'dhukuti_contribution',
-      entityId: dhukutiContributions
+      eventType: 'savings_circle_contribution_paid',
+      entityType: 'savings_circle_contribution',
+      entityId: savingsCircleContributions
           .firstWhere(
             (item) =>
-                item.poolId == familyDhukuti.id &&
+                item.poolId == familySavingsCircle.id &&
                 item.cycleNumber == 3 &&
                 item.userId == 'u-arjun',
           )
@@ -2896,47 +2907,47 @@ class AppStore extends ChangeNotifier {
       title: 'Arjun paid contribution',
       body: 'Cycle 3 contribution recorded through mock eSewa confirmation.',
     );
-    addDhukutiLedger(
-      pool: familyDhukuti,
-      eventType: 'dhukuti_cycle_opened',
-      entityType: 'dhukuti_pool',
-      entityId: familyDhukuti.id,
+    addSavingsCircleLedger(
+      pool: familySavingsCircle,
+      eventType: 'savings_circle_cycle_opened',
+      entityType: 'savings_circle_pool',
+      entityId: familySavingsCircle.id,
       title: 'Cycle 3 opened',
       body: 'Monthly contribution schedule is open for the current cycle.',
     );
-    addDhukutiLedger(
-      pool: familyDhukuti,
+    addSavingsCircleLedger(
+      pool: familySavingsCircle,
       actorId: 'u-sita',
-      eventType: 'dhukuti_recipient_current',
-      entityType: 'dhukuti_pool',
-      entityId: familyDhukuti.id,
+      eventType: 'savings_circle_recipient_current',
+      entityType: 'savings_circle_pool',
+      entityId: familySavingsCircle.id,
       title: 'Sita is current payout recipient',
       body: 'Payout turn follows the visible rotation order.',
     );
-    addDhukutiLedger(
-      pool: familyDhukuti,
+    addSavingsCircleLedger(
+      pool: familySavingsCircle,
       actorId: 'u-maya',
-      eventType: 'dhukuti_member_accepted',
-      entityType: 'dhukuti_member',
-      entityId: familyDhukuti.id,
-      title: 'Member accepted Dhukuti invitation',
+      eventType: 'savings_circle_member_accepted',
+      entityType: 'savings_circle_member',
+      entityId: familySavingsCircle.id,
+      title: 'Member accepted Savings Circle invitation',
       body: 'Maya joined the transparent contribution schedule.',
     );
 
-    final collegeDhukuti = seedDhukutiPool(
+    final collegeSavingsCircle = seedSavingsCirclePool(
       id: 'd-college-friends',
       group: college,
-      name: 'College Friends Dhukuti',
+      name: 'College Friends Savings Circle',
       amountMinor: npr(2000),
       startDate: DateTime(2026, 4, 15),
       createdBy: 'u-maya',
       memberIds: <String>['u-sita', 'u-maya', 'u-arjun', 'u-nabin', 'u-pasang'],
     );
-    collegeDhukuti.createdAt = DateTime(2026, 5, 27);
+    collegeSavingsCircle.createdAt = DateTime(2026, 5, 27);
     setCycleState(
-      collegeDhukuti.id,
+      collegeSavingsCircle.id,
       1,
-      DhukutiCycleStatus.paidOut,
+      SavingsCircleCycleStatus.paidOut,
       paidMembers: <String>[
         'u-sita',
         'u-maya',
@@ -2946,24 +2957,24 @@ class AppStore extends ChangeNotifier {
       ],
     );
     setCycleState(
-      collegeDhukuti.id,
+      collegeSavingsCircle.id,
       2,
-      DhukutiCycleStatus.atRisk,
+      SavingsCircleCycleStatus.atRisk,
       paidMembers: <String>['u-sita', 'u-maya'],
       lateMembers: <String>['u-arjun'],
       missedMembers: <String>['u-pasang'],
     );
-    addDhukutiLedger(
-      pool: collegeDhukuti,
+    addSavingsCircleLedger(
+      pool: collegeSavingsCircle,
       actorId: 'u-arjun',
-      eventType: 'dhukuti_contribution_late',
-      entityType: 'dhukuti_contribution',
-      entityId: collegeDhukuti.id,
+      eventType: 'savings_circle_contribution_late',
+      entityType: 'savings_circle_contribution',
+      entityId: collegeSavingsCircle.id,
       title: 'Arjun contribution marked late',
       body: 'Cycle 2 remains visible as at risk until pending statuses clear.',
     );
 
-    final officeDhukuti = seedDhukutiPool(
+    final officeSavingsCircle = seedSavingsCirclePool(
       id: 'd-office-circle',
       group: office,
       name: 'Office Savings Circle',
@@ -2981,23 +2992,23 @@ class AppStore extends ChangeNotifier {
         'u-kabir',
       ],
     );
-    officeDhukuti.createdAt = DateTime(2026, 5, 26);
-    setCycleState(officeDhukuti.id, 1, DhukutiCycleStatus.upcoming);
-    addDhukutiLedger(
-      pool: officeDhukuti,
-      eventType: 'dhukuti_created',
-      entityType: 'dhukuti_pool',
-      entityId: officeDhukuti.id,
+    officeSavingsCircle.createdAt = DateTime(2026, 5, 26);
+    setCycleState(officeSavingsCircle.id, 1, SavingsCircleCycleStatus.upcoming);
+    addSavingsCircleLedger(
+      pool: officeSavingsCircle,
+      eventType: 'savings_circle_created',
+      entityType: 'savings_circle_pool',
+      entityId: officeSavingsCircle.id,
       title: 'Office Savings Circle scheduled',
       body: 'First contribution cycle is upcoming.',
     );
 
-    addDhukutiLedger(
-      pool: familyDhukuti,
-      eventType: 'dhukuti_payout_completed',
-      entityType: 'dhukuti_payout',
-      entityId: dhukutiPayouts
-          .firstWhere((item) => item.poolId == familyDhukuti.id)
+    addSavingsCircleLedger(
+      pool: familySavingsCircle,
+      eventType: 'savings_circle_payout_completed',
+      entityType: 'savings_circle_payout',
+      entityId: savingsCirclePayouts
+          .firstWhere((item) => item.poolId == familySavingsCircle.id)
           .id,
       title: 'Cycle 2 payout completed',
       body: 'The previous cycle was settled in the mock ledger.',
@@ -3010,8 +3021,8 @@ class AppStore extends ChangeNotifier {
     );
     _notify(
       'u-sita',
-      'dhukuti',
-      'Dhukuti cycle at risk',
+      'savings_circle',
+      'Savings Circle cycle at risk',
       'One contribution is late before this cycle can be ready for payout.',
     );
   }

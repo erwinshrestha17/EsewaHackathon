@@ -12,7 +12,7 @@ import '../features/auth/auth_controller.dart';
 import '../features/auth/screens/auth_screen.dart';
 import '../features/auth/screens/onboarding_screen.dart';
 import '../features/auth/screens/splash_screen.dart';
-import '../features/dhukuti/dhukuti_list_screen.dart';
+import '../features/savings_circle/savings_circle_list_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/settings/settings_controller.dart';
 import '../features/settings/settings_models.dart';
@@ -354,7 +354,7 @@ class _SangaiShellState extends State<SangaiShell> {
         ),
         onScanBill: _openScanBillFromHome,
         onSendGift: () => _go(3),
-        onOpenDhukuti: _openDhukutiGroups,
+        onOpenSavingsCircle: _openSavingsCircleGroups,
         onOpenFriends: () => _go(2),
         onViewActivity: () => _openStandaloneScreen(const ActivityScreen()),
         onExploreTemplates: _showFestivalTemplates,
@@ -380,7 +380,7 @@ class _SangaiShellState extends State<SangaiShell> {
         ),
         onScanBill: _openScanBillFromHome,
         onSendGift: () => _go(3),
-        onOpenDhukuti: _openDhukutiGroups,
+        onOpenSavingsCircle: _openSavingsCircleGroups,
         onOpenFriends: () => _go(2),
         onViewActivity: () => _openStandaloneScreen(const ActivityScreen()),
         onExploreTemplates: _showFestivalTemplates,
@@ -517,8 +517,8 @@ class _SangaiShellState extends State<SangaiShell> {
     });
   }
 
-  void _openDhukutiGroups() {
-    _openGroupsTab(GroupKind.dhukuti);
+  void _openSavingsCircleGroups() {
+    _openGroupsTab(GroupKind.savingsCircle);
   }
 
   void _handleSettingsChanged() {
@@ -675,7 +675,7 @@ class ActivityScreen extends StatelessWidget {
         const ScreenHeader(
           title: 'Activity',
           subtitle:
-              'A single timeline for your groups, gifts, settlements, and Digital Dhukuti actions.',
+              'A single timeline for your groups, gifts, settlements, and Savings Circle actions.',
           icon: Icons.timeline,
         ),
         SectionPanel(
@@ -979,9 +979,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 label: Text('Expense Groups'),
               ),
               ButtonSegment(
-                value: GroupKind.dhukuti,
+                value: GroupKind.savingsCircle,
                 icon: Icon(Icons.account_balance_wallet_outlined),
-                label: Text('Dhukuti Groups'),
+                label: Text('Savings Circle Groups'),
               ),
             ],
             selected: {_tab},
@@ -989,14 +989,14 @@ class _GroupsScreenState extends State<GroupsScreen> {
           ),
         );
 
-        if (_tab == GroupKind.dhukuti) {
+        if (_tab == GroupKind.savingsCircle) {
           return Column(
             children: [
               tabSelector,
               Expanded(
-                child: DigitalDhukutiScreen(
+                child: SavingsCircleListScreen(
                   store: store,
-                  onCreate: (context) => showCreateDhukutiGroupDialog(
+                  onCreate: (context) => showCreateSavingsCircleGroupDialog(
                     context,
                     onCreated: (kind) => setState(() => _tab = kind),
                   ),
@@ -1013,7 +1013,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
             ScreenHeader(
               title: 'Groups overview',
               subtitle:
-                  'Expense groups stay separate from Dhukuti commitments. Open a group when you want its expenses, balances, members, and activity.',
+                  'Expense groups stay separate from Savings Circle commitments. Open a group when you want its expenses, balances, members, and activity.',
               icon: Icons.groups,
               action: FilledButton.icon(
                 onPressed: () => showCreateGroupDialog(
@@ -2949,20 +2949,21 @@ Future<void> showGiftOpenedCelebration(
   );
 }
 
-class DhukutiScreen extends StatefulWidget {
-  const DhukutiScreen({super.key});
+class SavingsCircleScreen extends StatefulWidget {
+  const SavingsCircleScreen({super.key});
 
   @override
-  State<DhukutiScreen> createState() => _DhukutiScreenState();
+  State<SavingsCircleScreen> createState() => _SavingsCircleScreenState();
 }
 
-class _DhukutiScreenState extends State<DhukutiScreen> {
+class _SavingsCircleScreenState extends State<SavingsCircleScreen> {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    final pools = store.visibleDhukutiPools;
+    final pools = store.visibleSavingsCirclePools;
     final selectedId =
-        store.selectedDhukutiPoolId ?? (pools.isEmpty ? null : pools.first.id);
+        store.selectedSavingsCirclePoolId ??
+        (pools.isEmpty ? null : pools.first.id);
     final selected = selectedId == null ? null : store.poolById(selectedId);
 
     return LayoutBuilder(
@@ -2971,12 +2972,12 @@ class _DhukutiScreenState extends State<DhukutiScreen> {
         final list = AppScrollView(
           children: [
             ScreenHeader(
-              title: 'Digital Dhukuti',
+              title: 'Savings Circle',
               subtitle:
                   'Transparent contribution scheduler and ledger. No credit, interest, investment return, or guaranteed payout claims.',
               icon: Icons.account_balance_wallet,
               action: FilledButton.icon(
-                onPressed: () => showCreateDhukutiDialog(context),
+                onPressed: () => showCreateSavingsCircleDialog(context),
                 icon: const Icon(Icons.add),
                 label: const Text('New pool'),
               ),
@@ -2986,7 +2987,7 @@ class _DhukutiScreenState extends State<DhukutiScreen> {
               child: pools.isEmpty
                   ? const EmptyState(
                       icon: Icons.account_balance_wallet_outlined,
-                      title: 'No Dhukuti pool',
+                      title: 'No Savings Circle pool',
                       body: 'Create one from an existing group.',
                     )
                   : Column(
@@ -3005,7 +3006,8 @@ class _DhukutiScreenState extends State<DhukutiScreen> {
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () {
                               setState(
-                                () => store.selectedDhukutiPoolId = pool.id,
+                                () =>
+                                    store.selectedSavingsCirclePoolId = pool.id,
                               );
                             },
                           ),
@@ -3019,10 +3021,10 @@ class _DhukutiScreenState extends State<DhukutiScreen> {
                 child: EmptyState(
                   icon: Icons.account_balance_wallet_outlined,
                   title: 'Select a pool',
-                  body: 'Dhukuti details appear here.',
+                  body: 'Savings Circle details appear here.',
                 ),
               )
-            : DhukutiDetail(pool: selected);
+            : SavingsCircleDetail(pool: selected);
         if (twoPane) {
           return Row(
             children: [
@@ -3038,22 +3040,22 @@ class _DhukutiScreenState extends State<DhukutiScreen> {
   }
 }
 
-class DhukutiDetail extends StatelessWidget {
-  const DhukutiDetail({required this.pool, super.key});
+class SavingsCircleDetail extends StatelessWidget {
+  const SavingsCircleDetail({required this.pool, super.key});
 
-  final DhukutiPool pool;
+  final SavingsCirclePool pool;
 
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final members = store.membersForPool(pool.id);
-    final cycles = store.dhukutiCycles
+    final cycles = store.savingsCircleCycles
         .where((cycle) => cycle.poolId == pool.id)
         .toList();
     final contributions = store.contributionsForPool(pool.id);
     final myMember = members
         .where((member) => member.userId == store.currentUserId)
-        .cast<DhukutiMember?>()
+        .cast<SavingsCircleMember?>()
         .firstWhere((member) => member != null, orElse: () => null);
     final myDue = contributions
         .where(
@@ -3074,15 +3076,15 @@ class DhukutiDetail extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              if (myMember?.status == DhukutiMemberStatus.invited)
+              if (myMember?.status == SavingsCircleMemberStatus.invited)
                 FilledButton.icon(
-                  onPressed: () => store.acceptDhukuti(pool.id),
+                  onPressed: () => store.acceptSavingsCircle(pool.id),
                   icon: const Icon(Icons.check),
                   label: const Text('Accept'),
                 ),
-              if (myMember?.status == DhukutiMemberStatus.invited)
+              if (myMember?.status == SavingsCircleMemberStatus.invited)
                 OutlinedButton.icon(
-                  onPressed: () => store.declineDhukuti(pool.id),
+                  onPressed: () => store.declineSavingsCircle(pool.id),
                   icon: const Icon(Icons.close),
                   label: const Text('Decline'),
                 ),
@@ -3112,7 +3114,7 @@ class DhukutiDetail extends StatelessWidget {
               label: 'Current cycle',
               value: enumLabel(cycles.first.status),
               icon: Icons.event_repeat,
-              tone: cycles.first.status == DhukutiCycleStatus.atRisk
+              tone: cycles.first.status == SavingsCircleCycleStatus.atRisk
                   ? Tone.warning
                   : Tone.success,
             ),
@@ -3161,7 +3163,7 @@ class DhukutiDetail extends StatelessWidget {
                   ),
                   trailing: StatusPill(
                     label: enumLabel(cycle.status),
-                    tone: cycle.status == DhukutiCycleStatus.atRisk
+                    tone: cycle.status == SavingsCircleCycleStatus.atRisk
                         ? Tone.warning
                         : Tone.neutral,
                   ),
@@ -3194,9 +3196,10 @@ class DhukutiDetail extends StatelessWidget {
                             if (contribution.userId == store.currentUserId &&
                                 contribution.status != ContributionStatus.paid)
                               FilledButton(
-                                onPressed: () => store.payDhukutiContribution(
-                                  contribution.id,
-                                ),
+                                onPressed: () =>
+                                    store.paySavingsCircleContribution(
+                                      contribution.id,
+                                    ),
                                 child: const Text('Pay'),
                               ),
                           ],
@@ -3218,7 +3221,13 @@ class NotificationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    const categories = ['All', 'Payments', 'Groups', 'Dhukuti', 'Requests'];
+    const categories = [
+      'All',
+      'Payments',
+      'Groups',
+      'Savings Circle',
+      'Requests',
+    ];
 
     return DefaultTabController(
       length: categories.length,
@@ -3231,7 +3240,7 @@ class NotificationsScreen extends StatelessWidget {
               Tab(text: 'All'),
               Tab(text: 'Payments'),
               Tab(text: 'Groups'),
-              Tab(text: 'Dhukuti'),
+              Tab(text: 'Savings Circle'),
               Tab(text: 'Requests'),
             ],
           ),
@@ -3286,7 +3295,7 @@ class _NotificationList extends StatelessWidget {
               icon: Icons.notifications_none,
               title: 'No notifications',
               body:
-                  'Settlement, group, request, gift, and Dhukuti alerts appear here.',
+                  'Settlement, group, request, gift, and Savings Circle alerts appear here.',
             )
           : Column(
               children: [
@@ -3312,8 +3321,8 @@ String _notificationCategory(NotificationItem item) {
   if (type.contains('settlement') || type.contains('payment')) {
     return 'Payments';
   }
-  if (type.contains('dhukuti')) {
-    return 'Dhukuti';
+  if (type.contains('savings_circle')) {
+    return 'Savings Circle';
   }
   if (type.contains('connection') || type.contains('request')) {
     return 'Requests';
@@ -3324,7 +3333,7 @@ String _notificationCategory(NotificationItem item) {
 IconData _notificationIcon(NotificationItem item) {
   return switch (_notificationCategory(item)) {
     'Payments' => Icons.payments_outlined,
-    'Dhukuti' => Icons.account_balance_wallet_outlined,
+    'Savings Circle' => Icons.account_balance_wallet_outlined,
     'Requests' => Icons.person_add_alt_1_outlined,
     _ => Icons.groups_outlined,
   };
@@ -6956,12 +6965,12 @@ Future<void> showCreateGroupDialog(
   name.dispose();
 }
 
-Future<void> showCreateDhukutiGroupDialog(
+Future<void> showCreateSavingsCircleGroupDialog(
   BuildContext context, {
   ValueChanged<GroupKind>? onCreated,
 }) async {
   final store = StoreScope.of(context);
-  final name = TextEditingController(text: 'Family Dhukuti');
+  final name = TextEditingController(text: 'Family Savings Circle');
   final contribution = TextEditingController(text: '5000');
   final serviceFee = TextEditingController(text: '50');
   var frequency = 'monthly';
@@ -6981,7 +6990,7 @@ Future<void> showCreateDhukutiGroupDialog(
           final canCreate =
               agreementAccepted && selected.isNotEmpty && amount > 0;
           return AlertDialog(
-            title: const Text('Create Dhukuti Group'),
+            title: const Text('Create Savings Circle Group'),
             content: SizedBox(
               width: 580,
               child: SingleChildScrollView(
@@ -6996,7 +7005,7 @@ Future<void> showCreateDhukutiGroupDialog(
                     TextField(
                       controller: name,
                       decoration: const InputDecoration(
-                        labelText: 'Dhukuti group name',
+                        labelText: 'Savings Circle group name',
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
@@ -7041,7 +7050,7 @@ Future<void> showCreateDhukutiGroupDialog(
                     _ManualFormSection(
                       title: 'Members',
                       icon: Icons.group_outlined,
-                      subtitle: 'Choose who joins this Dhukuti schedule',
+                      subtitle: 'Choose who joins this Savings Circle schedule',
                       trailing: _CountPill(label: '$memberCount people'),
                       child: Wrap(
                         spacing: 10,
@@ -7124,16 +7133,16 @@ Future<void> showCreateDhukutiGroupDialog(
                 onPressed: canCreate
                     ? () {
                         final groupName = name.text.trim().isEmpty
-                            ? 'New Dhukuti Group'
+                            ? 'New Savings Circle Group'
                             : name.text.trim();
                         final groupId = store.createGroup(
                           name: groupName,
                           category: GroupCategory.custom,
                           memberIds: selected.toList(),
-                          kind: GroupKind.dhukuti,
-                          template: 'Dhukuti',
+                          kind: GroupKind.savingsCircle,
+                          template: 'Savings Circle',
                         );
-                        final poolId = store.createDhukutiPool(
+                        final poolId = store.createSavingsCirclePool(
                           groupId: groupId,
                           name: groupName,
                           contributionAmountMinor: amount,
@@ -7142,14 +7151,17 @@ Future<void> showCreateDhukutiGroupDialog(
                           memberIds: selected.toList(),
                         );
                         store
-                          ..selectedDhukutiPoolId = poolId
+                          ..selectedSavingsCirclePoolId = poolId
                           ..selectedGroupId = null;
                         Navigator.pop(dialogContext);
-                        onCreated?.call(GroupKind.dhukuti);
-                        showSnack(context, '$groupName Dhukuti created.');
+                        onCreated?.call(GroupKind.savingsCircle);
+                        showSnack(
+                          context,
+                          '$groupName Savings Circle created.',
+                        );
                       }
                     : null,
-                child: const Text('Create Dhukuti Group'),
+                child: const Text('Create Savings Circle Group'),
               ),
             ],
           );
@@ -9912,14 +9924,14 @@ Future<void> showGiftPoolDetailsDialog(
   );
 }
 
-Future<void> showCreateDhukutiDialog(
+Future<void> showCreateSavingsCircleDialog(
   BuildContext context, {
   String? initialGroupId,
 }) async {
   final store = StoreScope.of(context);
-  final groups = store.visibleDhukutiGroups;
+  final groups = store.visibleSavingsCircleGroups;
   String? groupId = initialGroupId ?? (groups.isEmpty ? null : groups.first.id);
-  final name = TextEditingController(text: 'New Digital Dhukuti');
+  final name = TextEditingController(text: 'New Savings Circle');
   final contribution = TextEditingController(text: '2000');
   final members = <String>{
     for (final user in store.activeConnectionUsers()) user.id,
@@ -9931,7 +9943,7 @@ Future<void> showCreateDhukutiDialog(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Create Dhukuti Pool'),
+            title: const Text('Create Savings Circle Pool'),
             content: SizedBox(
               width: 580,
               child: SingleChildScrollView(
@@ -9987,7 +9999,7 @@ Future<void> showCreateDhukutiDialog(
                     _ManualFormSection(
                       title: 'Members',
                       icon: Icons.group_outlined,
-                      subtitle: 'Choose who joins this Dhukuti schedule',
+                      subtitle: 'Choose who joins this Savings Circle schedule',
                       trailing: _CountPill(
                         label: '${members.length + 1} people',
                       ),
@@ -10029,7 +10041,7 @@ Future<void> showCreateDhukutiDialog(
                 onPressed: groupId == null
                     ? null
                     : () {
-                        final poolId = store.createDhukutiPool(
+                        final poolId = store.createSavingsCirclePool(
                           groupId: groupId!,
                           name: name.text,
                           contributionAmountMinor: parseMoneyToMinor(
@@ -10039,7 +10051,7 @@ Future<void> showCreateDhukutiDialog(
                           startDate: DateTime.now(),
                           memberIds: members.toList(),
                         );
-                        store.selectedDhukutiPoolId = poolId;
+                        store.selectedSavingsCirclePoolId = poolId;
                         Navigator.pop(dialogContext);
                       },
                 child: const Text('Create'),

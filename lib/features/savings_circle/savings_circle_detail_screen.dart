@@ -10,26 +10,26 @@ import '../../shared/transactions/transaction_type.dart';
 import '../../src/app_state.dart';
 import '../../src/finance.dart';
 import '../../src/models.dart';
-import 'widgets/dhukuti_cycle_card.dart';
-import 'widgets/dhukuti_ledger_item.dart';
-import 'widgets/dhukuti_member_row.dart';
-import 'widgets/dhukuti_payment_bottom_sheet.dart';
-import 'widgets/dhukuti_pool_card.dart';
-import 'widgets/dhukuti_status_badge.dart';
-import 'widgets/dhukuti_tokens.dart';
+import 'widgets/savings_circle_cycle_card.dart';
+import 'widgets/savings_circle_ledger_item.dart';
+import 'widgets/savings_circle_member_row.dart';
+import 'widgets/savings_circle_payment_bottom_sheet.dart';
+import 'widgets/savings_circle_pool_card.dart';
+import 'widgets/savings_circle_status_badge.dart';
+import 'widgets/savings_circle_tokens.dart';
 
-enum _DhukutiTab { overview, members, schedule, ledger }
+enum _SavingsCircleTab { overview, members, schedule, ledger }
 
-Future<void> showRenameDhukutiPoolDialog({
+Future<void> showRenameSavingsCirclePoolDialog({
   required BuildContext context,
   required AppStore store,
-  required DhukutiPool pool,
+  required SavingsCirclePool pool,
   required VoidCallback onRenamed,
 }) async {
-  if (!store.canManageDhukutiPool(pool.id, store.currentUserId)) {
+  if (!store.canManageSavingsCirclePool(pool.id, store.currentUserId)) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Only the Dhukuti admin can rename this group.'),
+        content: Text('Only the Savings Circle admin can rename this group.'),
       ),
     );
     return;
@@ -42,7 +42,7 @@ Future<void> showRenameDhukutiPoolDialog({
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Rename Dhukuti group'),
+            title: const Text('Rename Savings Circle group'),
             content: SizedBox(
               width: 420,
               child: TextField(
@@ -50,7 +50,7 @@ Future<void> showRenameDhukutiPoolDialog({
                 autofocus: true,
                 textCapitalization: TextCapitalization.words,
                 decoration: InputDecoration(
-                  labelText: 'Dhukuti group name',
+                  labelText: 'Savings Circle group name',
                   errorText: errorText,
                 ),
                 onChanged: (_) {
@@ -67,7 +67,10 @@ Future<void> showRenameDhukutiPoolDialog({
               ),
               FilledButton(
                 onPressed: () {
-                  final error = store.renameDhukutiPool(pool.id, name.text);
+                  final error = store.renameSavingsCirclePool(
+                    pool.id,
+                    name.text,
+                  );
                   if (error != null) {
                     setState(() => errorText = error);
                     return;
@@ -89,8 +92,8 @@ Future<void> showRenameDhukutiPoolDialog({
   name.dispose();
 }
 
-class DhukutiDetailScreen extends StatefulWidget {
-  const DhukutiDetailScreen({
+class SavingsCircleDetailScreen extends StatefulWidget {
+  const SavingsCircleDetailScreen({
     required this.store,
     required this.pool,
     this.onBack,
@@ -98,16 +101,17 @@ class DhukutiDetailScreen extends StatefulWidget {
   });
 
   final AppStore store;
-  final DhukutiPool pool;
+  final SavingsCirclePool pool;
   final VoidCallback? onBack;
 
   @override
-  State<DhukutiDetailScreen> createState() => _DhukutiDetailScreenState();
+  State<SavingsCircleDetailScreen> createState() =>
+      _SavingsCircleDetailScreenState();
 }
 
-class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
-  var _tab = _DhukutiTab.overview;
-  var _ledgerFilter = DhukutiLedgerFilter.all;
+class _SavingsCircleDetailScreenState extends State<SavingsCircleDetailScreen> {
+  var _tab = _SavingsCircleTab.overview;
+  var _ledgerFilter = SavingsCircleLedgerFilter.all;
 
   @override
   Widget build(BuildContext context) {
@@ -115,16 +119,21 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
     final store = widget.store;
     final members = store.membersForPool(pool.id);
     final cycles =
-        store.dhukutiCycles.where((cycle) => cycle.poolId == pool.id).toList()
+        store.savingsCircleCycles
+            .where((cycle) => cycle.poolId == pool.id)
+            .toList()
           ..sort((a, b) => a.cycleNumber.compareTo(b.cycleNumber));
     final currentCycle = currentCycleFor(pool, cycles);
-    final currentContributions = store.dhukutiContributions
+    final currentContributions = store.savingsCircleContributions
         .where((item) => item.cycleId == currentCycle?.id)
         .toList();
     final statusLabel = poolDisplayStatus(pool, currentCycle);
-    final canManage = store.canManageDhukutiPool(pool.id, store.currentUserId);
+    final canManage = store.canManageSavingsCirclePool(
+      pool.id,
+      store.currentUserId,
+    );
 
-    return DhukutiScrollView(
+    return SavingsCircleScrollView(
       children: [
         if (widget.onBack != null)
           Align(
@@ -132,10 +141,10 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
             child: TextButton.icon(
               onPressed: widget.onBack,
               icon: const Icon(Icons.arrow_back),
-              label: const Text('Dhukuti pools'),
+              label: const Text('Savings Circle pools'),
             ),
           ),
-        DhukutiHeader(
+        SavingsCircleHeader(
           title: pool.name,
           subtitle:
               '${widget.store.groupById(pool.groupId).name} • ${money(pool.contributionAmountMinor)} ${pool.frequency}',
@@ -144,13 +153,13 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
             runSpacing: 8,
             alignment: WrapAlignment.end,
             children: [
-              DhukutiStatusBadge(
+              SavingsCircleStatusBadge(
                 label: statusLabel,
                 tone: toneForPoolStatus(statusLabel),
               ),
               if (canManage)
                 OutlinedButton.icon(
-                  onPressed: () => showRenameDhukutiPoolDialog(
+                  onPressed: () => showRenameSavingsCirclePoolDialog(
                     context: context,
                     store: store,
                     pool: pool,
@@ -172,28 +181,28 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
           ),
         _Tabs(selected: _tab, onChanged: (tab) => setState(() => _tab = tab)),
         switch (_tab) {
-          _DhukutiTab.overview => _OverviewTab(
+          _SavingsCircleTab.overview => _OverviewTab(
             store: store,
             pool: pool,
             cycle: currentCycle,
             contributions: currentContributions,
             onPaid: () => setState(() {}),
           ),
-          _DhukutiTab.members => _MembersTab(
+          _SavingsCircleTab.members => _MembersTab(
             store: store,
             pool: pool,
             members: members,
             cycle: currentCycle,
             contributions: currentContributions,
           ),
-          _DhukutiTab.schedule => _ScheduleTab(
+          _SavingsCircleTab.schedule => _ScheduleTab(
             store: store,
             pool: pool,
             members: members,
             cycles: cycles,
             currentCycle: currentCycle,
           ),
-          _DhukutiTab.ledger => _LedgerTab(
+          _SavingsCircleTab.ledger => _LedgerTab(
             store: store,
             pool: pool,
             filter: _ledgerFilter,
@@ -214,43 +223,43 @@ class _TopFacts extends StatelessWidget {
   });
 
   final AppStore store;
-  final DhukutiPool pool;
-  final List<DhukutiMember> members;
-  final List<DhukutiCycle> cycles;
+  final SavingsCirclePool pool;
+  final List<SavingsCircleMember> members;
+  final List<SavingsCircleCycle> cycles;
 
   @override
   Widget build(BuildContext context) {
     final currentCycle = currentCycleFor(pool, cycles);
-    return DhukutiResponsiveGrid(
+    return SavingsCircleResponsiveGrid(
       children: [
-        DhukutiMetricCard(
+        SavingsCircleMetricCard(
           label: 'Contribution',
           value: money(pool.contributionAmountMinor),
           helper: pool.frequency,
           icon: Icons.savings_outlined,
-          tone: DhukutiTone.success,
+          tone: SavingsCircleTone.success,
         ),
-        DhukutiMetricCard(
+        SavingsCircleMetricCard(
           label: 'Start date',
           value: dateLabel(pool.startDate),
           icon: Icons.calendar_today_outlined,
-          tone: DhukutiTone.neutral,
+          tone: SavingsCircleTone.neutral,
         ),
-        DhukutiMetricCard(
+        SavingsCircleMetricCard(
           label: 'Members',
           value: '${members.length}',
           icon: Icons.groups_outlined,
-          tone: DhukutiTone.info,
+          tone: SavingsCircleTone.info,
         ),
-        DhukutiMetricCard(
+        SavingsCircleMetricCard(
           label: 'Current cycle',
           value: currentCycle == null
               ? 'Pending'
               : '${currentCycle.cycleNumber} of ${cycles.length}',
           icon: Icons.event_repeat,
-          tone: currentCycle?.status == DhukutiCycleStatus.atRisk
-              ? DhukutiTone.warning
-              : DhukutiTone.success,
+          tone: currentCycle?.status == SavingsCircleCycleStatus.atRisk
+              ? SavingsCircleTone.warning
+              : SavingsCircleTone.success,
         ),
       ],
     );
@@ -266,9 +275,9 @@ class _HeroCycleCard extends StatelessWidget {
   });
 
   final AppStore store;
-  final DhukutiPool pool;
-  final DhukutiCycle cycle;
-  final List<DhukutiContribution> contributions;
+  final SavingsCirclePool pool;
+  final SavingsCircleCycle cycle;
+  final List<SavingsCircleContribution> contributions;
 
   @override
   Widget build(BuildContext context) {
@@ -281,7 +290,7 @@ class _HeroCycleCard extends StatelessWidget {
     final recipient = store.userById(cycle.payoutRecipientId);
     final cycleStatus = _friendlyCycleStatus(cycle.status);
     final tone = toneForCycleStatus(cycle.status);
-    final color = dhukutiToneColor(context, tone);
+    final color = savingsCircleToneColor(context, tone);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -310,13 +319,13 @@ class _HeroCycleCard extends StatelessWidget {
                   ],
                 ),
               ),
-              DhukutiStatusBadge(label: cycleStatus, tone: tone),
+              SavingsCircleStatusBadge(label: cycleStatus, tone: tone),
             ],
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              DhukutiAvatar(label: recipient.avatar),
+              SavingsCircleAvatar(label: recipient.avatar),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -359,7 +368,7 @@ class _HeroCycleCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text('Due date: ${dateLabel(cycle.dueDate)}'),
-          if (cycle.status == DhukutiCycleStatus.atRisk) ...[
+          if (cycle.status == SavingsCircleCycleStatus.atRisk) ...[
             const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,8 +383,8 @@ class _HeroCycleCard extends StatelessWidget {
               ],
             ),
           ],
-          if (cycle.status == DhukutiCycleStatus.readyForPayout ||
-              cycle.status == DhukutiCycleStatus.atRisk) ...[
+          if (cycle.status == SavingsCircleCycleStatus.readyForPayout ||
+              cycle.status == SavingsCircleCycleStatus.atRisk) ...[
             const SizedBox(height: 14),
             OutlinedButton.icon(
               onPressed: () => unawaited(
@@ -384,8 +393,8 @@ class _HeroCycleCard extends StatelessWidget {
                   _payoutConfirmationData(store, pool, cycle),
                   () async {
                     final wasReady =
-                        cycle.status == DhukutiCycleStatus.readyForPayout;
-                    final reference = store.confirmDhukutiPayoutReview(
+                        cycle.status == SavingsCircleCycleStatus.readyForPayout;
+                    final reference = store.confirmSavingsCirclePayoutReview(
                       cycle.id,
                     );
                     return TransactionResult.success(
@@ -393,7 +402,7 @@ class _HeroCycleCard extends StatelessWidget {
                           ? 'Payout Recorded'
                           : 'Payout Review Recorded',
                       message:
-                          'Your Dhukuti ledger has been updated without implying a guaranteed payout.',
+                          'Your Savings Circle ledger has been updated without implying a guaranteed payout.',
                       amount: cycle.expectedContributionTotalMinor,
                       transactionReference: reference,
                       createdAt: DateTime.now(),
@@ -413,12 +422,12 @@ class _HeroCycleCard extends StatelessWidget {
 
 TransactionConfirmationData _payoutConfirmationData(
   AppStore store,
-  DhukutiPool pool,
-  DhukutiCycle cycle,
+  SavingsCirclePool pool,
+  SavingsCircleCycle cycle,
 ) {
   return TransactionConfirmationData(
-    id: 'dhukuti-payout-${cycle.id}',
-    transactionType: TransactionType.dhukutiPayout,
+    id: 'savings-circle-payout-${cycle.id}',
+    transactionType: TransactionType.savingsCirclePayout,
     title: 'Confirm Payout',
     subtitle: '${pool.name} • Cycle ${cycle.cycleNumber}',
     amount: cycle.expectedContributionTotalMinor,
@@ -427,14 +436,14 @@ TransactionConfirmationData _payoutConfirmationData(
     recipientName: store.nameOf(cycle.payoutRecipientId),
     recipientAvatarUrl: store.userById(cycle.payoutRecipientId).avatar,
     poolName: pool.name,
-    warningMessage: cycle.status == DhukutiCycleStatus.atRisk
+    warningMessage: cycle.status == SavingsCircleCycleStatus.atRisk
         ? 'Some contributions are unpaid. This payout should not be shown as guaranteed.'
         : null,
-    complianceNote: dhukutiSafetyNoteText,
+    complianceNote: savingsCircleSafetyNoteText,
     confirmationButtonText: 'Confirm Payout',
     createdAt: DateTime.now(),
     idempotencyKey: '${pool.id}-payout-${cycle.cycleNumber}',
-    operationType: 'dhukuti_payout',
+    operationType: 'savings_circle_payout',
     details: [
       TransactionDetail('Cycle', 'Cycle ${cycle.cycleNumber}'),
       TransactionDetail(
@@ -449,34 +458,34 @@ TransactionConfirmationData _payoutConfirmationData(
 class _Tabs extends StatelessWidget {
   const _Tabs({required this.selected, required this.onChanged});
 
-  final _DhukutiTab selected;
-  final ValueChanged<_DhukutiTab> onChanged;
+  final _SavingsCircleTab selected;
+  final ValueChanged<_SavingsCircleTab> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: SegmentedButton<_DhukutiTab>(
+      child: SegmentedButton<_SavingsCircleTab>(
         selected: {selected},
         onSelectionChanged: (value) => onChanged(value.first),
         segments: const [
           ButtonSegment(
-            value: _DhukutiTab.overview,
+            value: _SavingsCircleTab.overview,
             label: Text('Overview'),
             icon: Icon(Icons.dashboard_outlined),
           ),
           ButtonSegment(
-            value: _DhukutiTab.members,
+            value: _SavingsCircleTab.members,
             label: Text('Members'),
             icon: Icon(Icons.groups_outlined),
           ),
           ButtonSegment(
-            value: _DhukutiTab.schedule,
+            value: _SavingsCircleTab.schedule,
             label: Text('Schedule'),
             icon: Icon(Icons.event_note_outlined),
           ),
           ButtonSegment(
-            value: _DhukutiTab.ledger,
+            value: _SavingsCircleTab.ledger,
             label: Text('Ledger'),
             icon: Icon(Icons.receipt_long_outlined),
           ),
@@ -496,15 +505,15 @@ class _OverviewTab extends StatelessWidget {
   });
 
   final AppStore store;
-  final DhukutiPool pool;
-  final DhukutiCycle? cycle;
-  final List<DhukutiContribution> contributions;
+  final SavingsCirclePool pool;
+  final SavingsCircleCycle? cycle;
+  final List<SavingsCircleContribution> contributions;
   final VoidCallback onPaid;
 
   @override
   Widget build(BuildContext context) {
     if (cycle == null) {
-      return const DhukutiEmptyState(
+      return const SavingsCircleEmptyState(
         icon: Icons.event_busy_outlined,
         title: 'No cycle schedule',
         message: 'The contribution schedule has not been generated yet.',
@@ -517,52 +526,52 @@ class _OverviewTab extends StatelessWidget {
         .length;
     final myContribution = contributions
         .where((item) => item.userId == store.currentUserId)
-        .cast<DhukutiContribution?>()
+        .cast<SavingsCircleContribution?>()
         .firstWhere((item) => item != null, orElse: () => null);
     final canPay =
         myContribution != null &&
         myContribution.status != ContributionStatus.paid &&
         myContribution.status != ContributionStatus.pending &&
-        cycle!.status != DhukutiCycleStatus.upcoming;
+        cycle!.status != SavingsCircleCycleStatus.upcoming;
 
-    return DhukutiSection(
+    return SavingsCircleSection(
       title: 'Overview',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DhukutiResponsiveGrid(
+          SavingsCircleResponsiveGrid(
             children: [
-              DhukutiMetricCard(
+              SavingsCircleMetricCard(
                 label: 'Contribution amount',
                 value: money(pool.contributionAmountMinor),
                 icon: Icons.savings_outlined,
-                tone: DhukutiTone.success,
+                tone: SavingsCircleTone.success,
               ),
-              DhukutiMetricCard(
+              SavingsCircleMetricCard(
                 label: 'Expected collection',
                 value: money(cycle!.expectedContributionTotalMinor),
                 icon: Icons.account_balance_wallet_outlined,
-                tone: DhukutiTone.info,
+                tone: SavingsCircleTone.info,
               ),
-              DhukutiMetricCard(
+              SavingsCircleMetricCard(
                 label: 'Paid so far',
                 value: money(paidTotal),
                 icon: Icons.check_circle_outline,
-                tone: DhukutiTone.success,
+                tone: SavingsCircleTone.success,
               ),
-              DhukutiMetricCard(
+              SavingsCircleMetricCard(
                 label: 'Remaining amount',
                 value: money(remaining),
                 icon: Icons.pending_actions_outlined,
                 tone: remaining == 0
-                    ? DhukutiTone.success
-                    : DhukutiTone.warning,
+                    ? SavingsCircleTone.success
+                    : SavingsCircleTone.warning,
               ),
-              DhukutiMetricCard(
+              SavingsCircleMetricCard(
                 label: 'Current recipient',
                 value: store.nameOf(cycle!.payoutRecipientId),
                 icon: Icons.person_pin_circle_outlined,
-                tone: DhukutiTone.neutral,
+                tone: SavingsCircleTone.neutral,
               ),
             ],
           ),
@@ -586,7 +595,7 @@ class _OverviewTab extends StatelessWidget {
             onPay: myContribution == null
                 ? null
                 : () async {
-                    final paid = await showDhukutiPaymentBottomSheet(
+                    final paid = await showSavingsCirclePaymentBottomSheet(
                       context: context,
                       store: store,
                       pool: pool,
@@ -598,7 +607,7 @@ class _OverviewTab extends StatelessWidget {
                   },
           ),
           const SizedBox(height: 12),
-          _DhukutiExitCard(
+          _SavingsCircleExitCard(
             store: store,
             pool: pool,
             contribution: myContribution,
@@ -610,8 +619,8 @@ class _OverviewTab extends StatelessWidget {
   }
 }
 
-class _DhukutiExitCard extends StatelessWidget {
-  const _DhukutiExitCard({
+class _SavingsCircleExitCard extends StatelessWidget {
+  const _SavingsCircleExitCard({
     required this.store,
     required this.pool,
     required this.contribution,
@@ -619,13 +628,13 @@ class _DhukutiExitCard extends StatelessWidget {
   });
 
   final AppStore store;
-  final DhukutiPool pool;
-  final DhukutiContribution? contribution;
+  final SavingsCirclePool pool;
+  final SavingsCircleContribution? contribution;
   final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final decision = store.dhukutiExitDecision(pool.id);
+    final decision = store.savingsCircleExitDecision(pool.id);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -637,7 +646,10 @@ class _DhukutiExitCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.exit_to_app_outlined, color: dhukutiFestival),
+              const Icon(
+                Icons.exit_to_app_outlined,
+                color: savingsCircleFestival,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -656,24 +668,28 @@ class _DhukutiExitCard extends StatelessWidget {
             children: [
               if (decision.secondaryAction != null)
                 OutlinedButton(
-                  onPressed: () => _showDhukutiExitDialog(context, store, pool),
+                  onPressed: () =>
+                      _showSavingsCircleExitDialog(context, store, pool),
                   child: Text(decision.secondaryAction!),
                 ),
               FilledButton(
-                onPressed: decision.type == DhukutiExitDecisionType.unavailable
+                onPressed:
+                    decision.type == SavingsCircleExitDecisionType.unavailable
                     ? null
                     : () async {
                         if (decision.type ==
-                            DhukutiExitDecisionType.pendingContribution) {
+                            SavingsCircleExitDecisionType.pendingContribution) {
                           final paidAmount = store
-                              .payRemainingDhukutiExitContributions(pool.id);
+                              .payRemainingSavingsCircleExitContributions(
+                                pool.id,
+                              );
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
                                   paidAmount == 0
                                       ? 'No remaining contribution is open.'
-                                      : 'Paid ${money(paidAmount)} toward remaining Dhukuti obligations.',
+                                      : 'Paid ${money(paidAmount)} toward remaining Savings Circle obligations.',
                                 ),
                               ),
                             );
@@ -682,22 +698,25 @@ class _DhukutiExitCard extends StatelessWidget {
                           return;
                         }
                         if (decision.type ==
-                                DhukutiExitDecisionType.receivedPayout &&
+                                SavingsCircleExitDecisionType.receivedPayout &&
                             decision.amountMinor > 0 &&
                             contribution != null) {
-                          final paid = await showDhukutiPaymentBottomSheet(
-                            context: context,
-                            store: store,
-                            pool: pool,
-                            contribution: contribution!,
-                          );
+                          final paid =
+                              await showSavingsCirclePaymentBottomSheet(
+                                context: context,
+                                store: store,
+                                pool: pool,
+                                contribution: contribution!,
+                              );
                           if (paid) {
                             onChanged();
                           }
                           return;
                         }
                         if (decision.canLeaveNow) {
-                          final error = store.leaveDhukutiBeforeStart(pool.id);
+                          final error = store.leaveSavingsCircleBeforeStart(
+                            pool.id,
+                          );
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -710,7 +729,11 @@ class _DhukutiExitCard extends StatelessWidget {
                           onChanged();
                           return;
                         }
-                        await _showDhukutiExitDialog(context, store, pool);
+                        await _showSavingsCircleExitDialog(
+                          context,
+                          store,
+                          pool,
+                        );
                         onChanged();
                       },
                 child: Text(decision.primaryAction ?? 'Request Exit'),
@@ -723,16 +746,16 @@ class _DhukutiExitCard extends StatelessWidget {
   }
 }
 
-Future<void> _showDhukutiExitDialog(
+Future<void> _showSavingsCircleExitDialog(
   BuildContext context,
   AppStore store,
-  DhukutiPool pool,
+  SavingsCirclePool pool,
 ) async {
-  final decision = store.dhukutiExitDecision(pool.id);
+  final decision = store.savingsCircleExitDecision(pool.id);
   final reason = TextEditingController(
-    text: decision.type == DhukutiExitDecisionType.pendingContribution
+    text: decision.type == SavingsCircleExitDecisionType.pendingContribution
         ? 'Requesting admin review before remaining contributions are fully paid'
-        : decision.type == DhukutiExitDecisionType.receivedPayout
+        : decision.type == SavingsCircleExitDecisionType.receivedPayout
         ? 'Requesting exit approval after payout'
         : 'Need to exit before receiving payout',
   );
@@ -803,7 +826,7 @@ class _NextActionCard extends StatelessWidget {
             paid
                 ? Icons.check_circle_outline
                 : Icons.account_balance_wallet_outlined,
-            color: paid ? dhukutiPrimary : dhukutiFestival,
+            color: paid ? savingsCirclePrimary : savingsCircleFestival,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -836,25 +859,25 @@ class _MembersTab extends StatelessWidget {
   });
 
   final AppStore store;
-  final DhukutiPool pool;
-  final List<DhukutiMember> members;
-  final DhukutiCycle? cycle;
-  final List<DhukutiContribution> contributions;
+  final SavingsCirclePool pool;
+  final List<SavingsCircleMember> members;
+  final SavingsCircleCycle? cycle;
+  final List<SavingsCircleContribution> contributions;
 
   @override
   Widget build(BuildContext context) {
-    return DhukutiSection(
+    return SavingsCircleSection(
       title: 'Members',
       child: Column(
         children: [
           for (final member in members)
-            DhukutiMemberRow(
+            SavingsCircleMemberRow(
               store: store,
               member: member,
               isOrganizer: member.userId == pool.createdBy,
               contribution: contributions
                   .where((item) => item.userId == member.userId)
-                  .cast<DhukutiContribution?>()
+                  .cast<SavingsCircleContribution?>()
                   .firstWhere((item) => item != null, orElse: () => null),
               amountMinor: pool.contributionAmountMinor,
             ),
@@ -874,25 +897,25 @@ class _ScheduleTab extends StatelessWidget {
   });
 
   final AppStore store;
-  final DhukutiPool pool;
-  final List<DhukutiMember> members;
-  final List<DhukutiCycle> cycles;
-  final DhukutiCycle? currentCycle;
+  final SavingsCirclePool pool;
+  final List<SavingsCircleMember> members;
+  final List<SavingsCircleCycle> cycles;
+  final SavingsCircleCycle? currentCycle;
 
   @override
   Widget build(BuildContext context) {
-    return DhukutiSection(
+    return SavingsCircleSection(
       title: 'Schedule',
       child: Column(
         children: [
           for (final cycle in cycles)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: DhukutiCycleCard(
+              child: SavingsCircleCycleCard(
                 store: store,
                 cycle: cycle,
                 members: members,
-                contributions: store.dhukutiContributions
+                contributions: store.savingsCircleContributions
                     .where((item) => item.cycleId == cycle.id)
                     .toList(),
                 current: cycle.id == currentCycle?.id,
@@ -913,9 +936,9 @@ class _LedgerTab extends StatelessWidget {
   });
 
   final AppStore store;
-  final DhukutiPool pool;
-  final DhukutiLedgerFilter filter;
-  final ValueChanged<DhukutiLedgerFilter> onFilterChanged;
+  final SavingsCirclePool pool;
+  final SavingsCircleLedgerFilter filter;
+  final ValueChanged<SavingsCircleLedgerFilter> onFilterChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -929,7 +952,7 @@ class _LedgerTab extends StatelessWidget {
             .toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-    return DhukutiSection(
+    return SavingsCircleSection(
       title: 'Transparent Ledger',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -939,7 +962,7 @@ class _LedgerTab extends StatelessWidget {
             child: Wrap(
               spacing: 8,
               children: [
-                for (final item in DhukutiLedgerFilter.values)
+                for (final item in SavingsCircleLedgerFilter.values)
                   ChoiceChip(
                     selected: filter == item,
                     label: Text(_filterLabel(item)),
@@ -950,37 +973,37 @@ class _LedgerTab extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (events.isEmpty)
-            const DhukutiEmptyState(
+            const SavingsCircleEmptyState(
               icon: Icons.receipt_long_outlined,
               title: 'No ledger activity',
-              message: 'Dhukuti actions and status updates appear here.',
+              message: 'Savings Circle actions and status updates appear here.',
             )
           else
             for (final event in events)
-              DhukutiLedgerItem(store: store, event: event),
+              SavingsCircleLedgerItem(store: store, event: event),
         ],
       ),
     );
   }
 }
 
-String _friendlyCycleStatus(DhukutiCycleStatus status) {
+String _friendlyCycleStatus(SavingsCircleCycleStatus status) {
   return switch (status) {
-    DhukutiCycleStatus.open => 'On Track',
-    DhukutiCycleStatus.atRisk => 'At Risk',
-    DhukutiCycleStatus.readyForPayout => 'Ready for Payout',
-    DhukutiCycleStatus.paidOut => 'Paid Out',
-    DhukutiCycleStatus.closed => 'Closed',
-    DhukutiCycleStatus.upcoming => 'Upcoming',
-    DhukutiCycleStatus.cancelled => 'Cancelled',
+    SavingsCircleCycleStatus.open => 'On Track',
+    SavingsCircleCycleStatus.atRisk => 'At Risk',
+    SavingsCircleCycleStatus.readyForPayout => 'Ready for Payout',
+    SavingsCircleCycleStatus.paidOut => 'Paid Out',
+    SavingsCircleCycleStatus.closed => 'Closed',
+    SavingsCircleCycleStatus.upcoming => 'Upcoming',
+    SavingsCircleCycleStatus.cancelled => 'Cancelled',
   };
 }
 
-String _filterLabel(DhukutiLedgerFilter filter) {
+String _filterLabel(SavingsCircleLedgerFilter filter) {
   return switch (filter) {
-    DhukutiLedgerFilter.all => 'All',
-    DhukutiLedgerFilter.contributions => 'Contributions',
-    DhukutiLedgerFilter.payouts => 'Payouts',
-    DhukutiLedgerFilter.statusUpdates => 'Status Updates',
+    SavingsCircleLedgerFilter.all => 'All',
+    SavingsCircleLedgerFilter.contributions => 'Contributions',
+    SavingsCircleLedgerFilter.payouts => 'Payouts',
+    SavingsCircleLedgerFilter.statusUpdates => 'Status Updates',
   };
 }

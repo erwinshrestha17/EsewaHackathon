@@ -321,8 +321,9 @@ IconData _iconFor(TransactionType type) {
     TransactionType.groupExpense => Icons.receipt_long_outlined,
     TransactionType.settlement => Icons.payments_outlined,
     TransactionType.gift => Icons.card_giftcard_outlined,
-    TransactionType.dhukutiContribution => Icons.savings_outlined,
-    TransactionType.dhukutiPayout => Icons.account_balance_wallet_outlined,
+    TransactionType.savingsCircleContribution => Icons.savings_outlined,
+    TransactionType.savingsCirclePayout =>
+      Icons.account_balance_wallet_outlined,
     TransactionType.giftPoolContribution => Icons.redeem_outlined,
     TransactionType.adjustment => Icons.tune,
     TransactionType.manualItemExpense => Icons.edit_note_outlined,

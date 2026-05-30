@@ -5,8 +5,8 @@ import '../../../shared/design_system/app_spacing.dart';
 import '../../../shared/design_system/app_text_styles.dart';
 import '../settings_models.dart';
 
-class DhukutiSafetyNoteCard extends StatelessWidget {
-  const DhukutiSafetyNoteCard({this.onTap, super.key});
+class SavingsCircleSafetyNoteCard extends StatelessWidget {
+  const SavingsCircleSafetyNoteCard({this.onTap, super.key});
 
   final VoidCallback? onTap;
 
@@ -23,7 +23,7 @@ class DhukutiSafetyNoteCard extends StatelessWidget {
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Text(
-              dhukutiSafetyNoteText,
+              savingsCircleSafetyNoteText,
               style: AppTextStyles.bodySecondary.copyWith(height: 1.35),
             ),
           ),

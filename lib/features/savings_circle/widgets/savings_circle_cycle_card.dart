@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../src/app_state.dart';
 import '../../../src/finance.dart';
 import '../../../src/models.dart';
-import 'dhukuti_status_badge.dart';
-import 'dhukuti_tokens.dart';
+import 'savings_circle_status_badge.dart';
+import 'savings_circle_tokens.dart';
 
-class DhukutiCycleCard extends StatelessWidget {
-  const DhukutiCycleCard({
+class SavingsCircleCycleCard extends StatelessWidget {
+  const SavingsCircleCycleCard({
     required this.store,
     required this.cycle,
     required this.members,
@@ -17,21 +17,21 @@ class DhukutiCycleCard extends StatelessWidget {
   });
 
   final AppStore store;
-  final DhukutiCycle cycle;
-  final List<DhukutiMember> members;
-  final List<DhukutiContribution> contributions;
+  final SavingsCircleCycle cycle;
+  final List<SavingsCircleMember> members;
+  final List<SavingsCircleContribution> contributions;
   final bool current;
 
   @override
   Widget build(BuildContext context) {
     final completed =
-        cycle.status == DhukutiCycleStatus.paidOut ||
-        cycle.status == DhukutiCycleStatus.closed;
+        cycle.status == SavingsCircleCycleStatus.paidOut ||
+        cycle.status == SavingsCircleCycleStatus.closed;
     final color = current
-        ? dhukutiPrimary
+        ? savingsCirclePrimary
         : completed
         ? Theme.of(context).colorScheme.onSurfaceVariant
-        : dhukutiToneColor(context, toneForCycleStatus(cycle.status));
+        : savingsCircleToneColor(context, toneForCycleStatus(cycle.status));
     final paidCount = contributions
         .where((item) => item.status == ContributionStatus.paid)
         .length;
@@ -67,7 +67,7 @@ class DhukutiCycleCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               side: BorderSide(
                 color: current
-                    ? dhukutiPrimary.withValues(alpha: 0.45)
+                    ? savingsCirclePrimary.withValues(alpha: 0.45)
                     : Theme.of(context).colorScheme.outlineVariant,
               ),
             ),
@@ -83,8 +83,8 @@ class DhukutiCycleCard extends StatelessWidget {
               subtitle: Text(
                 '${dateLabel(cycle.dueDate)} • Payout recipient: ${store.nameOf(cycle.payoutRecipientId)}',
               ),
-              trailing: DhukutiStatusBadge(
-                label: dhukutiEnumLabel(cycle.status),
+              trailing: SavingsCircleStatusBadge(
+                label: savingsCircleEnumLabel(cycle.status),
                 tone: toneForCycleStatus(cycle.status),
               ),
               children: [
@@ -132,18 +132,18 @@ class _ContributionLine extends StatelessWidget {
 
   final String name;
   final String avatar;
-  final DhukutiContribution contribution;
+  final SavingsCircleContribution contribution;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: DhukutiAvatar(label: avatar, small: true),
+      leading: SavingsCircleAvatar(label: avatar, small: true),
       title: Text(name),
       subtitle: Text(dateLabel(contribution.dueDate)),
-      trailing: DhukutiStatusBadge(
-        label: dhukutiEnumLabel(contribution.status),
+      trailing: SavingsCircleStatusBadge(
+        label: savingsCircleEnumLabel(contribution.status),
         tone: toneForContributionStatus(contribution.status),
       ),
     );

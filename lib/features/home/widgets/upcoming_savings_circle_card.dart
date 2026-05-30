@@ -3,15 +3,15 @@ import 'package:flutter/material.dart';
 import '../../../src/finance.dart';
 import '../home_models.dart';
 
-class UpcomingDhukutiCard extends StatelessWidget {
-  const UpcomingDhukutiCard({
+class UpcomingSavingsCircleCard extends StatelessWidget {
+  const UpcomingSavingsCircleCard({
     required this.due,
     required this.onPay,
     required this.onViewLedger,
     super.key,
   });
 
-  final HomeDhukutiDue? due;
+  final HomeSavingsCircleDue? due;
   final VoidCallback onPay;
   final VoidCallback onViewLedger;
 
@@ -25,7 +25,7 @@ class UpcomingDhukutiCard extends StatelessWidget {
     final isAtRisk = item.status == 'At Risk';
     final color = isAtRisk ? const Color(0xFFB56A12) : scheme.primary;
     return _HomeSection(
-      title: 'Upcoming Dhukuti',
+      title: 'Upcoming Savings Circle',
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
@@ -77,7 +77,7 @@ class UpcomingDhukutiCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Dhukuti is shown as a transparent contribution ledger and payment scheduler.',
+              'Savings Circle is shown as a transparent contribution ledger and payment scheduler.',
               style: TextStyle(
                 color: scheme.onSurfaceVariant,
                 fontSize: 12,

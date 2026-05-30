@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../src/app_state.dart';
 import '../../src/finance.dart';
-import '../dhukuti/widgets/dhukuti_payment_bottom_sheet.dart';
+import '../savings_circle/widgets/savings_circle_payment_bottom_sheet.dart';
 import 'home_controller.dart';
 import 'home_models.dart';
 import 'widgets/active_group_card.dart';
@@ -18,7 +18,7 @@ import 'widgets/pending_settlement_card.dart';
 import 'widgets/prototype_mode_banner.dart';
 import 'widgets/quick_action_grid.dart';
 import 'widgets/recent_activity_list.dart';
-import 'widgets/upcoming_dhukuti_card.dart';
+import 'widgets/upcoming_savings_circle_card.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -29,7 +29,7 @@ class HomeScreen extends StatefulWidget {
     required this.onSettle,
     required this.onScanBill,
     required this.onSendGift,
-    required this.onOpenDhukuti,
+    required this.onOpenSavingsCircle,
     required this.onOpenFriends,
     required this.onViewActivity,
     required this.onExploreTemplates,
@@ -43,7 +43,7 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onSettle;
   final VoidCallback onScanBill;
   final VoidCallback onSendGift;
-  final VoidCallback onOpenDhukuti;
+  final VoidCallback onOpenSavingsCircle;
   final VoidCallback onOpenFriends;
   final VoidCallback onViewActivity;
   final VoidCallback onExploreTemplates;
@@ -112,14 +112,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         onView: _showPendingSettlement,
                       ),
                     ],
-                    if (data.upcomingDhukutiDues.isNotEmpty) ...[
+                    if (data.upcomingSavingsCircleDues.isNotEmpty) ...[
                       const SizedBox(height: 18),
-                      UpcomingDhukutiCard(
-                        due: data.upcomingDhukutiDues.first,
+                      UpcomingSavingsCircleCard(
+                        due: data.upcomingSavingsCircleDues.first,
                         onPay: () => unawaited(
-                          _payDhukutiDue(data.upcomingDhukutiDues.first),
+                          _paySavingsCircleDue(
+                            data.upcomingSavingsCircleDues.first,
+                          ),
                         ),
-                        onViewLedger: widget.onOpenDhukuti,
+                        onViewLedger: widget.onOpenSavingsCircle,
                       ),
                     ],
                     const SizedBox(height: 18),
@@ -152,8 +154,8 @@ class _HomeScreenState extends State<HomeScreen> {
         widget.onSettle();
       case 'send_gift':
         widget.onSendGift();
-      case 'dhukuti':
-        widget.onOpenDhukuti();
+      case 'savings_circle':
+        widget.onOpenSavingsCircle();
       case 'connect_friend':
         widget.onOpenFriends();
       default:
@@ -166,12 +168,12 @@ class _HomeScreenState extends State<HomeScreen> {
     widget.onNavigate(1);
   }
 
-  Future<void> _payDhukutiDue(HomeDhukutiDue due) async {
+  Future<void> _paySavingsCircleDue(HomeSavingsCircleDue due) async {
     final pool = widget.store.poolById(due.poolId);
-    final contribution = widget.store.dhukutiContributions.firstWhere(
+    final contribution = widget.store.savingsCircleContributions.firstWhere(
       (item) => item.id == due.contributionId,
     );
-    final paid = await showDhukutiPaymentBottomSheet(
+    final paid = await showSavingsCirclePaymentBottomSheet(
       context: context,
       store: widget.store,
       pool: pool,

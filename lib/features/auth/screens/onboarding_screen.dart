@@ -19,7 +19,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       icon: Icons.restaurant_menu_outlined,
       title: 'Sajha Kharcha',
       description:
-          'Split expenses. Stay friends. Built for meals, trips, rent, gifts, and Dhukuti in Nepal.',
+          'Split expenses. Stay friends. Built for meals, trips, rent, gifts, and Savings Circle in Nepal.',
       note: 'English | नेपाली',
     ),
     OnboardingSlide(
@@ -32,7 +32,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       icon: Icons.diversity_3_outlined,
       title: 'For every shared moment',
       description:
-          'Use one social wallet layer for expenses, trips, gifts, and transparent Dhukuti commitments.',
+          'Use one social wallet layer for expenses, trips, gifts, and transparent Savings Circle commitments.',
       note: 'Scan. Split. Settle. Together.',
     ),
   ];

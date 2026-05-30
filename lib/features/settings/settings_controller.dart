@@ -65,13 +65,13 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setDhukutiContributionReminders(bool value) {
-    _state = _state.copyWith(dhukutiContributionReminders: value);
+  void setSavingsCircleContributionReminders(bool value) {
+    _state = _state.copyWith(savingsCircleContributionReminders: value);
     notifyListeners();
   }
 
-  void setDhukutiAtRiskAlerts(bool value) {
-    _state = _state.copyWith(dhukutiAtRiskAlerts: value);
+  void setSavingsCircleAtRiskAlerts(bool value) {
+    _state = _state.copyWith(savingsCircleAtRiskAlerts: value);
     notifyListeners();
   }
 

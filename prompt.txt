@@ -1,5 +1,5 @@
 Updated edge-case handling
-1. Leaving a group or Dhukuti when money is pending
+1. Leaving a group or Savings Circle when money is pending
 Normal expense group
 When a user taps Leave Group, the app first checks their net balance.
 Case A: User owes money
@@ -42,9 +42,9 @@ Flow:
 Choose New Admin → Confirm Transfer → Leave Group
 The group cannot be left without an active admin.
 
-Dhukuti group
-Dhukuti is stricter than a normal expense group because it is a rotating savings commitment.
-Case A: Dhukuti has not started
+Savings Circle group
+Savings Circle is stricter than a normal expense group because it is a rotating savings commitment.
+Case A: Savings Circle has not started
 A member can leave or decline before all members accept.
 Result:
 Member is removed.
@@ -59,7 +59,7 @@ Actions:
 Pay Contribution
 Request Admin Review
 Cancel
-Case C: User already received Dhukuti payout
+Case C: User already received Savings Circle payout
 The user cannot leave casually because they have already received the community pot.
 Message:
 Payout already received
@@ -79,7 +79,7 @@ Whether refund is applicable according to group agreement
 Updated payout order
 Updated pot amount
 Updated service fee
-Dhukuti exit is not instant because changing one member affects everyone’s payout schedule.
+Savings Circle exit is not instant because changing one member affects everyone’s payout schedule.
 
 2. Uneven split: one item shared by only some members
 This is handled through item-level splitting.
@@ -178,7 +178,7 @@ Track who owes whom
 Send settlement reminders
 Pay directly through eSewa
 Send gift cards with money
-Run transparent Dhukuti/community savings groups
+Run transparent Savings Circle/community savings groups
 Use the app in English or Nepali
 The product promise is:
 Scan. Split. Settle. Together.
@@ -219,8 +219,8 @@ Tax/service charge allocation
 Rounding adjustment
 Payment status
 Settlement transaction ID
-Dhukuti contribution status
-Dhukuti payout status
+Savings Circle contribution status
+Savings Circle payout status
 Service fee, if any
 Nothing important disappears. If someone leaves a group, their past records remain visible.
 
@@ -247,12 +247,12 @@ Visual:
 Phone scanning a restaurant receipt.
 Screen 3: For every shared moment
 Title:
-For meals, trips, rent, gifts, and Dhukuti
+For meals, trips, rent, gifts, and Savings Circle
 Cards:
 Expenses
 Trips
 Gifts
-Dhukuti
+Savings Circle
 CTA:
 Continue with eSewa
 
@@ -309,14 +309,14 @@ Add Expense
 Settle
 Send Gift
 Friends
-Dhukuti
+Savings Circle
 Action cards
 Pending settlement
 “You owe Ritika Rs 850 for Pokhara Trip.”
 CTA:
 Pay Now
-Dhukuti reminder
-“Family Dhukuti contribution due in 2 days.”
+Savings Circle reminder
+“Family Savings Circle contribution due in 2 days.”
 CTA:
 Contribute
 Active groups
@@ -369,7 +369,7 @@ Message:
 Group type screen
 Options:
 Expense Group “Meals, trips, rent, events, shopping”
-Dhukuti Group “Rotating savings with transparent contribution cycles”
+Savings Circle Group “Rotating savings with transparent contribution cycles”
 Expense group setup
 Fields:
 Group name
@@ -668,18 +668,18 @@ Gift sent
 Recipient notification:
 “Aayush sent you a Tihar Gift Card worth Rs 1,000.”
 
-12. Dhukuti Group Creation
-Dhukuti is designed as a transparent rotating savings group.
-Dhukuti intro
+12. Savings Circle Group Creation
+Savings Circle is designed as a transparent rotating savings group.
+Savings Circle intro
 Title:
-Create transparent Dhukuti
+Create transparent Savings Circle
 Subtitle:
 “Set contribution amount, members, payout order, reminders, and service fees before anyone joins.”
 CTA:
 Start Setup
 Group details
 Fields:
-Dhukuti name
+Savings Circle name
 Contribution amount
 Frequency
 Start date
@@ -721,12 +721,12 @@ Checkbox:
 “I understand the contribution and payout schedule.”
 CTA:
 Send Invites
-Dhukuti starts only after all members accept.
+Savings Circle starts only after all members accept.
 
-13. Dhukuti Contribution Tracking
+13. Savings Circle Contribution Tracking
 Dashboard
 Title:
-Family Dhukuti
+Family Savings Circle
 Status:
 Cycle 3 of 10
 Top card:
@@ -760,9 +760,9 @@ Cycle 2 — Paid out
 Cycle 3 — Current
 Cycle 4 — Upcoming
 Cycle 5 — Upcoming
-Dhukuti exit screen
-If user taps Leave Dhukuti, the app shows one of these states:
-“You can leave before Dhukuti starts.”
+Savings Circle exit screen
+If user taps Leave Savings Circle, the app shows one of these states:
+“You can leave before Savings Circle starts.”
 “You have a pending contribution. Please pay before requesting exit.”
 “You already received payout. Please complete remaining contributions.”
 “You have not received payout yet. You can request exit; members must approve the updated schedule.”
@@ -772,7 +772,7 @@ Notification categories
 All
 Payments
 Groups
-Dhukuti
+Savings Circle
 Requests
 Notification examples
 Settlement request
@@ -789,12 +789,12 @@ OCR review
 “2 receipt items need review.”
 Action:
 Review
-Dhukuti contribution
-“Family Dhukuti contribution due tomorrow: Rs 5,000.”
+Savings Circle contribution
+“Family Savings Circle contribution due tomorrow: Rs 5,000.”
 Action:
 Pay Contribution
 Leave request
-“Aayush requested to leave Family Dhukuti. Review schedule changes.”
+“Aayush requested to leave Family Savings Circle. Review schedule changes.”
 Action:
 Review Request
 Gift received
@@ -818,7 +818,7 @@ Social finance
 Friends
 Pending requests
 Groups
-Dhukuti agreements
+Savings Circle agreements
 Blocked users
 Preferences
 Language: English / नेपाली
@@ -841,7 +841,7 @@ Logout from all devices
 Help
 How splitting works
 How OCR works
-How Dhukuti works
+How Savings Circle works
 Report a problem
 Contact support
 
@@ -880,7 +880,7 @@ C owes A
 It simplifies the final settlement wherever possible.
 Rule 7: Past records remain visible
 Leaving a group or removing a connection never deletes financial history.
-Rule 8: Dhukuti commitments are stronger than expense groups
+Rule 8: Savings Circle commitments are stronger than expense groups
 A user who has received payout cannot leave without settling remaining obligations.
 
 Final product positioning
@@ -897,7 +897,7 @@ Balance tracking
 Settlement reminders
 eSewa payments
 Gift cards
-Dhukuti/community savings
+Savings Circle/community savings
 English/Nepali language support
 The final user promise should be:
 “Everyone sees the same bill, the same split, the same balance, and the same settlement status.”

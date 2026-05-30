@@ -65,7 +65,7 @@ class TransactionConfirmationData {
     return switch (transactionType) {
       TransactionType.settlement ||
       TransactionType.gift ||
-      TransactionType.dhukutiPayout => true,
+      TransactionType.savingsCirclePayout => true,
       _ => false,
     };
   }

@@ -6,7 +6,7 @@ enum MemberRole { admin, member, treasurer }
 
 enum MemberStatus { active, removed }
 
-enum GroupKind { expense, dhukuti }
+enum GroupKind { expense, savingsCircle }
 
 enum GroupLeaveDecisionType {
   canLeave,
@@ -67,11 +67,11 @@ enum ContributionStatus {
   cancelled,
 }
 
-enum DhukutiPoolStatus { draft, active, completed, cancelled }
+enum SavingsCirclePoolStatus { draft, active, completed, cancelled }
 
-enum DhukutiMemberStatus { invited, active, declined, exited }
+enum SavingsCircleMemberStatus { invited, active, declined, exited }
 
-enum DhukutiCycleStatus {
+enum SavingsCircleCycleStatus {
   upcoming,
   open,
   atRisk,
@@ -85,7 +85,7 @@ enum PayoutStatus { pending, paid, failed, failedReview, expired, cancelled }
 
 enum AdjustmentType { correction, reversal, refund, manual }
 
-enum DhukutiExitDecisionType {
+enum SavingsCircleExitDecisionType {
   canLeaveBeforeStart,
   pendingContribution,
   receivedPayout,
@@ -303,8 +303,8 @@ class GroupLeaveDecision {
       type == GroupLeaveDecisionType.canLeave;
 }
 
-class DhukutiExitDecision {
-  const DhukutiExitDecision({
+class SavingsCircleExitDecision {
+  const SavingsCircleExitDecision({
     required this.type,
     required this.title,
     required this.message,
@@ -313,18 +313,19 @@ class DhukutiExitDecision {
     this.secondaryAction,
   });
 
-  final DhukutiExitDecisionType type;
+  final SavingsCircleExitDecisionType type;
   final String title;
   final String message;
   final int amountMinor;
   final String? primaryAction;
   final String? secondaryAction;
 
-  bool get canLeaveNow => type == DhukutiExitDecisionType.canLeaveBeforeStart;
+  bool get canLeaveNow =>
+      type == SavingsCircleExitDecisionType.canLeaveBeforeStart;
 
   bool get canRequestApproval =>
-      type == DhukutiExitDecisionType.requiresApproval ||
-      type == DhukutiExitDecisionType.receivedPayout;
+      type == SavingsCircleExitDecisionType.requiresApproval ||
+      type == SavingsCircleExitDecisionType.receivedPayout;
 }
 
 class ItemSplitInput {
@@ -682,8 +683,8 @@ class GiftPoolContribution {
   DateTime? paidAt;
 }
 
-class DhukutiPool {
-  DhukutiPool({
+class SavingsCirclePool {
+  SavingsCirclePool({
     required this.id,
     required this.groupId,
     required this.name,
@@ -702,12 +703,12 @@ class DhukutiPool {
   String frequency;
   DateTime startDate;
   String createdBy;
-  DhukutiPoolStatus status;
+  SavingsCirclePoolStatus status;
   DateTime createdAt;
 }
 
-class DhukutiMember {
-  DhukutiMember({
+class SavingsCircleMember {
+  SavingsCircleMember({
     required this.id,
     required this.poolId,
     required this.userId,
@@ -719,11 +720,11 @@ class DhukutiMember {
   final String poolId;
   final String userId;
   int payoutOrder;
-  DhukutiMemberStatus status;
+  SavingsCircleMemberStatus status;
 }
 
-class DhukutiCycle {
-  DhukutiCycle({
+class SavingsCircleCycle {
+  SavingsCircleCycle({
     required this.id,
     required this.poolId,
     required this.cycleNumber,
@@ -741,11 +742,11 @@ class DhukutiCycle {
   String payoutRecipientId;
   int expectedContributionTotalMinor;
   int paidContributionTotalMinor;
-  DhukutiCycleStatus status;
+  SavingsCircleCycleStatus status;
 }
 
-class DhukutiContribution {
-  DhukutiContribution({
+class SavingsCircleContribution {
+  SavingsCircleContribution({
     required this.id,
     required this.poolId,
     required this.cycleId,
@@ -776,8 +777,8 @@ class DhukutiContribution {
   DateTime? paidAt;
 }
 
-class DhukutiPayout {
-  DhukutiPayout({
+class SavingsCirclePayout {
+  SavingsCirclePayout({
     required this.id,
     required this.poolId,
     required this.cycleId,

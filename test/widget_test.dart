@@ -223,43 +223,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Dhukuti quick action opens Dhukuti Groups inside Groups tab', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(800, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-    SharedPreferences.setMockInitialValues({
-      'auth.hasSeenIntro': true,
-      'auth.isLoggedIn': true,
-      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
-    });
+  testWidgets(
+    'Savings Circle quick action opens Savings Circle Groups inside Groups tab',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      SharedPreferences.setMockInitialValues({
+        'auth.hasSeenIntro': true,
+        'auth.isLoggedIn': true,
+        'auth.activeUserProfile': UserProfile.demo().toJsonString(),
+      });
 
-    await tester.pumpWidget(
-      AuthScope(
-        notifier: AuthController(),
-        child: StoreScope(notifier: AppStore(), child: const SangaiApp()),
-      ),
-    );
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        AuthScope(
+          notifier: AuthController(),
+          child: StoreScope(notifier: AppStore(), child: const SangaiApp()),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
 
-    final dhukutiAction = find.text('Dhukuti').first;
-    await tester.ensureVisible(dhukutiAction);
-    await tester.tap(dhukutiAction);
-    await tester.pumpAndSettle();
+      final savingsCircleAction = find.text('Savings Circle').first;
+      await tester.ensureVisible(savingsCircleAction);
+      await tester.tap(savingsCircleAction);
+      await tester.pumpAndSettle();
 
-    expect(find.text('Dhukuti Groups'), findsOneWidget);
-    expect(find.text('Digital Dhukuti'), findsOneWidget);
-    expect(
-      find.text('Expense groups stay separate from Dhukuti commitments.'),
-      findsNothing,
-    );
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.text('Savings Circle Groups'), findsOneWidget);
+      expect(find.text('Savings Circle'), findsOneWidget);
+      expect(
+        find.text(
+          'Expense groups stay separate from Savings Circle commitments.',
+        ),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('Groups screen tolerates a stale selected group', (tester) async {
     final store = AppStore()..selectedGroupId = 'missing-group';
@@ -321,7 +324,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Create Expense Group'), findsWidgets);
-    expect(find.text('Dhukuti Group'), findsNothing);
+    expect(find.text('Savings Circle Group'), findsNothing);
     final memberChips = tester.widgetList<FilterChip>(find.byType(FilterChip));
     expect(memberChips, isNotEmpty);
     expect(memberChips.every((chip) => !chip.selected), isTrue);
@@ -333,7 +336,7 @@ void main() {
     );
   });
 
-  testWidgets('dhukuti create flow uses dhukuti-specific setup', (
+  testWidgets('Savings Circle create flow uses savings-circle-specific setup', (
     tester,
   ) async {
     final store = AppStore();
@@ -346,8 +349,8 @@ void main() {
             builder: (context) {
               return Scaffold(
                 body: FilledButton(
-                  onPressed: () => showCreateDhukutiGroupDialog(context),
-                  child: const Text('Open dhukuti create'),
+                  onPressed: () => showCreateSavingsCircleGroupDialog(context),
+                  child: const Text('Open Savings Circle create'),
                 ),
               );
             },
@@ -356,10 +359,12 @@ void main() {
       ),
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Open dhukuti create'));
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Open Savings Circle create'),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('Create Dhukuti Group'), findsWidgets);
+    expect(find.text('Create Savings Circle Group'), findsWidgets);
     expect(find.text('Contribution amount'), findsOneWidget);
     expect(find.text('Gross pot per cycle'), findsOneWidget);
     expect(find.text('Default split: Equal'), findsNothing);
@@ -375,7 +380,7 @@ void main() {
     expect(memberCards.first.enabled, isFalse);
   });
 
-  testWidgets('Groups screen separates expense and Dhukuti groups', (
+  testWidgets('Groups screen separates expense and Savings Circle groups', (
     tester,
   ) async {
     final store = AppStore();
@@ -395,18 +400,18 @@ void main() {
     expect(find.text('Dashain Khasi Split'), findsOneWidget);
     expect(find.text('Shrestha Family'), findsNothing);
 
-    final dhukutiTab = find.text('Dhukuti Groups');
-    await tester.ensureVisible(dhukutiTab);
-    await tester.tapAt(tester.getCenter(dhukutiTab));
+    final savingsCircleTab = find.text('Savings Circle Groups');
+    await tester.ensureVisible(savingsCircleTab);
+    await tester.tapAt(tester.getCenter(savingsCircleTab));
     await tester.pump();
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.text('Family Dashain Dhukuti'),
+      find.text('Family Dashain Savings Circle'),
       300,
       scrollable: find.byType(Scrollable).last,
     );
-    expect(find.text('Family Dashain Dhukuti'), findsOneWidget);
+    expect(find.text('Family Dashain Savings Circle'), findsOneWidget);
     expect(find.text('Dashain Khasi Split'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -467,7 +472,7 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, 'Rename'), findsOneWidget);
   });
 
-  testWidgets('admin sees rename action in dhukuti group detail', (
+  testWidgets('admin sees rename action in Savings Circle group detail', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 1400);
@@ -485,11 +490,11 @@ void main() {
       ),
     );
 
-    final dhukutiTab = find.text('Dhukuti Groups');
-    await tester.tapAt(tester.getCenter(dhukutiTab));
+    final savingsCircleTab = find.text('Savings Circle Groups');
+    await tester.tapAt(tester.getCenter(savingsCircleTab));
     await tester.pumpAndSettle();
 
-    expect(find.text('Family Dashain Dhukuti'), findsWidgets);
+    expect(find.text('Family Dashain Savings Circle'), findsWidgets);
     expect(find.widgetWithText(OutlinedButton, 'Rename'), findsOneWidget);
   });
 

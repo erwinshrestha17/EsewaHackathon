@@ -57,9 +57,10 @@ class NotificationSettingsScreen extends StatelessWidget {
       NotificationPreference.paymentStatusUpdates =>
         Icons.account_balance_wallet_outlined,
       NotificationPreference.giftReceived => Icons.card_giftcard_outlined,
-      NotificationPreference.dhukutiContributionDue =>
+      NotificationPreference.savingsCircleContributionDue =>
         Icons.event_available_outlined,
-      NotificationPreference.dhukutiCycleAtRisk => Icons.warning_amber_outlined,
+      NotificationPreference.savingsCircleCycleAtRisk =>
+        Icons.warning_amber_outlined,
     };
   }
 }

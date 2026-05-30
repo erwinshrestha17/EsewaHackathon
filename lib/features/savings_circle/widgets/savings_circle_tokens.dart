@@ -6,23 +6,23 @@ import '../../../shared/design_system/app_spacing.dart';
 import '../../../shared/design_system/app_text_styles.dart';
 import '../../../src/models.dart';
 
-enum DhukutiTone { neutral, success, warning, info, danger }
+enum SavingsCircleTone { neutral, success, warning, info, danger }
 
-const dhukutiPrimary = AppColors.primaryGreen;
-const dhukutiFestival = AppColors.warning;
-const dhukutiInk = AppColors.textPrimary;
+const savingsCirclePrimary = AppColors.primaryGreen;
+const savingsCircleFestival = AppColors.warning;
+const savingsCircleInk = AppColors.textPrimary;
 
-Color dhukutiToneColor(BuildContext context, DhukutiTone tone) {
+Color savingsCircleToneColor(BuildContext context, SavingsCircleTone tone) {
   return switch (tone) {
-    DhukutiTone.success => AppColors.success,
-    DhukutiTone.warning => AppColors.warning,
-    DhukutiTone.info => AppColors.info,
-    DhukutiTone.danger => AppColors.error,
-    DhukutiTone.neutral => AppColors.textSecondary,
+    SavingsCircleTone.success => AppColors.success,
+    SavingsCircleTone.warning => AppColors.warning,
+    SavingsCircleTone.info => AppColors.info,
+    SavingsCircleTone.danger => AppColors.error,
+    SavingsCircleTone.neutral => AppColors.textSecondary,
   };
 }
 
-String dhukutiEnumLabel(Object value) {
+String savingsCircleEnumLabel(Object value) {
   final label = value.toString().split('.').last;
   final buffer = StringBuffer();
   for (var i = 0; i < label.length; i++) {
@@ -35,43 +35,44 @@ String dhukutiEnumLabel(Object value) {
   return buffer.toString();
 }
 
-DhukutiTone toneForPoolStatus(String status) {
+SavingsCircleTone toneForPoolStatus(String status) {
   return switch (status) {
-    'Active' => DhukutiTone.success,
-    'Upcoming' => DhukutiTone.info,
-    'At Risk' => DhukutiTone.warning,
-    'Completed' => DhukutiTone.neutral,
-    _ => DhukutiTone.neutral,
+    'Active' => SavingsCircleTone.success,
+    'Upcoming' => SavingsCircleTone.info,
+    'At Risk' => SavingsCircleTone.warning,
+    'Completed' => SavingsCircleTone.neutral,
+    _ => SavingsCircleTone.neutral,
   };
 }
 
-DhukutiTone toneForCycleStatus(DhukutiCycleStatus status) {
+SavingsCircleTone toneForCycleStatus(SavingsCircleCycleStatus status) {
   return switch (status) {
-    DhukutiCycleStatus.readyForPayout => DhukutiTone.success,
-    DhukutiCycleStatus.paidOut ||
-    DhukutiCycleStatus.closed => DhukutiTone.neutral,
-    DhukutiCycleStatus.atRisk => DhukutiTone.warning,
-    DhukutiCycleStatus.cancelled => DhukutiTone.danger,
-    DhukutiCycleStatus.open => DhukutiTone.info,
-    DhukutiCycleStatus.upcoming => DhukutiTone.neutral,
+    SavingsCircleCycleStatus.readyForPayout => SavingsCircleTone.success,
+    SavingsCircleCycleStatus.paidOut ||
+    SavingsCircleCycleStatus.closed => SavingsCircleTone.neutral,
+    SavingsCircleCycleStatus.atRisk => SavingsCircleTone.warning,
+    SavingsCircleCycleStatus.cancelled => SavingsCircleTone.danger,
+    SavingsCircleCycleStatus.open => SavingsCircleTone.info,
+    SavingsCircleCycleStatus.upcoming => SavingsCircleTone.neutral,
   };
 }
 
-DhukutiTone toneForContributionStatus(ContributionStatus status) {
+SavingsCircleTone toneForContributionStatus(ContributionStatus status) {
   return switch (status) {
-    ContributionStatus.paid => DhukutiTone.success,
+    ContributionStatus.paid => SavingsCircleTone.success,
     ContributionStatus.late ||
     ContributionStatus.missed ||
     ContributionStatus.failed ||
-    ContributionStatus.failedReview => DhukutiTone.warning,
+    ContributionStatus.failedReview => SavingsCircleTone.warning,
     ContributionStatus.cancelled ||
-    ContributionStatus.expired => DhukutiTone.danger,
-    ContributionStatus.due || ContributionStatus.pending => DhukutiTone.neutral,
+    ContributionStatus.expired => SavingsCircleTone.danger,
+    ContributionStatus.due ||
+    ContributionStatus.pending => SavingsCircleTone.neutral,
   };
 }
 
-class DhukutiSection extends StatelessWidget {
-  const DhukutiSection({
+class SavingsCircleSection extends StatelessWidget {
+  const SavingsCircleSection({
     required this.title,
     required this.child,
     this.action,
@@ -103,8 +104,8 @@ class DhukutiSection extends StatelessWidget {
   }
 }
 
-class DhukutiScrollView extends StatelessWidget {
-  const DhukutiScrollView({required this.children, super.key});
+class SavingsCircleScrollView extends StatelessWidget {
+  const SavingsCircleScrollView({required this.children, super.key});
 
   final List<Widget> children;
 
@@ -119,8 +120,8 @@ class DhukutiScrollView extends StatelessWidget {
   }
 }
 
-class DhukutiHeader extends StatelessWidget {
-  const DhukutiHeader({
+class SavingsCircleHeader extends StatelessWidget {
+  const SavingsCircleHeader({
     required this.title,
     required this.subtitle,
     this.action,
@@ -183,8 +184,8 @@ class DhukutiHeader extends StatelessWidget {
   }
 }
 
-class DhukutiEmptyState extends StatelessWidget {
-  const DhukutiEmptyState({
+class SavingsCircleEmptyState extends StatelessWidget {
+  const SavingsCircleEmptyState({
     required this.icon,
     required this.title,
     required this.message,
@@ -247,8 +248,12 @@ class DhukutiEmptyState extends StatelessWidget {
   }
 }
 
-class DhukutiAvatar extends StatelessWidget {
-  const DhukutiAvatar({required this.label, this.small = false, super.key});
+class SavingsCircleAvatar extends StatelessWidget {
+  const SavingsCircleAvatar({
+    required this.label,
+    this.small = false,
+    super.key,
+  });
 
   final String label;
   final bool small;
@@ -270,8 +275,8 @@ class DhukutiAvatar extends StatelessWidget {
   }
 }
 
-class DhukutiMetricCard extends StatelessWidget {
-  const DhukutiMetricCard({
+class SavingsCircleMetricCard extends StatelessWidget {
+  const SavingsCircleMetricCard({
     required this.label,
     required this.value,
     required this.icon,
@@ -283,12 +288,12 @@ class DhukutiMetricCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
-  final DhukutiTone tone;
+  final SavingsCircleTone tone;
   final String? helper;
 
   @override
   Widget build(BuildContext context) {
-    final color = dhukutiToneColor(context, tone);
+    final color = savingsCircleToneColor(context, tone);
     return ds.AppCard(
       padding: const EdgeInsets.all(14),
       tone: _toDesignTone(tone),
@@ -317,8 +322,8 @@ class DhukutiMetricCard extends StatelessWidget {
   }
 }
 
-class DhukutiResponsiveGrid extends StatelessWidget {
-  const DhukutiResponsiveGrid({required this.children, super.key});
+class SavingsCircleResponsiveGrid extends StatelessWidget {
+  const SavingsCircleResponsiveGrid({required this.children, super.key});
 
   final List<Widget> children;
 
@@ -349,12 +354,12 @@ class DhukutiResponsiveGrid extends StatelessWidget {
   }
 }
 
-ds.AppStatusTone _toDesignTone(DhukutiTone tone) {
+ds.AppStatusTone _toDesignTone(SavingsCircleTone tone) {
   return switch (tone) {
-    DhukutiTone.success => ds.AppStatusTone.success,
-    DhukutiTone.warning => ds.AppStatusTone.warning,
-    DhukutiTone.info => ds.AppStatusTone.info,
-    DhukutiTone.danger => ds.AppStatusTone.danger,
-    DhukutiTone.neutral => ds.AppStatusTone.neutral,
+    SavingsCircleTone.success => ds.AppStatusTone.success,
+    SavingsCircleTone.warning => ds.AppStatusTone.warning,
+    SavingsCircleTone.info => ds.AppStatusTone.info,
+    SavingsCircleTone.danger => ds.AppStatusTone.danger,
+    SavingsCircleTone.neutral => ds.AppStatusTone.neutral,
   };
 }

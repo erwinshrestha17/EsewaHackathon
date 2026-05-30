@@ -8,7 +8,7 @@ import 'edit_profile_screen.dart';
 import 'notification_settings_screen.dart';
 import 'settings_controller.dart';
 import 'settings_models.dart';
-import 'widgets/dhukuti_safety_note_card.dart';
+import 'widgets/savings_circle_safety_note_card.dart';
 import 'widgets/settings_choice_bottom_sheet.dart';
 import 'widgets/settings_profile_card.dart';
 import 'widgets/settings_section.dart';
@@ -146,28 +146,28 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               SettingsSection(
-                title: 'Digital Dhukuti',
-                footer: DhukutiSafetyNoteCard(
-                  onTap: () => _showDhukutiSafetyNote(context),
+                title: 'Savings Circle',
+                footer: SavingsCircleSafetyNoteCard(
+                  onTap: () => _showSavingsCircleSafetyNote(context),
                 ),
                 children: [
                   SettingsSwitchTile(
                     icon: Icons.event_available_outlined,
                     title: 'Contribution Reminders',
-                    value: state.dhukutiContributionReminders,
-                    onChanged: controller.setDhukutiContributionReminders,
+                    value: state.savingsCircleContributionReminders,
+                    onChanged: controller.setSavingsCircleContributionReminders,
                   ),
                   SettingsSwitchTile(
                     icon: Icons.warning_amber_outlined,
                     title: 'At-Risk Alerts',
-                    value: state.dhukutiAtRiskAlerts,
-                    onChanged: controller.setDhukutiAtRiskAlerts,
+                    value: state.savingsCircleAtRiskAlerts,
+                    onChanged: controller.setSavingsCircleAtRiskAlerts,
                   ),
                   SettingsTile(
                     icon: Icons.info_outline,
                     title: 'Safety Note',
                     value: 'Read',
-                    onTap: () => _showDhukutiSafetyNote(context),
+                    onTap: () => _showSavingsCircleSafetyNote(context),
                   ),
                 ],
               ),
@@ -230,7 +230,7 @@ class SettingsScreen extends StatelessWidget {
                           title: 'How Sajha Kharcha Works',
                           icon: Icons.help_outline,
                           body:
-                              'Sajha Kharcha helps trusted people create groups, scan receipts, split expenses, settle dues, send gifts, and track transparent Dhukuti ledgers.',
+                              'Sajha Kharcha helps trusted people create groups, scan receipts, split expenses, settle dues, send gifts, and track transparent Savings Circle ledgers.',
                         ),
                       ),
                     ),
@@ -292,7 +292,7 @@ class SettingsScreen extends StatelessWidget {
         return AlertDialog(
           title: const Text('Log out of Sajha Kharcha?'),
           content: const Text(
-            'You will need to log in again to access your groups, gifts, and Dhukuti details on this device.',
+            'You will need to log in again to access your groups, gifts, and Savings Circle details on this device.',
           ),
           actions: [
             TextButton(
@@ -513,7 +513,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _showDhukutiSafetyNote(BuildContext context) {
+  Future<void> _showSavingsCircleSafetyNote(BuildContext context) {
     return showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -535,7 +535,7 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      'Digital Dhukuti Safety Note',
+                      'Savings Circle Safety Note',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
@@ -543,7 +543,7 @@ class SettingsScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 14),
-                const Text(dhukutiSafetyNoteText),
+                const Text(savingsCircleSafetyNoteText),
               ],
             ),
           ),

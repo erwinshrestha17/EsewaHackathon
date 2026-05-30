@@ -300,30 +300,39 @@ void main() {
     expect(store.groupById(groupId).name, 'Admin only name');
   });
 
-  test('dhukuti admins can rename dhukuti groups', () {
+  test('Savings Circle admins can rename Savings Circle groups', () {
     final store = AppStore();
 
     expect(
-      store.renameDhukutiPool('d-family-dashain', 'Family Savings Dhukuti'),
+      store.renameSavingsCirclePool(
+        'd-family-dashain',
+        'Family Savings Circle',
+      ),
       isNull,
     );
 
-    expect(store.poolById('d-family-dashain').name, 'Family Savings Dhukuti');
+    expect(store.poolById('d-family-dashain').name, 'Family Savings Circle');
     expect(
       store.activityForGroup('g-shrestha-family').map((item) => item.eventType),
-      contains('dhukuti_renamed'),
+      contains('savings_circle_renamed'),
     );
   });
 
-  test('non-admin members cannot rename dhukuti groups', () {
+  test('non-admin members cannot rename Savings Circle groups', () {
     final store = AppStore()..switchUser('u-arjun');
 
     expect(
-      store.renameDhukutiPool('d-family-dashain', 'Member Dhukuti Name'),
-      'Only the Dhukuti admin can rename this group.',
+      store.renameSavingsCirclePool(
+        'd-family-dashain',
+        'Member Savings Circle Name',
+      ),
+      'Only the Savings Circle admin can rename this group.',
     );
 
-    expect(store.poolById('d-family-dashain').name, 'Family Dashain Dhukuti');
+    expect(
+      store.poolById('d-family-dashain').name,
+      'Family Dashain Savings Circle',
+    );
   });
 
   test('seeded store keeps group balances zero-sum after settlement', () {
@@ -428,115 +437,132 @@ void main() {
     expect(expense.billTaxMinor, npr(3));
   });
 
-  test('Dhukuti exit decisions distinguish before-start and obligations', () {
-    final store = AppStore();
-    final groupId = store.createGroup(
-      name: 'Family Dhukuti group',
-      category: GroupCategory.custom,
-      memberIds: const ['u-arjun', 'u-maya'],
-    );
-    final poolId = store.createDhukutiPool(
-      groupId: groupId,
-      name: 'Family Dhukuti',
-      contributionAmountMinor: npr(5000),
-      frequency: 'monthly',
-      startDate: DateTime(2026, 6, 1),
-      memberIds: const ['u-arjun', 'u-maya'],
-    );
+  test(
+    'Savings Circle exit decisions distinguish before-start and obligations',
+    () {
+      final store = AppStore();
+      final groupId = store.createGroup(
+        name: 'Family Savings Circle group',
+        category: GroupCategory.custom,
+        memberIds: const ['u-arjun', 'u-maya'],
+      );
+      final poolId = store.createSavingsCirclePool(
+        groupId: groupId,
+        name: 'Family Savings Circle',
+        contributionAmountMinor: npr(5000),
+        frequency: 'monthly',
+        startDate: DateTime(2026, 6, 1),
+        memberIds: const ['u-arjun', 'u-maya'],
+      );
 
-    expect(
-      store.dhukutiExitDecision(poolId).type,
-      DhukutiExitDecisionType.canLeaveBeforeStart,
-    );
+      expect(
+        store.savingsCircleExitDecision(poolId).type,
+        SavingsCircleExitDecisionType.canLeaveBeforeStart,
+      );
 
-    store.switchUser('u-arjun');
-    store.acceptDhukuti(poolId);
-    store.switchUser('u-maya');
-    store.acceptDhukuti(poolId);
-    store.switchUser('u-sita');
+      store.switchUser('u-arjun');
+      store.acceptSavingsCircle(poolId);
+      store.switchUser('u-maya');
+      store.acceptSavingsCircle(poolId);
+      store.switchUser('u-sita');
 
-    expect(
-      store.dhukutiExitDecision(poolId).type,
-      DhukutiExitDecisionType.pendingContribution,
-    );
+      expect(
+        store.savingsCircleExitDecision(poolId).type,
+        SavingsCircleExitDecisionType.pendingContribution,
+      );
 
-    final contribution = store.dhukutiContributions.firstWhere(
-      (item) => item.poolId == poolId && item.userId == 'u-sita',
-    );
-    store.payDhukutiContribution(contribution.id);
-    final remainingDecision = store.dhukutiExitDecision(poolId);
-    expect(remainingDecision.type, DhukutiExitDecisionType.pendingContribution);
-    expect(remainingDecision.amountMinor, npr(10000));
-    expect(store.payRemainingDhukutiExitContributions(poolId), npr(10000));
-    expect(
-      store.dhukutiExitDecision(poolId).type,
-      DhukutiExitDecisionType.requiresApproval,
-    );
-  });
+      final contribution = store.savingsCircleContributions.firstWhere(
+        (item) => item.poolId == poolId && item.userId == 'u-sita',
+      );
+      store.paySavingsCircleContribution(contribution.id);
+      final remainingDecision = store.savingsCircleExitDecision(poolId);
+      expect(
+        remainingDecision.type,
+        SavingsCircleExitDecisionType.pendingContribution,
+      );
+      expect(remainingDecision.amountMinor, npr(10000));
+      expect(
+        store.payRemainingSavingsCircleExitContributions(poolId),
+        npr(10000),
+      );
+      expect(
+        store.savingsCircleExitDecision(poolId).type,
+        SavingsCircleExitDecisionType.requiresApproval,
+      );
+    },
+  );
 
-  test('mid-cycle Dhukuti exit requires all remaining cycle payments', () {
-    final store = AppStore();
-    final groupId = store.createGroup(
-      name: 'Six member Dhukuti group',
-      category: GroupCategory.custom,
-      memberIds: const ['u-arjun', 'u-maya', 'u-nabin', 'u-laxmi', 'u-rina'],
-      kind: GroupKind.dhukuti,
-    );
-    final poolId = store.createDhukutiPool(
-      groupId: groupId,
-      name: 'Six Month Dhukuti',
-      contributionAmountMinor: npr(5000),
-      frequency: 'monthly',
-      startDate: DateTime(2026, 6, 1),
-      memberIds: const ['u-arjun', 'u-maya', 'u-nabin', 'u-laxmi', 'u-rina'],
-    );
+  test(
+    'mid-cycle Savings Circle exit requires all remaining cycle payments',
+    () {
+      final store = AppStore();
+      final groupId = store.createGroup(
+        name: 'Six member Savings Circle group',
+        category: GroupCategory.custom,
+        memberIds: const ['u-arjun', 'u-maya', 'u-nabin', 'u-laxmi', 'u-rina'],
+        kind: GroupKind.savingsCircle,
+      );
+      final poolId = store.createSavingsCirclePool(
+        groupId: groupId,
+        name: 'Six Month Savings Circle',
+        contributionAmountMinor: npr(5000),
+        frequency: 'monthly',
+        startDate: DateTime(2026, 6, 1),
+        memberIds: const ['u-arjun', 'u-maya', 'u-nabin', 'u-laxmi', 'u-rina'],
+      );
 
-    for (final userId in const [
-      'u-arjun',
-      'u-maya',
-      'u-nabin',
-      'u-laxmi',
-      'u-rina',
-    ]) {
-      store.switchUser(userId);
-      store.acceptDhukuti(poolId);
-    }
-    store.switchUser('u-sita');
+      for (final userId in const [
+        'u-arjun',
+        'u-maya',
+        'u-nabin',
+        'u-laxmi',
+        'u-rina',
+      ]) {
+        store.switchUser(userId);
+        store.acceptSavingsCircle(poolId);
+      }
+      store.switchUser('u-sita');
 
-    for (final cycle in store.dhukutiCycles.where(
-      (item) => item.poolId == poolId,
-    )) {
-      cycle.status = switch (cycle.cycleNumber) {
-        1 || 2 => DhukutiCycleStatus.paidOut,
-        3 => DhukutiCycleStatus.open,
-        _ => DhukutiCycleStatus.upcoming,
-      };
-    }
-    for (final contribution in store.dhukutiContributions.where(
-      (item) =>
-          item.poolId == poolId &&
-          item.userId == 'u-sita' &&
-          item.cycleNumber < 3,
-    )) {
-      contribution.status = ContributionStatus.paid;
-    }
+      for (final cycle in store.savingsCircleCycles.where(
+        (item) => item.poolId == poolId,
+      )) {
+        cycle.status = switch (cycle.cycleNumber) {
+          1 || 2 => SavingsCircleCycleStatus.paidOut,
+          3 => SavingsCircleCycleStatus.open,
+          _ => SavingsCircleCycleStatus.upcoming,
+        };
+      }
+      for (final contribution in store.savingsCircleContributions.where(
+        (item) =>
+            item.poolId == poolId &&
+            item.userId == 'u-sita' &&
+            item.cycleNumber < 3,
+      )) {
+        contribution.status = ContributionStatus.paid;
+      }
 
-    final decision = store.dhukutiExitDecision(poolId);
-    expect(decision.type, DhukutiExitDecisionType.pendingContribution);
-    expect(decision.amountMinor, npr(20000));
-    expect(decision.message, contains('Cycle 3'));
-    expect(decision.message, contains('Cycles 3-6'));
+      final decision = store.savingsCircleExitDecision(poolId);
+      expect(decision.type, SavingsCircleExitDecisionType.pendingContribution);
+      expect(decision.amountMinor, npr(20000));
+      expect(decision.message, contains('Cycle 3'));
+      expect(decision.message, contains('Cycles 3-6'));
 
-    expect(store.payRemainingDhukutiExitContributions(poolId), npr(20000));
-    expect(
-      store.remainingDhukutiExitContributions(poolId, userId: 'u-sita').length,
-      0,
-    );
-    expect(
-      store.dhukutiExitDecision(poolId).type,
-      DhukutiExitDecisionType.requiresApproval,
-    );
-  });
+      expect(
+        store.payRemainingSavingsCircleExitContributions(poolId),
+        npr(20000),
+      );
+      expect(
+        store
+            .remainingSavingsCircleExitContributions(poolId, userId: 'u-sita')
+            .length,
+        0,
+      );
+      expect(
+        store.savingsCircleExitDecision(poolId).type,
+        SavingsCircleExitDecisionType.requiresApproval,
+      );
+    },
+  );
 
   test('gifts require active unblocked connections', () {
     final store = AppStore();

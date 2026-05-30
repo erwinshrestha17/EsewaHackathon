@@ -2,42 +2,47 @@ import 'package:flutter/material.dart';
 
 import '../../src/app_state.dart';
 import '../../src/models.dart';
-import 'dhukuti_create_screen.dart';
-import 'dhukuti_detail_screen.dart';
-import 'widgets/dhukuti_pool_card.dart';
-import 'widgets/dhukuti_tokens.dart';
+import 'savings_circle_create_screen.dart';
+import 'savings_circle_detail_screen.dart';
+import 'widgets/savings_circle_pool_card.dart';
+import 'widgets/savings_circle_tokens.dart';
 
-class DigitalDhukutiScreen extends StatefulWidget {
-  const DigitalDhukutiScreen({required this.store, this.onCreate, super.key});
+class SavingsCircleListScreen extends StatefulWidget {
+  const SavingsCircleListScreen({
+    required this.store,
+    this.onCreate,
+    super.key,
+  });
 
   final AppStore store;
   final Future<void> Function(BuildContext context)? onCreate;
 
   @override
-  State<DigitalDhukutiScreen> createState() => _DigitalDhukutiScreenState();
+  State<SavingsCircleListScreen> createState() =>
+      _SavingsCircleListScreenState();
 }
 
-class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
+class _SavingsCircleListScreenState extends State<SavingsCircleListScreen> {
   var _showListOnMobile = true;
 
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
-    final pools = store.visibleDhukutiPools;
-    if (store.selectedDhukutiPoolId == null && pools.isNotEmpty) {
-      store.selectedDhukutiPoolId = pools.first.id;
+    final pools = store.visibleSavingsCirclePools;
+    if (store.selectedSavingsCirclePoolId == null && pools.isNotEmpty) {
+      store.selectedSavingsCirclePoolId = pools.first.id;
     }
     final selected =
         pools
-            .where((pool) => pool.id == store.selectedDhukutiPoolId)
-            .cast<DhukutiPool?>()
+            .where((pool) => pool.id == store.selectedSavingsCirclePoolId)
+            .cast<SavingsCirclePool?>()
             .firstWhere((pool) => pool != null, orElse: () => null) ??
         (pools.isEmpty ? null : pools.first);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final twoPane = constraints.maxWidth >= 980;
-        final list = _DhukutiPoolList(
+        final list = _SavingsCirclePoolList(
           store: store,
           pools: pools,
           selectedId: selected?.id,
@@ -45,27 +50,27 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
           onLearn: () => _showHowItWorks(context),
           onSelect: (pool) {
             setState(() {
-              store.selectedDhukutiPoolId = pool.id;
+              store.selectedSavingsCirclePoolId = pool.id;
               _showListOnMobile = false;
             });
           },
         );
         final detail = selected == null
             ? Center(
-                child: DhukutiEmptyState(
+                child: SavingsCircleEmptyState(
                   icon: Icons.account_balance_wallet_outlined,
-                  title: 'No Dhukuti pools yet',
+                  title: 'No Savings Circle pools yet',
                   message:
                       'Start or join a trusted contribution circle with people you know.',
                   action: FilledButton.icon(
                     onPressed: () => _openCreate(context),
                     icon: const Icon(Icons.add),
-                    label: const Text('Create Dhukuti Group'),
+                    label: const Text('Create Savings Circle Group'),
                   ),
                 ),
               )
-            : DhukutiDetailScreen(
-                key: ValueKey('dhukuti-detail-${selected.id}'),
+            : SavingsCircleDetailScreen(
+                key: ValueKey('savings-circle-detail-${selected.id}'),
                 store: store,
                 pool: selected,
                 onBack: twoPane
@@ -94,7 +99,7 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
     }
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => DhukutiCreateScreen(store: widget.store),
+        builder: (_) => SavingsCircleCreateScreen(store: widget.store),
       ),
     );
   }
@@ -112,14 +117,14 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'How Sajha Kharcha Dhukuti Works',
+                  'How Sajha Kharcha Savings Circle Works',
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Sajha Kharcha Dhukuti tracks contribution schedules, payout turns, member statuses, and ledger activity for transparency.',
+                  'Sajha Kharcha Savings Circle tracks contribution schedules, payout turns, member statuses, and ledger activity for transparency.',
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -135,8 +140,8 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
   }
 }
 
-class _DhukutiPoolList extends StatelessWidget {
-  const _DhukutiPoolList({
+class _SavingsCirclePoolList extends StatelessWidget {
+  const _SavingsCirclePoolList({
     required this.store,
     required this.pools,
     required this.selectedId,
@@ -146,44 +151,44 @@ class _DhukutiPoolList extends StatelessWidget {
   });
 
   final AppStore store;
-  final List<DhukutiPool> pools;
+  final List<SavingsCirclePool> pools;
   final String? selectedId;
   final VoidCallback onCreate;
   final VoidCallback onLearn;
-  final ValueChanged<DhukutiPool> onSelect;
+  final ValueChanged<SavingsCirclePool> onSelect;
 
   @override
   Widget build(BuildContext context) {
-    return DhukutiScrollView(
+    return SavingsCircleScrollView(
       children: [
-        DhukutiHeader(
-          title: 'Digital Dhukuti',
+        SavingsCircleHeader(
+          title: 'Savings Circle',
           subtitle:
               'Track contributions, payout turns, and group transparency.',
           action: FilledButton.icon(
             onPressed: onCreate,
             icon: const Icon(Icons.add),
-            label: const Text('Create Dhukuti Group'),
+            label: const Text('Create Savings Circle Group'),
           ),
         ),
-        DhukutiSection(
-          title: 'About Sajha Kharcha Dhukuti',
+        SavingsCircleSection(
+          title: 'About Sajha Kharcha Savings Circle',
           child: const Text(
-            'Sajha Kharcha Dhukuti is a transparent contribution ledger and payment scheduler.',
+            'Sajha Kharcha Savings Circle is a transparent contribution ledger and payment scheduler.',
           ),
         ),
-        DhukutiSection(
-          title: 'Your Dhukuti Pools',
+        SavingsCircleSection(
+          title: 'Your Savings Circle Pools',
           child: pools.isEmpty
-              ? DhukutiEmptyState(
+              ? SavingsCircleEmptyState(
                   icon: Icons.account_balance_wallet_outlined,
-                  title: 'No Dhukuti pools yet',
+                  title: 'No Savings Circle pools yet',
                   message:
                       'Start or join a trusted contribution circle with people you know.',
                   action: FilledButton.icon(
                     onPressed: onCreate,
                     icon: const Icon(Icons.add),
-                    label: const Text('Create Dhukuti Group'),
+                    label: const Text('Create Savings Circle Group'),
                   ),
                   secondaryAction: OutlinedButton.icon(
                     onPressed: onLearn,
@@ -196,7 +201,7 @@ class _DhukutiPoolList extends StatelessWidget {
                     for (final pool in pools)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: DhukutiPoolCard(
+                        child: SavingsCirclePoolCard(
                           store: store,
                           pool: pool,
                           selected: pool.id == selectedId,

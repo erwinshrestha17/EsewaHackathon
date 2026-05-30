@@ -33,11 +33,11 @@ HomeDashboardData mockHomeDashboardData() {
         status: 'Pending',
       ),
     ],
-    upcomingDhukutiDues: [
-      HomeDhukutiDue(
-        contributionId: 'mock-dhukuti-contribution',
-        poolId: 'mock-dhukuti',
-        poolName: 'Family Dashain Dhukuti',
+    upcomingSavingsCircleDues: [
+      HomeSavingsCircleDue(
+        contributionId: 'mock-savings-circle-contribution',
+        poolId: 'mock-savings-circle',
+        poolName: 'Family Dashain Savings Circle',
         amount: npr(5000),
         dueLabel: '3 days left',
         cycleLabel: 'Cycle 3 of 6',
@@ -108,8 +108,8 @@ HomeDashboardData mockHomeDashboardData() {
       ),
       HomeActivityItem(
         id: 'activity-4',
-        title: 'Dhukuti contribution paid',
-        subtitle: 'Family Dashain Dhukuti',
+        title: 'Savings Circle contribution paid',
+        subtitle: 'Family Dashain Savings Circle',
         amount: npr(5000),
         timestamp: '2 days ago',
         icon: Icons.savings_outlined,
@@ -137,8 +137,8 @@ HomeDashboardData mockHomeDashboardData() {
         icon: Icons.card_giftcard_outlined,
       ),
       HomeQuickAction(
-        id: 'dhukuti',
-        label: 'Dhukuti',
+        id: 'savings_circle',
+        label: 'Savings Circle',
         helper: 'View dues',
         icon: Icons.account_balance_wallet_outlined,
       ),
