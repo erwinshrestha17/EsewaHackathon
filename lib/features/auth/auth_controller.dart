@@ -13,7 +13,7 @@ class AuthController extends ChangeNotifier {
       _secureStorage =
           secureStorage ??
           const FlutterSecureStorage(
-            mOptions: MacOsOptions(usesDataProtectionKeychain: true),
+            mOptions: MacOsOptions(usesDataProtectionKeychain: false),
           );
 
   static const _hasSeenIntroKey = 'auth.hasSeenIntro';
@@ -31,6 +31,9 @@ class AuthController extends ChangeNotifier {
   Future<String?>? _refreshInFlight;
 
   AuthState get state => _state;
+
+  @visibleForTesting
+  FlutterSecureStorage get debugSecureStorage => _secureStorage;
 
   Future<String?> backendAccessToken() async {
     if (!_backendApi.isConfigured) {

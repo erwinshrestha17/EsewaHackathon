@@ -149,6 +149,16 @@ void main() {
     expect(controller.state.activeUser?.phone, '9800000001');
   });
 
+  test('default auth storage uses the compatible macOS keychain', () {
+    final controller = AuthController(backendApi: _FakeBackendApi());
+
+    expect(
+      controller.debugSecureStorage.mOptions
+          .toMap()['usesDataProtectionKeychain'],
+      'false',
+    );
+  });
+
   test('delete account clears saved profile and login state', () async {
     SharedPreferences.setMockInitialValues({'auth.hasSeenIntro': true});
     FlutterSecureStorage.setMockInitialValues({
