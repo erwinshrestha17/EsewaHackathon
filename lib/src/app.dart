@@ -389,9 +389,9 @@ Future<void> showExternalSettlementRequestDialog(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: const Text('Record external settlement'),
+      title: const Text('Record cash/bank payment'),
       content: Text(
-        'Use this when $payerName paid $payeeName ${friendlyMoney(suggestion.amountMinor)} outside Sajha Kharcha, like cash or bank transfer. $payeeName must approve before balances update.',
+        'Use this when $payerName paid $payeeName ${friendlyMoney(suggestion.amountMinor)} by cash, bank transfer, or another manual method. $payeeName must approve before balances update.',
       ),
       actions: [
         TextButton(
@@ -1785,10 +1785,10 @@ class SettlementStatementTile extends StatelessWidget {
         : '$payerName owes $payeeName ${friendlyMoney(suggestion.amountMinor)}';
     final pendingText = pendingIsExternal
         ? payerIsCurrent
-              ? 'Waiting for $payeeName to approve your external payment'
+              ? 'Waiting for $payeeName to approve your cash/bank payment'
               : payeeIsCurrent
-              ? '$payerName marked this paid outside the app. Approve after receiving it.'
-              : '$payerName marked this paid outside the app'
+              ? '$payerName recorded a cash/bank payment. Approve after receiving it.'
+              : '$payerName recorded a cash/bank payment'
         : payerIsCurrent
         ? 'Payment pending with $payeeName'
         : payeeIsCurrent
@@ -1810,7 +1810,7 @@ class SettlementStatementTile extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: onExternalSettle,
           icon: const Icon(Icons.payments_outlined),
-          label: const Text('Paid outside app'),
+          label: const Text('Record cash/bank payment'),
           style: compactOutlinedButtonStyle(),
         )
       else if (onApproveExternal != null)
@@ -2142,6 +2142,14 @@ class GroupDetail extends StatelessWidget {
                                 store,
                                 suggestion,
                               ),
+                            )
+                          : null,
+                      onExternalSettle:
+                          suggestion.payerId == store.currentUserId &&
+                              !suggestion.hasPending
+                          ? () => showExternalSettlementRequestDialog(
+                              context,
+                              suggestion,
                             )
                           : null,
                       onApproveExternal:

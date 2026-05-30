@@ -1045,7 +1045,7 @@ void main() {
     );
   });
 
-  testWidgets('settlement prompt routes payer to eSewa confirmation', (
+  testWidgets('settlement prompt supports eSewa and cash bank reconciliation', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1000, 7000);
@@ -1082,8 +1082,8 @@ void main() {
 
     expect(find.widgetWithText(FilledButton, 'Settle Now'), findsOneWidget);
     expect(
-      find.widgetWithText(OutlinedButton, 'Paid outside app'),
-      findsNothing,
+      find.widgetWithText(OutlinedButton, 'Record cash/bank payment'),
+      findsOneWidget,
     );
 
     await tester.tap(find.widgetWithText(FilledButton, 'Settle Now'));
@@ -1091,6 +1091,45 @@ void main() {
     expect(find.text('Confirm Settlement'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Pay with eSewa'), findsOneWidget);
     expect(store.settlements.where((item) => item.isExternal), isEmpty);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.widgetWithText(OutlinedButton, 'Record cash/bank payment'),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Record cash/bank payment'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Send Approval Request'),
+    );
+    await tester.pumpAndSettle();
+
+    final request = store.settlements.singleWhere((item) => item.isExternal);
+    expect(request.status, PaymentStatus.pending);
+    expect(find.text('Approval pending'), findsOneWidget);
+
+    store.switchUser('u-sita');
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Approve'));
+    await tester.pumpAndSettle();
+    expect(find.text('Approve external settlement'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Approve Settlement'));
+    await tester.pumpAndSettle();
+
+    expect(request.status, PaymentStatus.paid);
+    expect(store.balancesForGroup(groupId), isEmpty);
+    expect(find.text('Nothing to settle'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
