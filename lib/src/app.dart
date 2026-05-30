@@ -6620,34 +6620,29 @@ Future<void> showCreateDhukutiGroupDialog(
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
-                    Text(
-                      'Members',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'You are included automatically. Select members who must accept the Dhukuti schedule.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final user in connections)
-                          FilterChip(
-                            selected: selected.contains(user.id),
-                            avatar: UserAvatar(user: user, small: true),
-                            label: Text(user.displayName),
-                            onSelected: (checked) {
-                              setState(() {
-                                checked
-                                    ? selected.add(user.id)
-                                    : selected.remove(user.id);
-                              });
-                            },
-                          ),
-                      ],
+                    _ManualFormSection(
+                      title: 'Members',
+                      icon: Icons.group_outlined,
+                      subtitle: 'Choose who joins this Dhukuti schedule',
+                      trailing: _CountPill(label: '$memberCount people'),
+                      child: Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          for (final user in connections)
+                            ParticipantSelectorCard(
+                              user: user,
+                              selected: selected.contains(user.id),
+                              onTap: () {
+                                setState(() {
+                                  selected.contains(user.id)
+                                      ? selected.remove(user.id)
+                                      : selected.add(user.id);
+                                });
+                              },
+                            ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 14),
                     Container(

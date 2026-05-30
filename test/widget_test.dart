@@ -363,9 +363,11 @@ void main() {
     expect(find.text('Contribution amount'), findsOneWidget);
     expect(find.text('Gross pot per cycle'), findsOneWidget);
     expect(find.text('Default split: Equal'), findsNothing);
-    final memberChips = tester.widgetList<FilterChip>(find.byType(FilterChip));
-    expect(memberChips, isNotEmpty);
-    expect(memberChips.every((chip) => !chip.selected), isTrue);
+    final memberCards = tester.widgetList<ParticipantSelectorCard>(
+      find.byType(ParticipantSelectorCard),
+    );
+    expect(memberCards, isNotEmpty);
+    expect(memberCards.every((card) => !card.selected), isTrue);
   });
 
   testWidgets('Groups screen separates expense and Dhukuti groups', (

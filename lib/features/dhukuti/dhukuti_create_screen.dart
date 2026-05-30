@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/design_system/app_colors.dart';
+import '../../shared/design_system/app_spacing.dart';
+import '../../shared/design_system/app_text_styles.dart';
 import '../../src/app_state.dart';
 import '../../src/finance.dart';
+import '../../src/models.dart';
+import 'widgets/dhukuti_status_badge.dart';
 import 'widgets/dhukuti_tokens.dart';
 
 class DhukutiCreateScreen extends StatefulWidget {
@@ -126,23 +131,36 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
           ),
           DhukutiSection(
             title: 'Members',
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            action: DhukutiStatusBadge(
+              label: '$memberCount people',
+              tone: DhukutiTone.success,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final user in connections)
-                  FilterChip(
-                    selected: _selectedMembers.contains(user.id),
-                    avatar: DhukutiAvatar(label: user.avatar, small: true),
-                    label: Text(user.displayName),
-                    onSelected: (selected) {
-                      setState(() {
-                        selected
-                            ? _selectedMembers.add(user.id)
-                            : _selectedMembers.remove(user.id);
-                      });
-                    },
-                  ),
+                Text(
+                  'You are included automatically. Select members who must accept the Dhukuti schedule.',
+                  style: AppTextStyles.bodySecondary,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final user in connections)
+                      _DhukutiMemberSelectorCard(
+                        user: user,
+                        selected: _selectedMembers.contains(user.id),
+                        onTap: () {
+                          setState(() {
+                            _selectedMembers.contains(user.id)
+                                ? _selectedMembers.remove(user.id)
+                                : _selectedMembers.add(user.id);
+                          });
+                        },
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -260,6 +278,68 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
       ),
     );
     Navigator.pop(context);
+  }
+}
+
+class _DhukutiMemberSelectorCard extends StatelessWidget {
+  const _DhukutiMemberSelectorCard({
+    required this.user,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AppUser user;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 210, maxWidth: 260),
+      child: Material(
+        color: selected ? AppColors.primaryGreen : AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        elevation: selected ? 2 : 0,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: 10,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(
+                color: selected ? AppColors.primaryGreen : AppColors.border,
+                width: selected ? 1.4 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                DhukutiAvatar(label: user.avatar, small: true),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    user.displayName,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                      color: selected ? Colors.white : AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                if (selected) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  const Icon(Icons.check_circle, size: 18, color: Colors.white),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
