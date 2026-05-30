@@ -72,7 +72,6 @@ class HomeDhukutiDue {
     required this.amount,
     required this.dueLabel,
     required this.cycleLabel,
-    required this.payoutRecipientName,
     required this.status,
     required this.isPayable,
   });
@@ -83,7 +82,6 @@ class HomeDhukutiDue {
   final int amount;
   final String dueLabel;
   final String cycleLabel;
-  final String payoutRecipientName;
   final String status;
   final bool isPayable;
 }

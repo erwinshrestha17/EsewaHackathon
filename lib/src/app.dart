@@ -743,7 +743,7 @@ class ActivityScreen extends StatelessWidget {
         const ScreenHeader(
           title: 'Activity',
           subtitle:
-              'A single timeline for your groups, gifts, settlements, and Saving Circle actions.',
+              'A single timeline for your groups, gifts, settlements, and community savings actions.',
           icon: Icons.timeline,
         ),
         SectionPanel(
@@ -1161,7 +1161,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
               ButtonSegment(
                 value: GroupKind.dhukuti,
                 icon: Icon(Icons.account_balance_wallet_outlined),
-                label: Text('Saving Circle Groups'),
+                label: Text('Community Savings'),
               ),
             ],
             selected: {_tab},
@@ -1193,7 +1193,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
             ScreenHeader(
               title: 'Groups overview',
               subtitle:
-                  'Expense groups stay separate from Saving Circle commitments. Open a group when you want its expenses, balances, members, and activity.',
+                  'Expense groups stay separate from community fund tracking. Open a group when you want its expenses, balances, members, and activity.',
               icon: Icons.groups,
               action: FilledButton.icon(
                 onPressed: () => showCreateGroupDialog(
@@ -1745,9 +1745,10 @@ class SettlementStatementTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                backgroundColor: toneColor(context, tone).withValues(
-                  alpha: 0.12,
-                ),
+                backgroundColor: toneColor(
+                  context,
+                  tone,
+                ).withValues(alpha: 0.12),
                 foregroundColor: toneColor(context, tone),
                 child: Icon(
                   payerIsCurrent ? Icons.call_made : Icons.call_received,
@@ -3283,22 +3284,22 @@ class _DhukutiScreenState extends State<DhukutiScreen> {
         final list = AppScrollView(
           children: [
             ScreenHeader(
-              title: 'Saving Circle',
+              title: 'Community Savings Tracker',
               subtitle:
-                  'Transparent contribution scheduler and ledger. No credit, interest, investment return, or guaranteed payout claims.',
+                  'Track monthly contributions paid outside the app, admin confirmations, expenses, and fund balance.',
               icon: Icons.account_balance_wallet,
               action: FilledButton.icon(
                 onPressed: () => showCreateDhukutiDialog(context),
                 icon: const Icon(Icons.add),
-                label: const Text('New pool'),
+                label: const Text('New tracker'),
               ),
             ),
             SectionPanel(
-              title: 'Pools',
+              title: 'Community funds',
               child: pools.isEmpty
                   ? const EmptyState(
                       icon: Icons.account_balance_wallet_outlined,
-                      title: 'No Saving Circle pool',
+                      title: 'No community fund',
                       body: 'Create one from an existing group.',
                     )
                   : Column(
@@ -3330,8 +3331,8 @@ class _DhukutiScreenState extends State<DhukutiScreen> {
             ? const Center(
                 child: EmptyState(
                   icon: Icons.account_balance_wallet_outlined,
-                  title: 'Select a pool',
-                  body: 'Saving Circle details appear here.',
+                  title: 'Select a tracker',
+                  body: 'Community fund details appear here.',
                 ),
               )
             : DhukutiDetail(pool: selected);
@@ -3380,7 +3381,7 @@ class DhukutiDetail extends StatelessWidget {
         ScreenHeader(
           title: pool.name,
           subtitle:
-              '${money(pool.contributionAmountMinor)} ${pool.frequency} • Recipient: ${store.nameOf(cycles.first.payoutRecipientId)}',
+              '${money(pool.contributionAmountMinor)} ${pool.frequency} • Paid outside the app',
           icon: Icons.account_balance_wallet,
           action: Wrap(
             spacing: 8,
@@ -3421,7 +3422,7 @@ class DhukutiDetail extends StatelessWidget {
               tone: Tone.info,
             ),
             StatTile(
-              label: 'Current cycle',
+              label: 'Current month',
               value: enumLabel(cycles.first.status),
               icon: Icons.event_repeat,
               tone: cycles.first.status == DhukutiCycleStatus.atRisk
@@ -3429,7 +3430,7 @@ class DhukutiDetail extends StatelessWidget {
                   : Tone.success,
             ),
             StatTile(
-              label: 'Your unpaid dues',
+              label: 'Your pending notes',
               value: money(
                 myDue.fold<int>(0, (sum, item) => sum + item.amountMinor),
               ),
@@ -3439,7 +3440,7 @@ class DhukutiDetail extends StatelessWidget {
           ],
         ),
         SectionPanel(
-          title: 'Payout Order',
+          title: 'Members',
           child: Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -3451,14 +3452,14 @@ class DhukutiDetail extends StatelessWidget {
                     small: true,
                   ),
                   label: Text(
-                    '${member.payoutOrder}. ${store.nameOf(member.userId)} • ${enumLabel(member.status)}',
+                    '${store.nameOf(member.userId)} • ${enumLabel(member.status)}',
                   ),
                 ),
             ],
           ),
         ),
         SectionPanel(
-          title: 'Contribution Schedule',
+          title: 'Monthly Contribution Tracker',
           child: Column(
             children: [
               for (final cycle in cycles)
@@ -3466,7 +3467,7 @@ class DhukutiDetail extends StatelessWidget {
                   tilePadding: EdgeInsets.zero,
                   leading: CircleAvatar(child: Text('${cycle.cycleNumber}')),
                   title: Text(
-                    'Cycle ${cycle.cycleNumber}: Recipient ${store.nameOf(cycle.payoutRecipientId)}',
+                    'Month ${cycle.cycleNumber}: admin confirmation required',
                   ),
                   subtitle: Text(
                     '${dateLabel(cycle.dueDate)} • ${money(cycle.paidContributionTotalMinor)} of ${money(cycle.expectedContributionTotalMinor)}',
@@ -3509,7 +3510,7 @@ class DhukutiDetail extends StatelessWidget {
                                 onPressed: () => store.payDhukutiContribution(
                                   contribution.id,
                                 ),
-                                child: const Text('Pay'),
+                                child: const Text('I Have Paid'),
                               ),
                           ],
                         ),
@@ -3534,7 +3535,7 @@ class NotificationsScreen extends StatelessWidget {
       'All',
       'Payments',
       'Groups',
-      'Saving Circle',
+      'Community Savings',
       'Requests',
     ];
 
@@ -3549,7 +3550,7 @@ class NotificationsScreen extends StatelessWidget {
               Tab(text: 'All'),
               Tab(text: 'Payments'),
               Tab(text: 'Groups'),
-              Tab(text: 'Saving Circle'),
+              Tab(text: 'Community Savings'),
               Tab(text: 'Requests'),
             ],
           ),
@@ -3604,7 +3605,7 @@ class _NotificationList extends StatelessWidget {
               icon: Icons.notifications_none,
               title: 'No notifications',
               body:
-                  'Settlement, group, request, gift, and Saving Circle alerts appear here.',
+                  'Settlement, group, request, gift, and community savings alerts appear here.',
             )
           : Column(
               children: [
@@ -3631,7 +3632,7 @@ String _notificationCategory(NotificationItem item) {
     return 'Payments';
   }
   if (type.contains('dhukuti')) {
-    return 'Saving Circle';
+    return 'Community Savings';
   }
   if (type.contains('connection') || type.contains('request')) {
     return 'Requests';
@@ -3642,7 +3643,7 @@ String _notificationCategory(NotificationItem item) {
 IconData _notificationIcon(NotificationItem item) {
   return switch (_notificationCategory(item)) {
     'Payments' => Icons.payments_outlined,
-    'Saving Circle' => Icons.account_balance_wallet_outlined,
+    'Community Savings' => Icons.account_balance_wallet_outlined,
     'Requests' => Icons.person_add_alt_1_outlined,
     _ => Icons.groups_outlined,
   };
@@ -7357,9 +7358,8 @@ Future<void> showCreateDhukutiGroupDialog(
   ValueChanged<GroupKind>? onCreated,
 }) async {
   final store = StoreScope.of(context);
-  final name = TextEditingController(text: 'Family Saving Circle');
+  final name = TextEditingController(text: 'Family Community Fund');
   final contribution = TextEditingController(text: '5000');
-  final serviceFee = TextEditingController(text: '50');
   var frequency = 'monthly';
   final selected = <String>{};
   var agreementAccepted = false;
@@ -7370,14 +7370,12 @@ Future<void> showCreateDhukutiGroupDialog(
         builder: (context, setState) {
           final connections = store.activeConnectionUsers();
           final amount = parseMoneyToMinor(contribution.text);
-          final fee = parseMoneyToMinor(serviceFee.text);
           final memberCount = selected.length + 1;
-          final grossPot = amount * memberCount;
-          final netPayout = grossPot - fee;
+          final expectedMonthlyTotal = amount * memberCount;
           final canCreate =
               agreementAccepted && selected.isNotEmpty && amount > 0;
           return AlertDialog(
-            title: const Text('Create Saving Circle Group'),
+            title: const Text('Create Community Savings Tracker Group'),
             content: SizedBox(
               width: 580,
               child: SingleChildScrollView(
@@ -7386,13 +7384,13 @@ Future<void> showCreateDhukutiGroupDialog(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'Use this for rotating savings commitments with contribution cycles and payout order.',
+                      'Use this to track monthly contributions paid outside the app, admin confirmations, expenses, and fund balance.',
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: name,
                       decoration: const InputDecoration(
-                        labelText: 'Saving Circle group name',
+                        labelText: 'Community fund group name',
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
@@ -7424,20 +7422,10 @@ Future<void> showCreateDhukutiGroupDialog(
                           setState(() => frequency = value ?? frequency),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
-                      controller: serviceFee,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Service fee per payout',
-                        prefixText: 'NPR ',
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 12),
                     _ManualFormSection(
                       title: 'Members',
                       icon: Icons.group_outlined,
-                      subtitle: 'Choose who joins this Saving Circle schedule',
+                      subtitle: 'Choose who contributes to this community fund',
                       trailing: _CountPill(label: '$memberCount people'),
                       child: Wrap(
                         spacing: 10,
@@ -7480,20 +7468,8 @@ Future<void> showCreateDhukutiGroupDialog(
                             value: '$memberCount',
                           ),
                           _DialogReviewRow(
-                            label: 'Gross pot per cycle',
-                            value: money(grossPot),
-                          ),
-                          _DialogReviewRow(
-                            label: 'Service fee',
-                            value: money(fee),
-                          ),
-                          _DialogReviewRow(
-                            label: 'Net payout',
-                            value: money(netPayout),
-                          ),
-                          _DialogReviewRow(
-                            label: 'Cycles',
-                            value: '$memberCount',
+                            label: 'Expected monthly total',
+                            value: money(expectedMonthlyTotal),
                           ),
                         ],
                       ),
@@ -7502,7 +7478,7 @@ Future<void> showCreateDhukutiGroupDialog(
                       contentPadding: EdgeInsets.zero,
                       value: agreementAccepted,
                       title: const Text(
-                        'I understand the contribution and payout schedule.',
+                        'I understand payments are made outside the app and require admin confirmation.',
                       ),
                       onChanged: (value) =>
                           setState(() => agreementAccepted = value ?? false),
@@ -7520,14 +7496,14 @@ Future<void> showCreateDhukutiGroupDialog(
                 onPressed: canCreate
                     ? () {
                         final groupName = name.text.trim().isEmpty
-                            ? 'New Saving Circle Group'
+                            ? 'New Community Fund Group'
                             : name.text.trim();
                         final groupId = store.createGroup(
                           name: groupName,
                           category: GroupCategory.custom,
                           memberIds: selected.toList(),
                           kind: GroupKind.dhukuti,
-                          template: 'Saving Circle',
+                          template: 'Community Savings Tracker',
                         );
                         final poolId = store.createDhukutiPool(
                           groupId: groupId,
@@ -7542,10 +7518,10 @@ Future<void> showCreateDhukutiGroupDialog(
                           ..selectedGroupId = null;
                         Navigator.pop(dialogContext);
                         onCreated?.call(GroupKind.dhukuti);
-                        showSnack(context, '$groupName Saving Circle created.');
+                        showSnack(context, '$groupName tracker created.');
                       }
                     : null,
-                child: const Text('Create Saving Circle Group'),
+                child: const Text('Create Tracker Group'),
               ),
             ],
           );
@@ -7555,7 +7531,6 @@ Future<void> showCreateDhukutiGroupDialog(
   );
   name.dispose();
   contribution.dispose();
-  serviceFee.dispose();
 }
 
 class _DialogReviewRow extends StatelessWidget {
@@ -10699,7 +10674,7 @@ Future<void> showCreateDhukutiDialog(
   final store = StoreScope.of(context);
   final groups = store.visibleDhukutiGroups;
   String? groupId = initialGroupId ?? (groups.isEmpty ? null : groups.first.id);
-  final name = TextEditingController(text: 'New Saving Circle');
+  final name = TextEditingController(text: 'New Community Fund');
   final contribution = TextEditingController(text: '2000');
   final members = <String>{
     for (final user in store.activeConnectionUsers()) user.id,
@@ -10711,7 +10686,7 @@ Future<void> showCreateDhukutiDialog(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Create Saving Circle Pool'),
+            title: const Text('Create Community Savings Tracker'),
             content: SizedBox(
               width: 580,
               child: SingleChildScrollView(
@@ -10767,7 +10742,7 @@ Future<void> showCreateDhukutiDialog(
                     _ManualFormSection(
                       title: 'Members',
                       icon: Icons.group_outlined,
-                      subtitle: 'Choose who joins this Saving Circle schedule',
+                      subtitle: 'Choose who contributes to this community fund',
                       trailing: _CountPill(
                         label: '${members.length + 1} people',
                       ),

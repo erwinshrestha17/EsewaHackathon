@@ -34,16 +34,13 @@ class DhukutiPoolCard extends StatelessWidget {
     final contributions = store.dhukutiContributions
         .where((item) => item.cycleId == currentCycle?.id)
         .toList();
-    final paidCount = contributions
+    final confirmedCount = contributions
         .where((item) => item.status == ContributionStatus.paid)
         .length;
-    final recipientName = currentCycle == null
-        ? 'Not assigned'
-        : store.nameOf(currentCycle.payoutRecipientId);
     final statusLabel = poolDisplayStatus(pool, currentCycle);
     final progress = contributions.isEmpty
         ? 0.0
-        : paidCount / contributions.length;
+        : confirmedCount / contributions.length;
     final color = dhukutiToneColor(context, toneForPoolStatus(statusLabel));
 
     return ds.AppCard(
@@ -90,18 +87,14 @@ class DhukutiPoolCard extends StatelessWidget {
               _Fact(
                 icon: Icons.event_repeat,
                 label: currentCycle == null
-                    ? 'No cycle'
-                    : 'Cycle ${currentCycle.cycleNumber} of ${members.length}',
-              ),
-              _Fact(
-                icon: Icons.person_outline,
-                label: 'Recipient: $recipientName',
+                    ? 'No monthly tracker yet'
+                    : 'Month ${currentCycle.cycleNumber} of ${members.length}',
               ),
               _Fact(
                 icon: Icons.calendar_today_outlined,
                 label: currentCycle == null
-                    ? 'Due date pending'
-                    : 'Next due ${dateLabel(currentCycle.dueDate)}',
+                    ? 'Month pending'
+                    : 'Due ${dateLabel(currentCycle.dueDate)}',
               ),
             ],
           ),
@@ -121,7 +114,7 @@ class DhukutiPoolCard extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               Text(
-                '$paidCount/${contributions.length} paid',
+                '$confirmedCount/${contributions.length} confirmed',
                 style: AppTextStyles.caption.copyWith(
                   fontWeight: FontWeight.w800,
                 ),

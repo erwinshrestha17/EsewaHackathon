@@ -54,13 +54,13 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
             ? Center(
                 child: DhukutiEmptyState(
                   icon: Icons.account_balance_wallet_outlined,
-                  title: 'No Saving Circle pools yet',
+                  title: 'No community savings groups yet',
                   message:
-                      'Start or join a trusted contribution circle with people you know.',
+                      'Track monthly contributions, admin confirmations, expenses, and available fund balance.',
                   action: FilledButton.icon(
                     onPressed: () => _openCreate(context),
                     icon: const Icon(Icons.add),
-                    label: const Text('Create Saving Circle Group'),
+                    label: const Text('Create Tracker Group'),
                   ),
                 ),
               )
@@ -112,14 +112,14 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'How Sajha Kharcha Saving Circle Works',
+                  'How Community Savings Tracker Works',
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Sajha Kharcha Saving Circle tracks contribution schedules, payout turns, member statuses, and ledger activity for transparency.',
+                  'Community Savings Tracker records monthly contributions paid outside the app, admin confirmations, expenses, and available fund balance.',
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -157,33 +157,33 @@ class _DhukutiPoolList extends StatelessWidget {
     return DhukutiScrollView(
       children: [
         DhukutiHeader(
-          title: 'Saving Circle',
+          title: 'Community Savings Tracker',
           subtitle:
-              'Track contributions, payout turns, and group transparency.',
+              'Track monthly contributions, admin confirmations, expenses, and fund balance.',
           action: FilledButton.icon(
             onPressed: onCreate,
             icon: const Icon(Icons.add),
-            label: const Text('Create Saving Circle Group'),
+            label: const Text('Create Tracker Group'),
           ),
         ),
         DhukutiSection(
-          title: 'About Sajha Kharcha Saving Circle',
+          title: 'About Community Savings Tracker',
           child: const Text(
-            'Sajha Kharcha Saving Circle is a transparent contribution ledger and payment scheduler.',
+            'Payments are made outside the app. The app only tracks submitted notes, admin confirmations, expenses, and the available community fund balance.',
           ),
         ),
         DhukutiSection(
-          title: 'Your Saving Circle Pools',
+          title: 'Your Community Fund Groups',
           child: pools.isEmpty
               ? DhukutiEmptyState(
                   icon: Icons.account_balance_wallet_outlined,
-                  title: 'No Saving Circle pools yet',
+                  title: 'No community savings groups yet',
                   message:
-                      'Start or join a trusted contribution circle with people you know.',
+                      'Create a group to track monthly contributions and expenses.',
                   action: FilledButton.icon(
                     onPressed: onCreate,
                     icon: const Icon(Icons.add),
-                    label: const Text('Create Saving Circle Group'),
+                    label: const Text('Create Tracker Group'),
                   ),
                   secondaryAction: OutlinedButton.icon(
                     onPressed: onLearn,

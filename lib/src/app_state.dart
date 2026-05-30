@@ -1876,8 +1876,8 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_created',
       entityType: 'dhukuti_pool',
       entityId: pool.id,
-      title: 'Saving Circle created',
-      body: '$name now has a transparent schedule and ledger.',
+      title: 'Community Savings Tracker created',
+      body: '$name now tracks monthly contributions and fund activity.',
     );
     notifyListeners();
     return pool.id;
@@ -1899,14 +1899,14 @@ class AppStore extends ChangeNotifier {
   String? renameDhukutiPool(String poolId, String name) {
     final pool = poolByIdOrNull(poolId);
     if (pool == null) {
-      return 'Saving Circle group is no longer available.';
+      return 'Community savings group is no longer available.';
     }
     if (!canManageDhukutiPool(poolId, currentUserId)) {
-      return 'Only the Saving Circle admin can rename this group.';
+      return 'Only the Community Savings Tracker admin can rename this group.';
     }
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
-      return 'Saving Circle group name cannot be empty.';
+      return 'Community savings group name cannot be empty.';
     }
     if (trimmed == pool.name) {
       return null;
@@ -1919,7 +1919,7 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_renamed',
       entityType: 'dhukuti_pool',
       entityId: pool.id,
-      title: 'Saving Circle group renamed',
+      title: 'Community savings group renamed',
       body: '${nameOf(currentUserId)} renamed $previousName to ${pool.name}.',
     );
     notifyListeners();
@@ -1937,8 +1937,8 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_accepted',
       entityType: 'dhukuti_member',
       entityId: member.id,
-      title: 'Saving Circle participation accepted',
-      body: '${nameOf(currentUserId)} accepted the Saving Circle invite.',
+      title: 'Community savings participation accepted',
+      body: '${nameOf(currentUserId)} accepted the tracker invite.',
     );
     notifyListeners();
   }
@@ -1954,8 +1954,8 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_declined',
       entityType: 'dhukuti_member',
       entityId: member.id,
-      title: 'Saving Circle invite declined',
-      body: '${nameOf(currentUserId)} declined the Saving Circle invite.',
+      title: 'Community savings invite declined',
+      body: '${nameOf(currentUserId)} declined the tracker invite.',
     );
     notifyListeners();
   }
@@ -1993,9 +1993,9 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_contribution_paid',
       entityType: 'dhukuti_contribution',
       entityId: contribution.id,
-      title: 'Saving Circle contribution paid',
+      title: 'Contribution note submitted',
       body:
-          '${nameOf(currentUserId)} paid ${money(contribution.amountMinor)} for cycle ${contribution.cycleNumber}.',
+          '${nameOf(currentUserId)} submitted ${money(contribution.amountMinor)} for admin confirmation.',
     );
     notifyListeners();
   }
@@ -2033,7 +2033,7 @@ class AppStore extends ChangeNotifier {
         eventType: 'dhukuti_exit_contribution_paid',
         entityType: 'dhukuti_contribution',
         entityId: contribution.id,
-        title: 'Saving Circle exit contribution paid',
+        title: 'Contribution note submitted',
         body:
             '${nameOf(currentUserId)} prepaid ${money(contribution.amountMinor)} for cycle ${contribution.cycleNumber} before exit review.',
       );
@@ -2057,9 +2057,8 @@ class AppStore extends ChangeNotifier {
         eventType: 'dhukuti_payout_completed',
         entityType: 'dhukuti_payout',
         entityId: payout.id,
-        title: 'Saving Circle payout recorded',
-        body:
-            'Cycle ${cycle.cycleNumber} payout was recorded in the transparent ledger.',
+        title: 'Community fund review recorded',
+        body: 'Month ${cycle.cycleNumber} was reviewed in the tracker ledger.',
       );
     } else {
       _activity(
@@ -2068,9 +2067,9 @@ class AppStore extends ChangeNotifier {
         eventType: 'dhukuti_payout_reviewed',
         entityType: 'dhukuti_payout',
         entityId: payout.id,
-        title: 'Saving Circle payout reviewed',
+        title: 'Community fund review completed',
         body:
-            'Cycle ${cycle.cycleNumber} payout was reviewed without changing ledger balances.',
+            'Month ${cycle.cycleNumber} was reviewed without changing ledger balances.',
       );
     }
     notifyListeners();
@@ -2124,9 +2123,9 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_left_before_start',
       entityType: 'dhukuti_member',
       entityId: member.id,
-      title: 'Saving Circle member left',
+      title: 'Community savings member left',
       body:
-          '${nameOf(currentUserId)} left before the Saving Circle started. The schedule needs member review.',
+          '${nameOf(currentUserId)} left before tracking started. Member records need review.',
     );
     _regenerateDhukutiSchedule(poolId);
     notifyListeners();
@@ -2141,8 +2140,8 @@ class AppStore extends ChangeNotifier {
     if (pool == null || pool.status == DhukutiPoolStatus.cancelled) {
       return const DhukutiExitDecision(
         type: DhukutiExitDecisionType.unavailable,
-        title: 'Saving Circle unavailable',
-        message: 'This Saving Circle pool is no longer available.',
+        title: 'Tracker unavailable',
+        message: 'This community savings group is no longer available.',
       );
     }
     final member = dhukutiMembers
@@ -2153,7 +2152,7 @@ class AppStore extends ChangeNotifier {
       return const DhukutiExitDecision(
         type: DhukutiExitDecisionType.unavailable,
         title: 'No active participation',
-        message: 'You are not an active participant in this Saving Circle.',
+        message: 'You are not an active participant in this tracker.',
       );
     }
     final members = membersForPool(poolId);
@@ -2182,10 +2181,10 @@ class AppStore extends ChangeNotifier {
         (hasPendingInvite && !hasPaidAnyContribution && !hasReceivedPayout)) {
       return DhukutiExitDecision(
         type: DhukutiExitDecisionType.canLeaveBeforeStart,
-        title: 'Leave before Saving Circle starts?',
+        title: 'Leave before tracking starts?',
         message:
-            'You can leave before all members accept. Contribution amount and payout schedule will be recalculated.',
-        primaryAction: 'Leave Saving Circle',
+            'You can leave before all members accept. Monthly contribution records will be updated.',
+        primaryAction: 'Leave Tracker',
       );
     }
     final remainingExitContributions = remainingDhukutiExitContributions(
@@ -2205,7 +2204,7 @@ class AppStore extends ChangeNotifier {
         type: DhukutiExitDecisionType.pendingContribution,
         title: 'Remaining contributions required',
         message:
-            'You are in Cycle $currentCycle. To leave this Saving Circle, you must first pay ${money(remainingExitTotal)} for your remaining contribution obligations ($cycleText).',
+            'You are in month $currentCycle. Ask the admin to review your remaining contribution records before leaving ($cycleText).',
         amountMinor: remainingExitTotal,
         primaryAction: 'Pay Remaining Contributions',
         secondaryAction: 'View Agreement',
@@ -2229,7 +2228,7 @@ class AppStore extends ChangeNotifier {
       type: DhukutiExitDecisionType.requiresApproval,
       title: 'Contributions already paid',
       message:
-          'You can request exit, but members must approve the updated payout order, pot amount, service fee, and refund treatment.',
+          'You can request exit, but members must approve updated contribution and expense records.',
       amountMinor: paid,
       primaryAction: 'Request Exit',
       secondaryAction: 'View Agreement',
@@ -2798,7 +2797,7 @@ class AppStore extends ChangeNotifier {
       id: 'g-shrestha-family',
       name: 'Shrestha Family',
       category: GroupCategory.festival,
-      template: 'Family Saving Circle',
+      template: 'Family Community Fund',
       kind: GroupKind.dhukuti,
       createdBy: 'u-sita',
       createdAt: DateTime(2026, 5, 14),
@@ -3117,7 +3116,7 @@ class AppStore extends ChangeNotifier {
     final familyDhukuti = seedDhukutiPool(
       id: 'd-family-dashain',
       group: family,
-      name: 'Family Dashain Saving Circle',
+      name: 'Family Dashain Community Fund',
       amountMinor: npr(5000),
       startDate: DateTime(2026, 3, 15),
       createdBy: 'u-sita',
@@ -3194,7 +3193,7 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_recipient_current',
       entityType: 'dhukuti_pool',
       entityId: familyDhukuti.id,
-      title: 'Sita is current recipient',
+      title: 'Sita contribution record reviewed',
       body: 'Recipient turn follows the visible rotation order.',
     );
     addDhukutiLedger(
@@ -3203,14 +3202,14 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_member_accepted',
       entityType: 'dhukuti_member',
       entityId: familyDhukuti.id,
-      title: 'Member accepted Saving Circle invitation',
+      title: 'Member accepted tracker invitation',
       body: 'Maya joined the transparent contribution schedule.',
     );
 
     final collegeDhukuti = seedDhukutiPool(
       id: 'd-college-friends',
       group: college,
-      name: 'College Friends Saving Circle',
+      name: 'College Friends Community Fund',
       amountMinor: npr(2000),
       startDate: DateTime(2026, 4, 15),
       createdBy: 'u-maya',
@@ -3283,7 +3282,7 @@ class AppStore extends ChangeNotifier {
       entityId: dhukutiPayouts
           .firstWhere((item) => item.poolId == familyDhukuti.id)
           .id,
-      title: 'Cycle 2 payout completed',
+      title: 'Month 2 review completed',
       body: 'The previous cycle was settled in the ledger.',
     );
     _notify(
@@ -3295,8 +3294,8 @@ class AppStore extends ChangeNotifier {
     _notify(
       'u-sita',
       'dhukuti',
-      'Saving Circle cycle at risk',
-      'One contribution is late before this cycle can be ready for payout.',
+      'Community savings month needs attention',
+      'One contribution is late and requires admin follow-up.',
     );
   }
 }

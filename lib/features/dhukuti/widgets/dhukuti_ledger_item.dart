@@ -6,7 +6,7 @@ import '../../../src/models.dart';
 import 'dhukuti_status_badge.dart';
 import 'dhukuti_tokens.dart';
 
-enum DhukutiLedgerFilter { all, contributions, payouts, statusUpdates }
+enum DhukutiLedgerFilter { all, contributions, expenses, statusUpdates }
 
 class DhukutiLedgerItem extends StatelessWidget {
   const DhukutiLedgerItem({
@@ -63,11 +63,11 @@ bool ledgerEventMatches(ActivityLog event, DhukutiLedgerFilter filter) {
     DhukutiLedgerFilter.contributions => event.eventType.contains(
       'contribution',
     ),
-    DhukutiLedgerFilter.payouts => event.eventType.contains('payout'),
+    DhukutiLedgerFilter.expenses => event.eventType.contains('expense'),
     DhukutiLedgerFilter.statusUpdates =>
       event.eventType.contains('opened') ||
           event.eventType.contains('seeded') ||
-          event.eventType.contains('recipient') ||
+          event.eventType.contains('review') ||
           event.eventType.contains('late') ||
           event.eventType.contains('accepted') ||
           event.eventType.contains('created'),
@@ -78,8 +78,8 @@ IconData _iconForEvent(ActivityLog event) {
   if (event.eventType.contains('contribution')) {
     return Icons.payments_outlined;
   }
-  if (event.eventType.contains('payout')) {
-    return Icons.outbox_outlined;
+  if (event.eventType.contains('expense')) {
+    return Icons.receipt_long_outlined;
   }
   if (event.eventType.contains('late') || event.eventType.contains('risk')) {
     return Icons.warning_amber_outlined;
@@ -95,7 +95,7 @@ DhukutiTone _toneForEvent(ActivityLog event) {
     return DhukutiTone.warning;
   }
   if (event.eventType.contains('contribution') ||
-      event.eventType.contains('payout')) {
+      event.eventType.contains('expense')) {
     return DhukutiTone.success;
   }
   return DhukutiTone.neutral;
@@ -106,10 +106,10 @@ String _statusForEvent(ActivityLog event) {
     return 'Attention';
   }
   if (event.eventType.contains('contribution')) {
-    return 'Paid';
+    return 'Confirmed';
   }
-  if (event.eventType.contains('payout')) {
-    return 'Completed';
+  if (event.eventType.contains('expense')) {
+    return 'Recorded';
   }
   return 'Logged';
 }

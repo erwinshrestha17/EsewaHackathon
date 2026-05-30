@@ -1,24 +1,41 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
-import '../../features/settings/settings_models.dart';
-import '../../shared/transactions/transaction_confirmation_controller.dart';
-import '../../shared/transactions/transaction_confirmation_data.dart';
-import '../../shared/transactions/transaction_status.dart';
-import '../../shared/transactions/transaction_type.dart';
+import '../../shared/design_system/app_components.dart' as ds;
+import '../../shared/design_system/app_spacing.dart';
+import '../../shared/design_system/app_text_styles.dart';
 import '../../src/app_state.dart';
 import '../../src/finance.dart';
 import '../../src/models.dart';
-import 'widgets/dhukuti_cycle_card.dart';
-import 'widgets/dhukuti_ledger_item.dart';
-import 'widgets/dhukuti_member_row.dart';
-import 'widgets/dhukuti_payment_bottom_sheet.dart';
-import 'widgets/dhukuti_pool_card.dart';
 import 'widgets/dhukuti_status_badge.dart';
 import 'widgets/dhukuti_tokens.dart';
 
-enum _DhukutiTab { overview, members, schedule, ledger }
+const List<String> _paymentMethods = [
+  'Cash',
+  'Bank Transfer',
+  'eSewa',
+  'Khalti',
+  'IME Pay',
+  'Other',
+];
+
+const List<String> _expenseCategories = [
+  'Food',
+  'Event',
+  'Emergency',
+  'Maintenance',
+  'Donation',
+  'Travel',
+  'Supplies',
+  'Other',
+];
+
+enum _TrackerTab { dashboard, monthlyTracker, history }
+
+enum _LedgerTab { all, contributions, expenses }
+
+enum _ContributionUiStatus { pending, submitted, confirmedReceived, waived }
+
+enum _LedgerItemType { contribution, expense }
 
 Future<void> showRenameDhukutiPoolDialog({
   required BuildContext context,
@@ -29,7 +46,9 @@ Future<void> showRenameDhukutiPoolDialog({
   if (!store.canManageDhukutiPool(pool.id, store.currentUserId)) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Only the Saving Circle admin can rename this group.'),
+        content: Text(
+          'Only the Community Savings Tracker admin can rename this group.',
+        ),
       ),
     );
     return;
@@ -42,7 +61,7 @@ Future<void> showRenameDhukutiPoolDialog({
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Rename Saving Circle group'),
+            title: const Text('Rename community fund group'),
             content: SizedBox(
               width: 420,
               child: TextField(
@@ -50,7 +69,7 @@ Future<void> showRenameDhukutiPoolDialog({
                 autofocus: true,
                 textCapitalization: TextCapitalization.words,
                 decoration: InputDecoration(
-                  labelText: 'Saving Circle group name',
+                  labelText: 'Group name',
                   errorText: errorText,
                 ),
                 onChanged: (_) {
@@ -106,24 +125,111 @@ class DhukutiDetailScreen extends StatefulWidget {
 }
 
 class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
-  var _tab = _DhukutiTab.overview;
-  var _ledgerFilter = DhukutiLedgerFilter.all;
+  final bool isAdmin = true;
+  var _tab = _TrackerTab.dashboard;
+  var _ledgerTab = _LedgerTab.all;
+  late final _CommunitySavingsGroup _communityGroup;
+  late final List<_CommunitySavingsMember> _members;
+  late final List<_ContributionRecord> _contributions;
+  late final List<_CommunityExpense> _expenses;
+  late final List<_LedgerRecord> _ledger;
+
+  @override
+  void initState() {
+    super.initState();
+    final store = widget.store;
+    final group = store.groupById(widget.pool.groupId);
+    final currentMonth = _monthLabel(DateTime.now());
+    final adminName = store.nameOf(widget.pool.createdBy);
+    final members = store.membersForPool(widget.pool.id);
+    _communityGroup = _CommunitySavingsGroup(
+      id: widget.pool.id,
+      name: group.name,
+      monthlyContributionAmount: widget.pool.contributionAmountMinor,
+      currency: 'Rs.',
+      currentBalance: 0,
+    );
+    _members = [
+      for (final member in members)
+        _CommunitySavingsMember(
+          id: member.userId,
+          name: store.nameOf(member.userId),
+          role: member.userId == widget.pool.createdBy ? 'Admin' : 'Member',
+          avatarInitials: store.userById(member.userId).avatar,
+        ),
+    ];
+    _contributions = [
+      for (var index = 0; index < _members.length; index++)
+        _ContributionRecord.seed(
+          id: 'contribution-${widget.pool.id}-${_members[index].id}',
+          memberId: _members[index].id,
+          memberName: _members[index].name,
+          month: currentMonth,
+          initials: _members[index].avatarInitials,
+          expectedAmount: widget.pool.contributionAmountMinor,
+          status: switch (index) {
+            0 => _ContributionUiStatus.confirmedReceived,
+            1 => _ContributionUiStatus.submitted,
+            2 => _ContributionUiStatus.waived,
+            _ => _ContributionUiStatus.pending,
+          },
+          confirmedBy: adminName,
+        ),
+    ];
+    _expenses = [
+      _CommunityExpense(
+        id: 'expense-snacks',
+        title: 'Meeting snacks',
+        amount: npr(1200),
+        expenseDate: DateTime.now().subtract(const Duration(days: 4)),
+        category: 'Food',
+        recordedBy: store.nameOf(store.currentUserId),
+        description: 'Monthly member meeting.',
+        receiptReference: 'SNK-204',
+      ),
+    ];
+    _ledger = [
+      for (final item in _contributions)
+        if (item.status == _ContributionUiStatus.confirmedReceived)
+          _LedgerRecord.contribution(
+            item,
+            item.confirmedAt ??
+                DateTime.now().subtract(const Duration(days: 8)),
+          ),
+      _LedgerRecord.expense(_expenses.first),
+    ]..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  int get _totalConfirmedContributions => _contributions
+      .where((item) => item.status == _ContributionUiStatus.confirmedReceived)
+      .fold<int>(0, (sum, item) => sum + item.receivedAmount);
+
+  int get _totalRecordedExpenses =>
+      _expenses.fold<int>(0, (sum, item) => sum + item.amount);
+
+  int get _fundBalance => _totalConfirmedContributions - _totalRecordedExpenses;
+
+  int get _receivedThisMonth => _contributions
+      .where((item) => item.status == _ContributionUiStatus.confirmedReceived)
+      .fold<int>(0, (sum, item) => sum + item.receivedAmount);
+
+  int get _pendingCount => _contributions
+      .where(
+        (item) =>
+            item.status == _ContributionUiStatus.pending ||
+            item.status == _ContributionUiStatus.submitted,
+      )
+      .length;
+
+  int get _expensesThisMonth =>
+      _expenses.fold<int>(0, (sum, item) => sum + item.amount);
+
+  int get _totalExpectedThisMonth =>
+      _contributions.fold<int>(0, (sum, item) => sum + item.expectedAmount);
 
   @override
   Widget build(BuildContext context) {
-    final pool = widget.pool;
-    final store = widget.store;
-    final members = store.membersForPool(pool.id);
-    final cycles =
-        store.dhukutiCycles.where((cycle) => cycle.poolId == pool.id).toList()
-          ..sort((a, b) => a.cycleNumber.compareTo(b.cycleNumber));
-    final currentCycle = currentCycleFor(pool, cycles);
-    final currentContributions = store.dhukutiContributions
-        .where((item) => item.cycleId == currentCycle?.id)
-        .toList();
-    final statusLabel = poolDisplayStatus(pool, currentCycle);
-    final canManage = store.canManageDhukutiPool(pool.id, store.currentUserId);
-
+    final currentMonth = _monthLabel(DateTime.now());
     return DhukutiScrollView(
       children: [
         if (widget.onBack != null)
@@ -132,28 +238,18 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
             child: TextButton.icon(
               onPressed: widget.onBack,
               icon: const Icon(Icons.arrow_back),
-              label: const Text('Saving Circle pools'),
+              label: const Text('Community savings groups'),
             ),
           ),
         DhukutiHeader(
-          title: pool.name,
-          subtitle:
-              '${widget.store.groupById(pool.groupId).name} • ${money(pool.contributionAmountMinor)} ${pool.frequency}',
-          action: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.end,
-            children: [
-              DhukutiStatusBadge(
-                label: statusLabel,
-                tone: toneForPoolStatus(statusLabel),
-              ),
-              if (canManage)
-                OutlinedButton.icon(
+          title: 'Community Savings Tracker',
+          subtitle: '${_communityGroup.name} • $currentMonth',
+          action: isAdmin
+              ? OutlinedButton.icon(
                   onPressed: () => showRenameDhukutiPoolDialog(
                     context: context,
-                    store: store,
-                    pool: pool,
+                    store: widget.store,
+                    pool: widget.pool,
                     onRenamed: () => setState(() {}),
                   ),
                   icon: const Icon(Icons.edit_outlined, size: 18),
@@ -167,564 +263,1183 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     visualDensity: VisualDensity.compact,
                   ),
-                ),
-            ],
-          ),
+                )
+              : null,
         ),
-        _TopFacts(store: store, pool: pool, members: members, cycles: cycles),
-        if (currentCycle != null)
-          _HeroCycleCard(
-            store: store,
-            pool: pool,
-            cycle: currentCycle,
-            contributions: currentContributions,
-          ),
-        _Tabs(selected: _tab, onChanged: (tab) => setState(() => _tab = tab)),
+        _PaymentNotice(),
+        _Tabs(
+          selected: _tab,
+          onChanged: (value) => setState(() => _tab = value),
+        ),
         switch (_tab) {
-          _DhukutiTab.overview => _OverviewTab(
-            store: store,
-            pool: pool,
-            cycle: currentCycle,
-            contributions: currentContributions,
-            onPaid: () => setState(() {}),
+          _TrackerTab.dashboard => _DashboardView(
+            groupName: _communityGroup.name,
+            currentMonth: currentMonth,
+            monthlyContribution: widget.pool.contributionAmountMinor,
+            fundBalance: _fundBalance,
+            receivedThisMonth: _receivedThisMonth,
+            pendingContributions: _pendingCount,
+            expensesThisMonth: _expensesThisMonth,
+            totalExpectedThisMonth: _totalExpectedThisMonth,
+            hasActivity:
+                _totalConfirmedContributions > 0 || _expenses.isNotEmpty,
+            isAdmin: isAdmin,
+            onConfirmContribution: () => _showAdminConfirmSheet(),
+            onRecordExpense: () => _showRecordExpenseSheet(),
+            onViewHistory: () => setState(() => _tab = _TrackerTab.history),
+            onManageMembers: () =>
+                setState(() => _tab = _TrackerTab.monthlyTracker),
+            onHavePaid: () => _showMemberPaidSheet(),
+            onViewStatus: () =>
+                setState(() => _tab = _TrackerTab.monthlyTracker),
           ),
-          _DhukutiTab.members => _MembersTab(
-            store: store,
-            pool: pool,
-            members: members,
-            cycle: currentCycle,
-            contributions: currentContributions,
+          _TrackerTab.monthlyTracker => _MonthlyTrackerView(
+            contributions: _contributions,
+            isAdmin: isAdmin,
+            currentUserId: widget.store.currentUserId,
+            onConfirm: _showAdminConfirmSheet,
+            onEdit: _showAdminConfirmSheet,
+            onWaive: _waiveContribution,
+            onHavePaid: _showMemberPaidSheet,
           ),
-          _DhukutiTab.schedule => _ScheduleTab(
-            store: store,
-            pool: pool,
-            members: members,
-            cycles: cycles,
-            currentCycle: currentCycle,
-          ),
-          _DhukutiTab.ledger => _LedgerTab(
-            store: store,
-            pool: pool,
-            filter: _ledgerFilter,
-            onFilterChanged: (value) => setState(() => _ledgerFilter = value),
+          _TrackerTab.history => _HistoryView(
+            selected: _ledgerTab,
+            onChanged: (value) => setState(() => _ledgerTab = value),
+            ledger: _filteredLedger,
           ),
         },
       ],
     );
   }
+
+  List<_LedgerRecord> get _filteredLedger {
+    return switch (_ledgerTab) {
+      _LedgerTab.all => _ledger,
+      _LedgerTab.contributions =>
+        _ledger
+            .where((item) => item.type == _LedgerItemType.contribution)
+            .toList(),
+      _LedgerTab.expenses =>
+        _ledger.where((item) => item.type == _LedgerItemType.expense).toList(),
+    };
+  }
+
+  Future<void> _showMemberPaidSheet([_ContributionRecord? record]) async {
+    final target =
+        record ??
+        _contributions.firstWhere(
+          (item) => item.memberId == widget.store.currentUserId,
+          orElse: () => _contributions.first,
+        );
+    final submitted = await showModalBottomSheet<_ContributionRecord>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) =>
+          _MemberPaidSheet(record: target, month: _monthLabel(DateTime.now())),
+    );
+    if (submitted == null) {
+      return;
+    }
+    setState(() {
+      target
+        ..status = _ContributionUiStatus.submitted
+        ..submittedAmount = submitted.submittedAmount
+        ..paymentMethod = submitted.paymentMethod
+        ..submittedAt = DateTime.now()
+        ..confirmedAt = null
+        ..confirmedBy = ''
+        ..receivedAmount = 0
+        ..note = submitted.note
+        ..referenceNumber = submitted.referenceNumber;
+    });
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Your payment note has been submitted. The fund balance will update after the admin confirms the money was received.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAdminConfirmSheet([_ContributionRecord? record]) async {
+    final pending = _contributions
+        .where((item) => item.status != _ContributionUiStatus.confirmedReceived)
+        .toList();
+    final selected =
+        record ?? (pending.isEmpty ? _contributions.first : pending.first);
+    final confirmed = await showModalBottomSheet<_ContributionRecord>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _AdminConfirmSheet(
+        records: _contributions,
+        selected: selected,
+        month: _monthLabel(DateTime.now()),
+        adminName: widget.store.nameOf(widget.store.currentUserId),
+      ),
+    );
+    if (confirmed == null) {
+      return;
+    }
+    setState(() {
+      final item = _contributions.firstWhere(
+        (entry) => entry.memberId == confirmed.memberId,
+      );
+      item
+        ..status = _ContributionUiStatus.confirmedReceived
+        ..receivedAmount = confirmed.receivedAmount
+        ..paymentMethod = confirmed.paymentMethod
+        ..confirmedAt = confirmed.confirmedAt
+        ..confirmedBy = confirmed.confirmedBy
+        ..note = confirmed.note
+        ..referenceNumber = confirmed.referenceNumber;
+      _ledger.removeWhere(
+        (entry) =>
+            entry.type == _LedgerItemType.contribution &&
+            entry.sourceId == item.id,
+      );
+      _ledger.insert(
+        0,
+        _LedgerRecord.contribution(item, item.confirmedAt ?? DateTime.now()),
+      );
+    });
+  }
+
+  Future<void> _showRecordExpenseSheet() async {
+    final expense = await showModalBottomSheet<_CommunityExpense>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _RecordExpenseSheet(
+        availableBalance: _fundBalance,
+        recordedBy: widget.store.nameOf(widget.store.currentUserId),
+      ),
+    );
+    if (expense == null) {
+      return;
+    }
+    setState(() {
+      _expenses.add(expense);
+      _ledger.insert(0, _LedgerRecord.expense(expense));
+    });
+  }
+
+  void _waiveContribution(_ContributionRecord record) {
+    setState(() {
+      record
+        ..status = _ContributionUiStatus.waived
+        ..receivedAmount = 0
+        ..submittedAmount = 0
+        ..confirmedAt = null
+        ..confirmedBy = '';
+    });
+  }
 }
 
-class _TopFacts extends StatelessWidget {
-  const _TopFacts({
-    required this.store,
-    required this.pool,
-    required this.members,
-    required this.cycles,
+class _DashboardView extends StatelessWidget {
+  const _DashboardView({
+    required this.groupName,
+    required this.currentMonth,
+    required this.monthlyContribution,
+    required this.fundBalance,
+    required this.receivedThisMonth,
+    required this.pendingContributions,
+    required this.expensesThisMonth,
+    required this.totalExpectedThisMonth,
+    required this.hasActivity,
+    required this.isAdmin,
+    required this.onConfirmContribution,
+    required this.onRecordExpense,
+    required this.onViewHistory,
+    required this.onManageMembers,
+    required this.onHavePaid,
+    required this.onViewStatus,
   });
 
-  final AppStore store;
-  final DhukutiPool pool;
-  final List<DhukutiMember> members;
-  final List<DhukutiCycle> cycles;
+  final String groupName;
+  final String currentMonth;
+  final int monthlyContribution;
+  final int fundBalance;
+  final int receivedThisMonth;
+  final int pendingContributions;
+  final int expensesThisMonth;
+  final int totalExpectedThisMonth;
+  final bool hasActivity;
+  final bool isAdmin;
+  final VoidCallback onConfirmContribution;
+  final VoidCallback onRecordExpense;
+  final VoidCallback onViewHistory;
+  final VoidCallback onManageMembers;
+  final VoidCallback onHavePaid;
+  final VoidCallback onViewStatus;
 
   @override
   Widget build(BuildContext context) {
-    final currentCycle = currentCycleFor(pool, cycles);
-    return DhukutiResponsiveGrid(
+    return Column(
       children: [
-        DhukutiMetricCard(
-          label: 'Contribution',
-          value: money(pool.contributionAmountMinor),
-          helper: pool.frequency,
-          icon: Icons.savings_outlined,
-          tone: DhukutiTone.success,
+        DhukutiResponsiveGrid(
+          children: [
+            DhukutiMetricCard(
+              label: 'Group name',
+              value: groupName,
+              icon: Icons.groups_outlined,
+              tone: DhukutiTone.info,
+            ),
+            DhukutiMetricCard(
+              label: 'Current month',
+              value: currentMonth,
+              icon: Icons.calendar_month_outlined,
+              tone: DhukutiTone.neutral,
+            ),
+            DhukutiMetricCard(
+              label: 'Available fund balance',
+              value: _rs(fundBalance),
+              icon: Icons.account_balance_outlined,
+              tone: fundBalance >= 0
+                  ? DhukutiTone.success
+                  : DhukutiTone.warning,
+            ),
+            DhukutiMetricCard(
+              label: 'Monthly contribution amount',
+              value: _rs(monthlyContribution),
+              icon: Icons.savings_outlined,
+              tone: DhukutiTone.info,
+            ),
+            DhukutiMetricCard(
+              label: 'Received this month',
+              value: _rs(receivedThisMonth),
+              icon: Icons.verified_outlined,
+              tone: DhukutiTone.success,
+            ),
+            DhukutiMetricCard(
+              label: 'Pending contributions',
+              value: '$pendingContributions',
+              icon: Icons.pending_actions_outlined,
+              tone: pendingContributions == 0
+                  ? DhukutiTone.success
+                  : DhukutiTone.warning,
+            ),
+            DhukutiMetricCard(
+              label: 'Expenses this month',
+              value: _rs(expensesThisMonth),
+              icon: Icons.receipt_long_outlined,
+              tone: DhukutiTone.neutral,
+            ),
+            DhukutiMetricCard(
+              label: 'Total expected this month',
+              value: _rs(totalExpectedThisMonth),
+              icon: Icons.summarize_outlined,
+              tone: DhukutiTone.info,
+            ),
+          ],
         ),
-        DhukutiMetricCard(
-          label: 'Start date',
-          value: dateLabel(pool.startDate),
-          icon: Icons.calendar_today_outlined,
-          tone: DhukutiTone.neutral,
-        ),
-        DhukutiMetricCard(
-          label: 'Members',
-          value: '${members.length}',
-          icon: Icons.groups_outlined,
-          tone: DhukutiTone.info,
-        ),
-        DhukutiMetricCard(
-          label: 'Current cycle',
-          value: currentCycle == null
-              ? 'Pending'
-              : '${currentCycle.cycleNumber} of ${cycles.length}',
-          icon: Icons.event_repeat,
-          tone: currentCycle?.status == DhukutiCycleStatus.atRisk
-              ? DhukutiTone.warning
-              : DhukutiTone.success,
+        if (!hasActivity) ...[
+          const SizedBox(height: AppSpacing.lg),
+          const DhukutiEmptyState(
+            icon: Icons.savings_outlined,
+            title: 'No contributions recorded yet',
+            message: 'Start tracking this month\'s community savings.',
+          ),
+        ],
+        const SizedBox(height: AppSpacing.lg),
+        if (isAdmin)
+          _ActionPanel(
+            title: 'Admin actions',
+            actions: [
+              _TrackerAction(
+                icon: Icons.fact_check_outlined,
+                label: 'Confirm Contribution',
+                onTap: onConfirmContribution,
+              ),
+              _TrackerAction(
+                icon: Icons.add_card_outlined,
+                label: 'Record Expense',
+                onTap: onRecordExpense,
+              ),
+              _TrackerAction(
+                icon: Icons.history_outlined,
+                label: 'View History',
+                onTap: onViewHistory,
+              ),
+              _TrackerAction(
+                icon: Icons.manage_accounts_outlined,
+                label: 'Manage Members',
+                onTap: onManageMembers,
+              ),
+            ],
+          ),
+        const SizedBox(height: AppSpacing.lg),
+        _ActionPanel(
+          title: 'Member actions',
+          actions: [
+            _TrackerAction(
+              icon: Icons.upload_file_outlined,
+              label: 'I Have Paid',
+              onTap: onHavePaid,
+            ),
+            _TrackerAction(
+              icon: Icons.person_search_outlined,
+              label: 'View My Status',
+              onTap: onViewStatus,
+            ),
+            _TrackerAction(
+              icon: Icons.history_outlined,
+              label: 'View History',
+              onTap: onViewHistory,
+            ),
+          ],
         ),
       ],
     );
   }
 }
 
-class _HeroCycleCard extends StatelessWidget {
-  const _HeroCycleCard({
-    required this.store,
-    required this.pool,
-    required this.cycle,
+class _MonthlyTrackerView extends StatelessWidget {
+  const _MonthlyTrackerView({
     required this.contributions,
+    required this.isAdmin,
+    required this.currentUserId,
+    required this.onConfirm,
+    required this.onEdit,
+    required this.onWaive,
+    required this.onHavePaid,
   });
 
-  final AppStore store;
-  final DhukutiPool pool;
-  final DhukutiCycle cycle;
-  final List<DhukutiContribution> contributions;
+  final List<_ContributionRecord> contributions;
+  final bool isAdmin;
+  final String currentUserId;
+  final ValueChanged<_ContributionRecord> onConfirm;
+  final ValueChanged<_ContributionRecord> onEdit;
+  final ValueChanged<_ContributionRecord> onWaive;
+  final ValueChanged<_ContributionRecord> onHavePaid;
 
   @override
   Widget build(BuildContext context) {
-    final paidCount = contributions
-        .where((item) => item.status == ContributionStatus.paid)
-        .length;
-    final progress = contributions.isEmpty
-        ? 0.0
-        : paidCount / contributions.length;
-    final recipient = store.userById(cycle.payoutRecipientId);
-    final cycleStatus = _friendlyCycleStatus(cycle.status);
-    final tone = toneForCycleStatus(cycle.status);
-    final color = dhukutiToneColor(context, tone);
+    return DhukutiSection(
+      title: 'Monthly Contribution Tracker',
+      child: contributions.isEmpty
+          ? const DhukutiEmptyState(
+              icon: Icons.group_add_outlined,
+              title: 'No members added yet',
+              message: 'Add members to start tracking monthly contributions.',
+            )
+          : Column(
+              children: [
+                for (final record in contributions)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    child: _ContributionRow(
+                      record: record,
+                      isAdmin: isAdmin,
+                      isCurrentUser: record.memberId == currentUserId,
+                      onConfirm: () => onConfirm(record),
+                      onEdit: () => onEdit(record),
+                      onWaive: () => onWaive(record),
+                      onHavePaid: () => onHavePaid(record),
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+}
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.24)),
-      ),
+class _ContributionRow extends StatelessWidget {
+  const _ContributionRow({
+    required this.record,
+    required this.isAdmin,
+    required this.isCurrentUser,
+    required this.onConfirm,
+    required this.onEdit,
+    required this.onWaive,
+    required this.onHavePaid,
+  });
+
+  final _ContributionRecord record;
+  final bool isAdmin;
+  final bool isCurrentUser;
+  final VoidCallback onConfirm;
+  final VoidCallback onEdit;
+  final VoidCallback onWaive;
+  final VoidCallback onHavePaid;
+
+  @override
+  Widget build(BuildContext context) {
+    return ds.AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              DhukutiAvatar(label: record.initials),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(record.memberName, style: AppTextStyles.cardTitle),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
-                      'Cycle ${cycle.cycleNumber} of ${contributions.length}',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                      'Expected ${_rs(record.expectedAmount)} • Received ${_rs(record.receivedAmount)}',
+                      style: AppTextStyles.bodySecondary,
                     ),
-                    const Text('Recipient'),
+                    const SizedBox(height: AppSpacing.xs),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        if (record.paymentMethod.isNotEmpty)
+                          _InlineMeta(
+                            icon: Icons.payments_outlined,
+                            label: record.paymentMethod,
+                          ),
+                        if (record.submittedAt != null)
+                          _InlineMeta(
+                            icon: Icons.upload_file_outlined,
+                            label:
+                                'Submitted ${dateLabel(record.submittedAt!)}',
+                          ),
+                        if (record.confirmedAt != null)
+                          _InlineMeta(
+                            icon: Icons.verified_outlined,
+                            label:
+                                'Confirmed ${dateLabel(record.confirmedAt!)}',
+                          ),
+                      ],
+                    ),
+                    if (record.status == _ContributionUiStatus.submitted) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Waiting for admin confirmation',
+                        style: AppTextStyles.caption.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              DhukutiStatusBadge(label: cycleStatus, tone: tone),
+              DhukutiStatusBadge(
+                label: _statusLabel(record.status),
+                tone: _statusTone(record.status),
+              ),
             ],
           ),
-          const SizedBox(height: 16),
-          Row(
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             children: [
-              DhukutiAvatar(label: recipient.avatar),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      recipient.displayName,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(
-                      'Expected payout amount ${money(cycle.expectedContributionTotalMinor)}',
-                    ),
-                  ],
+              if (isAdmin) ...[
+                FilledButton.tonalIcon(
+                  onPressed: onConfirm,
+                  icon: const Icon(Icons.check_circle_outline, size: 18),
+                  label: const Text('Confirm'),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    minHeight: 10,
-                    value: progress,
-                    backgroundColor: color.withValues(alpha: 0.14),
-                    valueColor: AlwaysStoppedAnimation<Color>(color),
-                  ),
+                OutlinedButton.icon(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('Edit'),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                '$paidCount of ${contributions.length} paid',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text('Due date: ${dateLabel(cycle.dueDate)}'),
-          if (cycle.status == DhukutiCycleStatus.atRisk) ...[
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.warning_amber_outlined, color: color),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Some contributions are still unpaid. Payout is not shown as guaranteed.',
-                  ),
+                OutlinedButton.icon(
+                  onPressed: onWaive,
+                  icon: const Icon(Icons.remove_done_outlined, size: 18),
+                  label: const Text('Waive'),
                 ),
               ],
-            ),
-          ],
-          if (cycle.status == DhukutiCycleStatus.readyForPayout ||
-              cycle.status == DhukutiCycleStatus.atRisk) ...[
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              onPressed: () => unawaited(
-                openTransactionConfirmation(
-                  context,
-                  _payoutConfirmationData(store, pool, cycle),
-                  () async {
-                    final wasReady =
-                        cycle.status == DhukutiCycleStatus.readyForPayout;
-                    final reference = store.confirmDhukutiPayoutReview(
-                      cycle.id,
-                    );
-                    return TransactionResult.success(
-                      title: wasReady
-                          ? 'Payout Recorded'
-                          : 'Payout Review Recorded',
-                      message:
-                          'Your Saving Circle ledger has been updated without implying a guaranteed payout.',
-                      amount: cycle.expectedContributionTotalMinor,
-                      transactionReference: reference,
-                      createdAt: DateTime.now(),
-                    );
-                  },
-                ),
+              OutlinedButton.icon(
+                onPressed: isCurrentUser ? onHavePaid : null,
+                icon: const Icon(Icons.upload_file_outlined, size: 18),
+                label: const Text('I Have Paid'),
               ),
-              icon: const Icon(Icons.fact_check_outlined),
-              label: const Text('Review payout'),
-            ),
-          ],
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-TransactionConfirmationData _payoutConfirmationData(
-  AppStore store,
-  DhukutiPool pool,
-  DhukutiCycle cycle,
-) {
-  return TransactionConfirmationData(
-    id: 'dhukuti-payout-${cycle.id}',
-    transactionType: TransactionType.dhukutiPayout,
-    title: 'Confirm Payout',
-    subtitle: '${pool.name} • Cycle ${cycle.cycleNumber}',
-    amount: cycle.expectedContributionTotalMinor,
-    payerName: pool.name,
-    payerAvatarUrl: 'D',
-    recipientName: store.nameOf(cycle.payoutRecipientId),
-    recipientAvatarUrl: store.userById(cycle.payoutRecipientId).avatar,
-    poolName: pool.name,
-    warningMessage: cycle.status == DhukutiCycleStatus.atRisk
-        ? 'Some contributions are unpaid. This payout should not be shown as guaranteed.'
-        : null,
-    complianceNote: dhukutiSafetyNoteText,
-    confirmationButtonText: 'Confirm Payout',
-    createdAt: DateTime.now(),
-    idempotencyKey: '${pool.id}-payout-${cycle.cycleNumber}',
-    operationType: 'dhukuti_payout',
-    details: [
-      TransactionDetail('Cycle', 'Cycle ${cycle.cycleNumber}'),
-      TransactionDetail(
-        'Paid contribution total',
-        money(cycle.paidContributionTotalMinor),
+class _HistoryView extends StatelessWidget {
+  const _HistoryView({
+    required this.selected,
+    required this.onChanged,
+    required this.ledger,
+  });
+
+  final _LedgerTab selected;
+  final ValueChanged<_LedgerTab> onChanged;
+  final List<_LedgerRecord> ledger;
+
+  @override
+  Widget build(BuildContext context) {
+    return DhukutiSection(
+      title: 'History / Ledger',
+      action: SegmentedButton<_LedgerTab>(
+        selected: {selected},
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: _LedgerTab.all, label: Text('All')),
+          ButtonSegment(
+            value: _LedgerTab.contributions,
+            label: Text('Contributions'),
+          ),
+          ButtonSegment(value: _LedgerTab.expenses, label: Text('Expenses')),
+        ],
+        onSelectionChanged: (value) => onChanged(value.first),
       ),
-      TransactionDetail('Cycle status', enumLabel(cycle.status)),
-    ],
-  );
+      child: ledger.isEmpty
+          ? DhukutiEmptyState(
+              icon: selected == _LedgerTab.expenses
+                  ? Icons.receipt_long_outlined
+                  : Icons.history_outlined,
+              title: switch (selected) {
+                _LedgerTab.expenses => 'No expenses recorded yet',
+                _ => 'No fund activity yet',
+              },
+              message: switch (selected) {
+                _LedgerTab.expenses =>
+                  'Shared expenses will appear here once recorded by an admin.',
+                _ =>
+                  'Confirmed contributions and recorded expenses will appear here.',
+              },
+            )
+          : Column(
+              children: [
+                for (final item in ledger)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: _LedgerTile(item: item),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+class _LedgerTile extends StatelessWidget {
+  const _LedgerTile({required this.item});
+
+  final _LedgerRecord item;
+
+  @override
+  Widget build(BuildContext context) {
+    final isContribution = item.type == _LedgerItemType.contribution;
+    final color = isContribution
+        ? dhukutiToneColor(context, DhukutiTone.success)
+        : Theme.of(context).colorScheme.error;
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+      leading: CircleAvatar(
+        backgroundColor: color.withValues(alpha: 0.12),
+        foregroundColor: color,
+        child: Icon(
+          isContribution
+              ? Icons.add_circle_outline
+              : Icons.remove_circle_outline,
+        ),
+      ),
+      title: Text(
+        item.title,
+        style: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: AppSpacing.xs),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(item.subtitle),
+            const SizedBox(height: AppSpacing.xs),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.xs,
+              children: [
+                for (final detail in item.details)
+                  _InlineMeta(icon: detail.icon, label: detail.label),
+              ],
+            ),
+          ],
+        ),
+      ),
+      trailing: Text(
+        '${isContribution ? '+' : '-'} ${_rs(item.amount)}',
+        style: TextStyle(color: color, fontWeight: FontWeight.w900),
+      ),
+    );
+  }
+}
+
+class _InlineMeta extends StatelessWidget {
+  const _InlineMeta({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    if (label.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: scheme.onSurfaceVariant),
+          const SizedBox(width: AppSpacing.xs),
+          Text(label, style: AppTextStyles.caption),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemberPaidSheet extends StatefulWidget {
+  const _MemberPaidSheet({required this.record, required this.month});
+
+  final _ContributionRecord record;
+  final String month;
+
+  @override
+  State<_MemberPaidSheet> createState() => _MemberPaidSheetState();
+}
+
+class _MemberPaidSheetState extends State<_MemberPaidSheet> {
+  late final TextEditingController _amount;
+  final _note = TextEditingController();
+  final _reference = TextEditingController();
+  var _method = _paymentMethods.first;
+
+  @override
+  void initState() {
+    super.initState();
+    _amount = TextEditingController(
+      text: (widget.record.expectedAmount ~/ 100).toString(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _note.dispose();
+    _reference.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SheetScaffold(
+      title: 'I Have Paid',
+      helper:
+          'Submit a note for money paid outside the app. Submitted payments do not change the fund balance.',
+      child: Column(
+        children: [
+          _ReadOnlyField(label: 'Month', value: widget.month),
+          TextField(
+            controller: _amount,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Amount paid',
+              prefixText: 'Rs. ',
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          DropdownButtonFormField<String>(
+            initialValue: _method,
+            decoration: const InputDecoration(labelText: 'Payment method'),
+            items: [
+              for (final item in _paymentMethods)
+                DropdownMenuItem(value: item, child: Text(item)),
+            ],
+            onChanged: (value) => setState(() => _method = value ?? _method),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _note,
+            decoration: const InputDecoration(labelText: 'Optional admin note'),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _reference,
+            decoration: const InputDecoration(
+              labelText: 'Optional reference number',
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  widget.record.copyWith(
+                    submittedAmount: parseMoneyToMinor(_amount.text),
+                    paymentMethod: _method,
+                    note: _note.text.trim(),
+                    referenceNumber: _reference.text.trim(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.verified_user_outlined),
+              label: const Text('Submit for Admin Confirmation'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminConfirmSheet extends StatefulWidget {
+  const _AdminConfirmSheet({
+    required this.records,
+    required this.selected,
+    required this.month,
+    required this.adminName,
+  });
+
+  final List<_ContributionRecord> records;
+  final _ContributionRecord selected;
+  final String month;
+  final String adminName;
+
+  @override
+  State<_AdminConfirmSheet> createState() => _AdminConfirmSheetState();
+}
+
+class _AdminConfirmSheetState extends State<_AdminConfirmSheet> {
+  late _ContributionRecord _selected;
+  late final TextEditingController _amount;
+  final _note = TextEditingController();
+  final _reference = TextEditingController();
+  var _method = _paymentMethods.first;
+  var _date = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.selected;
+    _amount = TextEditingController(
+      text:
+          ((_selected.submittedAmount > 0
+                      ? _selected.submittedAmount
+                      : _selected.expectedAmount) ~/
+                  100)
+              .toString(),
+    );
+    _method = _selected.paymentMethod;
+    _note.text = _selected.note;
+    _reference.text = _selected.referenceNumber;
+  }
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _note.dispose();
+    _reference.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SheetScaffold(
+      title: 'Confirm Received Contribution',
+      helper:
+          'This only records a payment received outside the app. No money is processed by the app.',
+      child: Column(
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: _selected.memberId,
+            decoration: const InputDecoration(labelText: 'Member'),
+            items: [
+              for (final record in widget.records)
+                DropdownMenuItem(
+                  value: record.memberId,
+                  child: Text(record.memberName),
+                ),
+            ],
+            onChanged: (value) {
+              final next = widget.records.firstWhere(
+                (item) => item.memberId == value,
+                orElse: () => _selected,
+              );
+              setState(() {
+                _selected = next;
+                _amount.text =
+                    ((next.submittedAmount > 0
+                                ? next.submittedAmount
+                                : next.expectedAmount) ~/
+                            100)
+                        .toString();
+                _method = next.paymentMethod;
+                _note.text = next.note;
+                _reference.text = next.referenceNumber;
+              });
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _ReadOnlyField(label: 'Month', value: widget.month),
+          _ReadOnlyField(
+            label: 'Expected amount',
+            value: _rs(_selected.expectedAmount),
+          ),
+          TextField(
+            controller: _amount,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Amount received',
+              prefixText: 'Rs. ',
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          DropdownButtonFormField<String>(
+            initialValue: _method,
+            decoration: const InputDecoration(labelText: 'Payment method'),
+            items: [
+              for (final item in _paymentMethods)
+                DropdownMenuItem(value: item, child: Text(item)),
+            ],
+            onChanged: (value) => setState(() => _method = value ?? _method),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Date received'),
+            subtitle: Text(dateLabel(_date)),
+            trailing: OutlinedButton.icon(
+              onPressed: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                  initialDate: _date,
+                );
+                if (picked != null) {
+                  setState(() => _date = picked);
+                }
+              },
+              icon: const Icon(Icons.calendar_today_outlined, size: 18),
+              label: const Text('Change'),
+            ),
+          ),
+          TextField(
+            controller: _note,
+            decoration: const InputDecoration(labelText: 'Optional note'),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _reference,
+            decoration: const InputDecoration(
+              labelText: 'Optional reference number',
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  _selected.copyWith(
+                    status: _ContributionUiStatus.confirmedReceived,
+                    receivedAmount: parseMoneyToMinor(_amount.text),
+                    paymentMethod: _method,
+                    confirmedAt: _date,
+                    confirmedBy: widget.adminName,
+                    note: _note.text.trim(),
+                    referenceNumber: _reference.text.trim(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.check_circle_outline),
+              label: const Text('Confirm Received'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecordExpenseSheet extends StatefulWidget {
+  const _RecordExpenseSheet({
+    required this.availableBalance,
+    required this.recordedBy,
+  });
+
+  final int availableBalance;
+  final String recordedBy;
+
+  @override
+  State<_RecordExpenseSheet> createState() => _RecordExpenseSheetState();
+}
+
+class _RecordExpenseSheetState extends State<_RecordExpenseSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _title = TextEditingController();
+  final _amount = TextEditingController();
+  final _description = TextEditingController();
+  final _receipt = TextEditingController();
+  var _category = _expenseCategories.first;
+  var _date = DateTime.now();
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _amount.dispose();
+    _description.dispose();
+    _receipt.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = parseMoneyToMinor(_amount.text);
+    final exceedsBalance = amount > widget.availableBalance && amount > 0;
+    return _SheetScaffold(
+      title: 'Record Expense',
+      helper: 'Record money spent from the community fund.',
+      child: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            TextFormField(
+              controller: _title,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Expense title'),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Title required'
+                  : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _amount,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Amount spent',
+                prefixText: 'Rs. ',
+              ),
+              onChanged: (_) => setState(() {}),
+              validator: (value) =>
+                  (value ?? '').contains('-') ||
+                      parseMoneyToMinor(value ?? '') <= 0
+                  ? 'Amount must be greater than 0'
+                  : null,
+            ),
+            if (exceedsBalance) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Warning: this amount exceeds the available fund balance.',
+                  style: AppTextStyles.caption.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.md),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Expense date'),
+              subtitle: Text(dateLabel(_date)),
+              trailing: OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                    initialDate: _date,
+                  );
+                  if (picked != null) {
+                    setState(() => _date = picked);
+                  }
+                },
+                icon: const Icon(Icons.calendar_today_outlined, size: 18),
+                label: const Text('Change'),
+              ),
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: _category,
+              decoration: const InputDecoration(labelText: 'Category'),
+              items: [
+                for (final item in _expenseCategories)
+                  DropdownMenuItem(value: item, child: Text(item)),
+              ],
+              onChanged: (value) =>
+                  setState(() => _category = value ?? _category),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _ReadOnlyField(
+              label: 'Paid by / recorded by',
+              value: widget.recordedBy,
+            ),
+            TextField(
+              controller: _description,
+              decoration: const InputDecoration(
+                labelText: 'Optional description',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _receipt,
+              decoration: const InputDecoration(
+                labelText: 'Optional receipt reference',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () {
+                  if (!_formKey.currentState!.validate()) {
+                    return;
+                  }
+                  Navigator.pop(
+                    context,
+                    _CommunityExpense(
+                      id: 'expense-${DateTime.now().microsecondsSinceEpoch}',
+                      title: _title.text.trim(),
+                      amount: parseMoneyToMinor(_amount.text),
+                      expenseDate: _date,
+                      category: _category,
+                      recordedBy: widget.recordedBy,
+                      description: _description.text.trim(),
+                      receiptReference: _receipt.text.trim(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('Record Expense'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionPanel extends StatelessWidget {
+  const _ActionPanel({required this.title, required this.actions});
+
+  final String title;
+  final List<_TrackerAction> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return DhukutiSection(
+      title: title,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final itemWidth = constraints.maxWidth < 560
+              ? constraints.maxWidth
+              : (constraints.maxWidth - AppSpacing.md) / 2;
+          return Wrap(
+            spacing: AppSpacing.md,
+            runSpacing: AppSpacing.md,
+            children: [
+              for (final action in actions)
+                SizedBox(width: itemWidth, child: action),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TrackerAction extends StatelessWidget {
+  const _TrackerAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+    );
+  }
 }
 
 class _Tabs extends StatelessWidget {
   const _Tabs({required this.selected, required this.onChanged});
 
-  final _DhukutiTab selected;
-  final ValueChanged<_DhukutiTab> onChanged;
+  final _TrackerTab selected;
+  final ValueChanged<_TrackerTab> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SegmentedButton<_DhukutiTab>(
-        selected: {selected},
-        onSelectionChanged: (value) => onChanged(value.first),
-        segments: const [
-          ButtonSegment(
-            value: _DhukutiTab.overview,
-            label: Text('Overview'),
-            icon: Icon(Icons.dashboard_outlined),
-          ),
-          ButtonSegment(
-            value: _DhukutiTab.members,
-            label: Text('Members'),
-            icon: Icon(Icons.groups_outlined),
-          ),
-          ButtonSegment(
-            value: _DhukutiTab.schedule,
-            label: Text('Schedule'),
-            icon: Icon(Icons.event_note_outlined),
-          ),
-          ButtonSegment(
-            value: _DhukutiTab.ledger,
-            label: Text('Ledger'),
-            icon: Icon(Icons.receipt_long_outlined),
-          ),
-        ],
-      ),
+    return SegmentedButton<_TrackerTab>(
+      selected: {selected},
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(
+          value: _TrackerTab.dashboard,
+          icon: Icon(Icons.dashboard_outlined),
+          label: Text('Dashboard'),
+        ),
+        ButtonSegment(
+          value: _TrackerTab.monthlyTracker,
+          icon: Icon(Icons.fact_check_outlined),
+          label: Text('Tracker'),
+        ),
+        ButtonSegment(
+          value: _TrackerTab.history,
+          icon: Icon(Icons.history_outlined),
+          label: Text('History'),
+        ),
+      ],
+      onSelectionChanged: (value) => onChanged(value.first),
     );
   }
 }
 
-class _OverviewTab extends StatelessWidget {
-  const _OverviewTab({
-    required this.store,
-    required this.pool,
-    required this.cycle,
-    required this.contributions,
-    required this.onPaid,
-  });
-
-  final AppStore store;
-  final DhukutiPool pool;
-  final DhukutiCycle? cycle;
-  final List<DhukutiContribution> contributions;
-  final VoidCallback onPaid;
-
+class _PaymentNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    if (cycle == null) {
-      return const DhukutiEmptyState(
-        icon: Icons.event_busy_outlined,
-        title: 'No cycle schedule',
-        message: 'The contribution schedule has not been generated yet.',
-      );
-    }
-    final paidTotal = cycle!.paidContributionTotalMinor;
-    final remaining = cycle!.expectedContributionTotalMinor - paidTotal;
-    final paidCount = contributions
-        .where((item) => item.status == ContributionStatus.paid)
-        .length;
-    final myContribution = contributions
-        .where((item) => item.userId == store.currentUserId)
-        .cast<DhukutiContribution?>()
-        .firstWhere((item) => item != null, orElse: () => null);
-    final canPay =
-        myContribution != null &&
-        myContribution.status != ContributionStatus.paid &&
-        myContribution.status != ContributionStatus.pending &&
-        cycle!.status != DhukutiCycleStatus.upcoming;
-
-    return DhukutiSection(
-      title: 'Overview',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DhukutiResponsiveGrid(
-            children: [
-              DhukutiMetricCard(
-                label: 'Contribution amount',
-                value: money(pool.contributionAmountMinor),
-                icon: Icons.savings_outlined,
-                tone: DhukutiTone.success,
-              ),
-              DhukutiMetricCard(
-                label: 'Expected collection',
-                value: money(cycle!.expectedContributionTotalMinor),
-                icon: Icons.account_balance_wallet_outlined,
-                tone: DhukutiTone.info,
-              ),
-              DhukutiMetricCard(
-                label: 'Paid so far',
-                value: money(paidTotal),
-                icon: Icons.check_circle_outline,
-                tone: DhukutiTone.success,
-              ),
-              DhukutiMetricCard(
-                label: 'Remaining amount',
-                value: money(remaining),
-                icon: Icons.pending_actions_outlined,
-                tone: remaining == 0
-                    ? DhukutiTone.success
-                    : DhukutiTone.warning,
-              ),
-              DhukutiMetricCard(
-                label: 'Current recipient',
-                value: store.nameOf(cycle!.payoutRecipientId),
-                icon: Icons.person_pin_circle_outlined,
-                tone: DhukutiTone.neutral,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '$paidCount of ${contributions.length} contributions paid',
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(
-            minHeight: 10,
-            borderRadius: BorderRadius.circular(999),
-            value: contributions.isEmpty ? 0 : paidCount / contributions.length,
-          ),
-          const SizedBox(height: 16),
-          _NextActionCard(
-            paid: myContribution?.status == ContributionStatus.paid,
-            canPay: canPay,
-            onPay: myContribution == null
-                ? null
-                : () async {
-                    final paid = await showDhukutiPaymentBottomSheet(
-                      context: context,
-                      store: store,
-                      pool: pool,
-                      contribution: myContribution,
-                    );
-                    if (paid) {
-                      onPaid();
-                    }
-                  },
-          ),
-          const SizedBox(height: 12),
-          _DhukutiExitCard(
-            store: store,
-            pool: pool,
-            contribution: myContribution,
-            onChanged: onPaid,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DhukutiExitCard extends StatelessWidget {
-  const _DhukutiExitCard({
-    required this.store,
-    required this.pool,
-    required this.contribution,
-    required this.onChanged,
-  });
-
-  final AppStore store;
-  final DhukutiPool pool;
-  final DhukutiContribution? contribution;
-  final VoidCallback onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final decision = store.dhukutiExitDecision(pool.id);
+    final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
+        color: scheme.primaryContainer.withValues(alpha: 0.36),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.16)),
       ),
-      child: Column(
+      child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.exit_to_app_outlined, color: dhukutiFestival),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  decision.title,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(decision.message),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              if (decision.secondaryAction != null)
-                OutlinedButton(
-                  onPressed: () => _showDhukutiExitDialog(context, store, pool),
-                  child: Text(decision.secondaryAction!),
-                ),
-              FilledButton(
-                onPressed: decision.type == DhukutiExitDecisionType.unavailable
-                    ? null
-                    : () async {
-                        if (decision.type ==
-                            DhukutiExitDecisionType.pendingContribution) {
-                          final paidAmount = store
-                              .payRemainingDhukutiExitContributions(pool.id);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  paidAmount == 0
-                                      ? 'No remaining contribution is open.'
-                                      : 'Paid ${money(paidAmount)} toward remaining Saving Circle obligations.',
-                                ),
-                              ),
-                            );
-                          }
-                          onChanged();
-                          return;
-                        }
-                        if (decision.type ==
-                                DhukutiExitDecisionType.receivedPayout &&
-                            decision.amountMinor > 0 &&
-                            contribution != null) {
-                          final paid = await showDhukutiPaymentBottomSheet(
-                            context: context,
-                            store: store,
-                            pool: pool,
-                            contribution: contribution!,
-                          );
-                          if (paid) {
-                            onChanged();
-                          }
-                          return;
-                        }
-                        if (decision.canLeaveNow) {
-                          final error = store.leaveDhukutiBeforeStart(pool.id);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  error ?? 'You left ${pool.name}.',
-                                ),
-                              ),
-                            );
-                          }
-                          onChanged();
-                          return;
-                        }
-                        await _showDhukutiExitDialog(context, store, pool);
-                        onChanged();
-                      },
-                child: Text(decision.primaryAction ?? 'Request Exit'),
-              ),
-            ],
+          Icon(Icons.info_outline),
+          SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'Payments are made outside the app. The fund balance updates only after an admin confirms money was received.',
+            ),
           ),
         ],
       ),
@@ -732,264 +1447,342 @@ class _DhukutiExitCard extends StatelessWidget {
   }
 }
 
-Future<void> _showDhukutiExitDialog(
-  BuildContext context,
-  AppStore store,
-  DhukutiPool pool,
-) async {
-  final decision = store.dhukutiExitDecision(pool.id);
-  final reason = TextEditingController(
-    text: decision.type == DhukutiExitDecisionType.pendingContribution
-        ? 'Requesting admin review before remaining contributions are fully paid'
-        : decision.type == DhukutiExitDecisionType.receivedPayout
-        ? 'Requesting exit approval after payout'
-        : 'Need to exit before receiving payout',
-  );
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text(decision.title),
-      content: SizedBox(
-        width: 460,
+class _SheetScaffold extends StatelessWidget {
+  const _SheetScaffold({
+    required this.title,
+    required this.helper,
+    required this.child,
+  });
+
+  final String title;
+  final String helper;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(decision.message),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reason,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Reason for admin and member review',
-              ),
+            Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
             ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(helper, style: AppTextStyles.bodySecondary),
+            const SizedBox(height: AppSpacing.lg),
+            child,
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('Cancel'),
+    );
+  }
+}
+
+class _ReadOnlyField extends StatelessWidget {
+  const _ReadOnlyField({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: InputDecorator(
+        decoration: InputDecoration(labelText: label),
+        child: Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+      ),
+    );
+  }
+}
+
+class _CommunitySavingsGroup {
+  const _CommunitySavingsGroup({
+    required this.id,
+    required this.name,
+    required this.monthlyContributionAmount,
+    required this.currency,
+    required this.currentBalance,
+  });
+
+  final String id;
+  final String name;
+  final int monthlyContributionAmount;
+  final String currency;
+  final int currentBalance;
+}
+
+class _CommunitySavingsMember {
+  const _CommunitySavingsMember({
+    required this.id,
+    required this.name,
+    required this.role,
+    required this.avatarInitials,
+  });
+
+  final String id;
+  final String name;
+  final String role;
+  final String avatarInitials;
+}
+
+class _ContributionRecord {
+  _ContributionRecord({
+    required this.id,
+    required this.memberId,
+    required this.memberName,
+    required this.month,
+    required this.initials,
+    required this.expectedAmount,
+    required this.receivedAmount,
+    required this.submittedAmount,
+    required this.status,
+    required this.paymentMethod,
+    required this.submittedAt,
+    required this.confirmedAt,
+    required this.confirmedBy,
+    required this.note,
+    required this.referenceNumber,
+  });
+
+  factory _ContributionRecord.seed({
+    required String id,
+    required String memberId,
+    required String memberName,
+    required String month,
+    required String initials,
+    required int expectedAmount,
+    required _ContributionUiStatus status,
+    required String confirmedBy,
+  }) {
+    final now = DateTime.now();
+    return _ContributionRecord(
+      id: id,
+      memberId: memberId,
+      memberName: memberName,
+      month: month,
+      initials: initials,
+      expectedAmount: expectedAmount,
+      receivedAmount: status == _ContributionUiStatus.confirmedReceived
+          ? expectedAmount
+          : 0,
+      submittedAmount: status == _ContributionUiStatus.submitted
+          ? expectedAmount
+          : 0,
+      status: status,
+      paymentMethod:
+          status == _ContributionUiStatus.pending ||
+              status == _ContributionUiStatus.waived
+          ? ''
+          : switch (status) {
+              _ContributionUiStatus.confirmedReceived => 'Cash',
+              _ContributionUiStatus.submitted => 'eSewa',
+              _ => '',
+            },
+      submittedAt: switch (status) {
+        _ContributionUiStatus.confirmedReceived => now.subtract(
+          const Duration(days: 9),
         ),
-        FilledButton(
-          onPressed: decision.canRequestApproval
-              ? () {
-                  store.requestEmergencyExit(pool.id, reason.text);
-                  Navigator.pop(dialogContext);
-                }
-              : null,
-          child: const Text('Request Review'),
+        _ContributionUiStatus.submitted => now.subtract(
+          const Duration(days: 2),
+        ),
+        _ => null,
+      },
+      confirmedAt: status == _ContributionUiStatus.confirmedReceived
+          ? now.subtract(const Duration(days: 8))
+          : null,
+      confirmedBy: status == _ContributionUiStatus.confirmedReceived
+          ? confirmedBy
+          : '',
+      note: '',
+      referenceNumber: '',
+    );
+  }
+
+  final String id;
+  final String memberId;
+  final String memberName;
+  final String month;
+  final String initials;
+  final int expectedAmount;
+  int receivedAmount;
+  int submittedAmount;
+  _ContributionUiStatus status;
+  String paymentMethod;
+  DateTime? submittedAt;
+  DateTime? confirmedAt;
+  String confirmedBy;
+  String note;
+  String referenceNumber;
+
+  _ContributionRecord copyWith({
+    int? receivedAmount,
+    int? submittedAmount,
+    _ContributionUiStatus? status,
+    String? paymentMethod,
+    DateTime? submittedAt,
+    DateTime? confirmedAt,
+    String? confirmedBy,
+    String? note,
+    String? referenceNumber,
+  }) {
+    return _ContributionRecord(
+      id: id,
+      memberId: memberId,
+      memberName: memberName,
+      month: month,
+      initials: initials,
+      expectedAmount: expectedAmount,
+      receivedAmount: receivedAmount ?? this.receivedAmount,
+      submittedAmount: submittedAmount ?? this.submittedAmount,
+      status: status ?? this.status,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      submittedAt: submittedAt ?? this.submittedAt,
+      confirmedAt: confirmedAt ?? this.confirmedAt,
+      confirmedBy: confirmedBy ?? this.confirmedBy,
+      note: note ?? this.note,
+      referenceNumber: referenceNumber ?? this.referenceNumber,
+    );
+  }
+}
+
+class _CommunityExpense {
+  _CommunityExpense({
+    required this.id,
+    required this.title,
+    required this.amount,
+    required this.expenseDate,
+    required this.category,
+    required this.recordedBy,
+    required this.description,
+    required this.receiptReference,
+  });
+
+  final String id;
+  final String title;
+  final int amount;
+  final DateTime expenseDate;
+  final String category;
+  final String recordedBy;
+  final String description;
+  final String receiptReference;
+}
+
+class _LedgerRecord {
+  _LedgerRecord({
+    required this.sourceId,
+    required this.type,
+    required this.title,
+    required this.subtitle,
+    required this.amount,
+    required this.date,
+    required this.details,
+  });
+
+  factory _LedgerRecord.contribution(
+    _ContributionRecord record,
+    DateTime date,
+  ) {
+    return _LedgerRecord(
+      sourceId: record.id,
+      type: _LedgerItemType.contribution,
+      title: 'Contribution confirmed',
+      subtitle: record.memberName,
+      amount: record.receivedAmount,
+      date: date,
+      details: [
+        _LedgerDetail(Icons.payments_outlined, record.paymentMethod),
+        _LedgerDetail(Icons.calendar_month_outlined, record.month),
+        _LedgerDetail(
+          Icons.verified_outlined,
+          'Confirmed ${dateLabel(record.confirmedAt ?? date)}',
+        ),
+        _LedgerDetail(
+          Icons.admin_panel_settings_outlined,
+          'Confirmed by ${record.confirmedBy.isEmpty ? 'admin' : record.confirmedBy}',
         ),
       ],
-    ),
-  );
-  reason.dispose();
-}
-
-class _NextActionCard extends StatelessWidget {
-  const _NextActionCard({
-    required this.paid,
-    required this.canPay,
-    required this.onPay,
-  });
-
-  final bool paid;
-  final bool canPay;
-  final VoidCallback? onPay;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            paid
-                ? Icons.check_circle_outline
-                : Icons.account_balance_wallet_outlined,
-            color: paid ? dhukutiPrimary : dhukutiFestival,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              paid
-                  ? 'Your contribution is paid'
-                  : canPay
-                  ? 'Your current cycle contribution is due.'
-                  : 'No payable contribution is open for you right now.',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-          FilledButton(
-            onPressed: canPay ? onPay : null,
-            child: const Text('Pay Contribution'),
-          ),
-        ],
-      ),
     );
   }
-}
 
-class _MembersTab extends StatelessWidget {
-  const _MembersTab({
-    required this.store,
-    required this.pool,
-    required this.members,
-    required this.cycle,
-    required this.contributions,
-  });
-
-  final AppStore store;
-  final DhukutiPool pool;
-  final List<DhukutiMember> members;
-  final DhukutiCycle? cycle;
-  final List<DhukutiContribution> contributions;
-
-  @override
-  Widget build(BuildContext context) {
-    return DhukutiSection(
-      title: 'Members',
-      child: Column(
-        children: [
-          for (final member in members)
-            DhukutiMemberRow(
-              store: store,
-              member: member,
-              isOrganizer: member.userId == pool.createdBy,
-              contribution: contributions
-                  .where((item) => item.userId == member.userId)
-                  .cast<DhukutiContribution?>()
-                  .firstWhere((item) => item != null, orElse: () => null),
-              amountMinor: pool.contributionAmountMinor,
-            ),
-        ],
-      ),
+  factory _LedgerRecord.expense(_CommunityExpense expense) {
+    return _LedgerRecord(
+      sourceId: expense.id,
+      type: _LedgerItemType.expense,
+      title: expense.title,
+      subtitle: expense.category,
+      amount: expense.amount,
+      date: expense.expenseDate,
+      details: [
+        _LedgerDetail(
+          Icons.calendar_today_outlined,
+          dateLabel(expense.expenseDate),
+        ),
+        _LedgerDetail(
+          Icons.person_outline,
+          'Recorded by ${expense.recordedBy}',
+        ),
+      ],
     );
   }
+
+  final String sourceId;
+  final _LedgerItemType type;
+  final String title;
+  final String subtitle;
+  final int amount;
+  final DateTime date;
+  final List<_LedgerDetail> details;
 }
 
-class _ScheduleTab extends StatelessWidget {
-  const _ScheduleTab({
-    required this.store,
-    required this.pool,
-    required this.members,
-    required this.cycles,
-    required this.currentCycle,
-  });
+class _LedgerDetail {
+  const _LedgerDetail(this.icon, this.label);
 
-  final AppStore store;
-  final DhukutiPool pool;
-  final List<DhukutiMember> members;
-  final List<DhukutiCycle> cycles;
-  final DhukutiCycle? currentCycle;
-
-  @override
-  Widget build(BuildContext context) {
-    return DhukutiSection(
-      title: 'Schedule',
-      child: Column(
-        children: [
-          for (final cycle in cycles)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: DhukutiCycleCard(
-                store: store,
-                cycle: cycle,
-                members: members,
-                contributions: store.dhukutiContributions
-                    .where((item) => item.cycleId == cycle.id)
-                    .toList(),
-                current: cycle.id == currentCycle?.id,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
+  final IconData icon;
+  final String label;
 }
 
-class _LedgerTab extends StatelessWidget {
-  const _LedgerTab({
-    required this.store,
-    required this.pool,
-    required this.filter,
-    required this.onFilterChanged,
-  });
-
-  final AppStore store;
-  final DhukutiPool pool;
-  final DhukutiLedgerFilter filter;
-  final ValueChanged<DhukutiLedgerFilter> onFilterChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final events =
-        store.activity
-            .where(
-              (event) =>
-                  event.groupId == pool.groupId &&
-                  ledgerEventMatches(event, filter),
-            )
-            .toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-    return DhukutiSection(
-      title: 'Transparent Ledger',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Wrap(
-              spacing: 8,
-              children: [
-                for (final item in DhukutiLedgerFilter.values)
-                  ChoiceChip(
-                    selected: filter == item,
-                    label: Text(_filterLabel(item)),
-                    onSelected: (_) => onFilterChanged(item),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (events.isEmpty)
-            const DhukutiEmptyState(
-              icon: Icons.receipt_long_outlined,
-              title: 'No ledger activity',
-              message: 'Saving Circle actions and status updates appear here.',
-            )
-          else
-            for (final event in events)
-              DhukutiLedgerItem(store: store, event: event),
-        ],
-      ),
-    );
-  }
-}
-
-String _friendlyCycleStatus(DhukutiCycleStatus status) {
+String _statusLabel(_ContributionUiStatus status) {
   return switch (status) {
-    DhukutiCycleStatus.open => 'On Track',
-    DhukutiCycleStatus.atRisk => 'At Risk',
-    DhukutiCycleStatus.readyForPayout => 'Ready for Payout',
-    DhukutiCycleStatus.paidOut => 'Paid Out',
-    DhukutiCycleStatus.closed => 'Closed',
-    DhukutiCycleStatus.upcoming => 'Upcoming',
-    DhukutiCycleStatus.cancelled => 'Cancelled',
+    _ContributionUiStatus.pending => 'Pending',
+    _ContributionUiStatus.submitted => 'Submitted',
+    _ContributionUiStatus.confirmedReceived => 'Confirmed Received',
+    _ContributionUiStatus.waived => 'Waived',
   };
 }
 
-String _filterLabel(DhukutiLedgerFilter filter) {
-  return switch (filter) {
-    DhukutiLedgerFilter.all => 'All',
-    DhukutiLedgerFilter.contributions => 'Contributions',
-    DhukutiLedgerFilter.payouts => 'Payouts',
-    DhukutiLedgerFilter.statusUpdates => 'Status Updates',
+DhukutiTone _statusTone(_ContributionUiStatus status) {
+  return switch (status) {
+    _ContributionUiStatus.pending => DhukutiTone.neutral,
+    _ContributionUiStatus.submitted => DhukutiTone.info,
+    _ContributionUiStatus.confirmedReceived => DhukutiTone.success,
+    _ContributionUiStatus.waived => DhukutiTone.warning,
   };
+}
+
+String _rs(int minor) => money(minor).replaceFirst('NPR', 'Rs.');
+
+String _monthLabel(DateTime date) {
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  return '${months[date.month - 1]} ${date.year}';
 }

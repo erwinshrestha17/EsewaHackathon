@@ -114,9 +114,7 @@ class HomeController {
           poolName: item.pool.name,
           amount: item.contribution.amountMinor,
           dueLabel: _dueLabel(item.contribution.dueDate),
-          cycleLabel:
-              'Cycle ${item.contribution.cycleNumber} of ${store.dhukutiCycles.where((cycle) => cycle.poolId == item.pool.id).length}',
-          payoutRecipientName: store.nameOf(item.cycle.payoutRecipientId),
+          cycleLabel: 'Monthly contribution',
           status: _dhukutiDueStatus(item.contribution, item.cycle, now),
           isPayable: _isDhukutiContributionPayable(
             item.pool,

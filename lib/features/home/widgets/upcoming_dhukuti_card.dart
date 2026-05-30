@@ -26,7 +26,7 @@ class UpcomingDhukutiCard extends StatelessWidget {
         item.status == 'At Risk' || item.status == 'Due Late';
     final color = needsAttention ? const Color(0xFFB56A12) : scheme.primary;
     return _HomeSection(
-      title: 'Upcoming Saving Circle',
+      title: 'Community Savings Tracker',
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
@@ -56,7 +56,7 @@ class UpcomingDhukutiCard extends StatelessWidget {
                             ?.copyWith(fontWeight: FontWeight.w900),
                       ),
                       Text(
-                        '${item.cycleLabel} · Recipient: ${item.payoutRecipientName}',
+                        '${item.cycleLabel} · Paid outside the app',
                         style: TextStyle(color: scheme.onSurfaceVariant),
                       ),
                     ],
@@ -78,7 +78,7 @@ class UpcomingDhukutiCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Saving Circle is shown as a transparent contribution ledger and payment scheduler.',
+              'Submit a payment note after paying outside the app. Balance updates after admin confirmation.',
               style: TextStyle(
                 color: scheme.onSurfaceVariant,
                 fontSize: 12,
@@ -93,7 +93,7 @@ class UpcomingDhukutiCard extends StatelessWidget {
                     ? Icons.account_balance_wallet_outlined
                     : Icons.receipt_long_outlined,
               ),
-              label: Text(item.isPayable ? 'Pay Contribution' : 'View Ledger'),
+              label: Text(item.isPayable ? 'I Have Paid' : 'View History'),
             ),
           ],
         ),

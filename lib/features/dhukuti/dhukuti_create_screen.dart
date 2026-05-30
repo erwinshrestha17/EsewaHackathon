@@ -18,11 +18,9 @@ class DhukutiCreateScreen extends StatefulWidget {
 }
 
 class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
-  final _poolName = TextEditingController(text: 'New Saving Circle');
+  final _poolName = TextEditingController(text: 'New Community Fund');
   final _amount = TextEditingController(text: '3000');
-  final _serviceFee = TextEditingController(text: '50');
   var _frequency = 'Monthly';
-  var _payoutOrder = 'Manual order';
   String? _groupId;
   final _selectedMembers = <String>{};
   var _agreementAccepted = false;
@@ -41,7 +39,6 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
   void dispose() {
     _poolName.dispose();
     _amount.dispose();
-    _serviceFee.dispose();
     super.dispose();
   }
 
@@ -52,20 +49,19 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
     final connections = store.activeConnectionUsers();
     final memberCount = _selectedMembers.length + 1;
     final amount = parseMoneyToMinor(_amount.text);
-    final serviceFee = parseMoneyToMinor(_serviceFee.text);
     final expected = amount * memberCount;
-    final netPayout = expected - serviceFee;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Saving Circle Pool')),
+      appBar: AppBar(title: const Text('Create Community Savings Tracker')),
       body: DhukutiScrollView(
         children: [
           DhukutiHeader(
-            title: 'Create Saving Circle Pool',
-            subtitle: 'Set up a trusted contribution circle.',
+            title: 'Create Community Savings Tracker',
+            subtitle:
+                'Set up a trusted contribution tracker for money collected outside the app.',
           ),
           DhukutiSection(
-            title: 'Pool Details',
+            title: 'Tracker Details',
             child: Column(
               children: [
                 TextField(
@@ -109,16 +105,6 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                       setState(() => _frequency = value ?? _frequency),
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: _serviceFee,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Service fee per payout',
-                    prefixText: 'NPR ',
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 12),
                 InputDatePickerFormField(
                   firstDate: DateTime(2026, 5, 29),
                   lastDate: DateTime(2027, 12, 31),
@@ -138,7 +124,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'You are included automatically. Select members who must accept the Saving Circle schedule.',
+                  'You are included automatically. Select members whose monthly contributions will be tracked.',
                   style: AppTextStyles.bodySecondary,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -170,53 +156,20 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
             ),
           ),
           DhukutiSection(
-            title: 'Payout Order',
-            child: SegmentedButton<String>(
-              selected: {_payoutOrder},
-              onSelectionChanged: (value) =>
-                  setState(() => _payoutOrder = value.first),
-              segments: const [
-                ButtonSegment(
-                  value: 'Manual order',
-                  label: Text('Manual'),
-                  icon: Icon(Icons.drag_indicator),
-                ),
-                ButtonSegment(
-                  value: 'Random order',
-                  label: Text('Random'),
-                  icon: Icon(Icons.shuffle),
-                ),
-                ButtonSegment(
-                  value: 'Organizer first',
-                  label: Text('Organizer'),
-                  icon: Icon(Icons.workspace_premium_outlined),
-                ),
-              ],
-            ),
-          ),
-          DhukutiSection(
             title: 'Review',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _ReviewRow(label: 'Contribution amount', value: money(amount)),
                 _ReviewRow(label: 'Number of members', value: '$memberCount'),
-                _ReviewRow(label: 'Gross pot', value: money(expected)),
-                _ReviewRow(label: 'Service fee', value: money(serviceFee)),
                 _ReviewRow(
-                  label: 'Net payout per cycle',
-                  value: money(netPayout),
+                  label: 'Expected monthly total',
+                  value: money(expected),
                 ),
-                _ReviewRow(label: 'Total cycles', value: '$memberCount'),
                 const _ReviewRow(label: 'Start date', value: 'Jun 15, 2026'),
-                _ReviewRow(label: 'Payout order', value: _payoutOrder),
                 const _ReviewRow(
-                  label: 'Late contribution rule',
-                  value: 'Marked at risk after due date',
-                ),
-                const _ReviewRow(
-                  label: 'Exit rule',
-                  value: 'Member review after contribution or payout',
+                  label: 'Balance rule',
+                  value: 'Only confirmed received contributions update balance',
                 ),
                 _ReviewRow(
                   label: 'Admin',
@@ -233,7 +186,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                     ),
                   ),
                   child: const Text(
-                    'Saving Circle is a contribution schedule and transparent ledger. It does not provide credit, interest, investment return, or guaranteed payout.',
+                    'Community Savings Tracker records contributions paid outside the app. It does not process money.',
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -241,7 +194,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                   contentPadding: EdgeInsets.zero,
                   value: _agreementAccepted,
                   title: const Text(
-                    'I understand the contribution and payout schedule.',
+                    'I understand admin confirmation is required before the fund balance updates.',
                   ),
                   onChanged: (value) =>
                       setState(() => _agreementAccepted = value ?? false),
@@ -270,7 +223,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
     final id = widget.store.createDhukutiPool(
       groupId: _groupId!,
       name: _poolName.text.trim().isEmpty
-          ? 'New Saving Circle'
+          ? 'New Community Fund'
           : _poolName.text.trim(),
       contributionAmountMinor: parseMoneyToMinor(_amount.text),
       frequency: _frequency,

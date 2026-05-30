@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/design_system/app_spacing.dart';
+import '../../../shared/design_system/app_text_styles.dart';
 import '../../../src/app_state.dart';
-import '../../../src/finance.dart';
 import '../../../src/models.dart';
-import '../../../features/settings/settings_models.dart';
-import '../../../shared/transactions/transaction_confirmation_controller.dart';
-import '../../../shared/transactions/transaction_confirmation_data.dart';
-import '../../../shared/transactions/transaction_status.dart';
-import '../../../shared/transactions/transaction_type.dart';
-import 'dhukuti_tokens.dart';
+
+const List<String> _paymentMethods = [
+  'Cash',
+  'Bank Transfer',
+  'eSewa',
+  'Khalti',
+  'IME Pay',
+  'Other',
+];
 
 Future<bool> showDhukutiPaymentBottomSheet({
   required BuildContext context,
@@ -16,179 +20,138 @@ Future<bool> showDhukutiPaymentBottomSheet({
   required DhukutiPool pool,
   required DhukutiContribution contribution,
 }) async {
-  final cycle = store.dhukutiCycles.firstWhere(
-    (item) => item.id == contribution.cycleId,
-  );
-  final result = await openTransactionConfirmation(
-    context,
-    TransactionConfirmationData(
-      id: contribution.id,
-      transactionType: TransactionType.dhukutiContribution,
-      title: 'Confirm Saving Circle Contribution',
-      subtitle: '${pool.name} • Cycle ${contribution.cycleNumber}',
+  final result = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) => _ContributionNoteSheet(
+      groupName: pool.name,
       amount: contribution.amountMinor,
-      payerName: store.nameOf(contribution.userId),
-      payerAvatarUrl: store.userById(contribution.userId).avatar,
-      recipientName: store.nameOf(cycle.payoutRecipientId),
-      recipientAvatarUrl: store.userById(cycle.payoutRecipientId).avatar,
-      poolName: pool.name,
-      complianceNote: dhukutiSafetyNoteText,
-      confirmationButtonText: 'Pay Contribution',
-      createdAt: DateTime.now(),
-      idempotencyKey: contribution.idempotencyKey,
-      operationType: contribution.operationType,
-      details: [
-        TransactionDetail('Cycle', 'Cycle ${contribution.cycleNumber}'),
-        TransactionDetail('Due date', dateLabel(contribution.dueDate)),
-        TransactionDetail('Recipient', store.nameOf(cycle.payoutRecipientId)),
-      ],
+      monthLabel: 'Month ${contribution.cycleNumber}',
     ),
-    () async {
-      store.payDhukutiContribution(contribution.id);
-      return TransactionResult.success(
-        title: 'Contribution Paid',
-        message: 'Your Saving Circle ledger has been updated.',
-        amount: contribution.amountMinor,
-        transactionReference: contribution.id,
-        createdAt: DateTime.now(),
-      );
-    },
   );
-  return result?.isSuccess ?? false;
+  return result ?? false;
 }
 
-class _DhukutiPaymentSheet extends StatefulWidget {
-  const _DhukutiPaymentSheet({
-    required this.store,
-    required this.pool,
-    required this.contribution,
+class _ContributionNoteSheet extends StatefulWidget {
+  const _ContributionNoteSheet({
+    required this.groupName,
+    required this.amount,
+    required this.monthLabel,
   });
 
-  final AppStore store;
-  final DhukutiPool pool;
-  final DhukutiContribution contribution;
+  final String groupName;
+  final int amount;
+  final String monthLabel;
 
   @override
-  State<_DhukutiPaymentSheet> createState() => _DhukutiPaymentSheetState();
+  State<_ContributionNoteSheet> createState() => _ContributionNoteSheetState();
 }
 
-class _DhukutiPaymentSheetState extends State<_DhukutiPaymentSheet> {
-  var _paid = false;
+class _ContributionNoteSheetState extends State<_ContributionNoteSheet> {
+  late final TextEditingController _amount;
+  final _note = TextEditingController();
+  final _reference = TextEditingController();
+  var _method = _paymentMethods.first;
+
+  @override
+  void initState() {
+    super.initState();
+    _amount = TextEditingController(text: (widget.amount ~/ 100).toString());
+  }
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _note.dispose();
+    _reference.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 20),
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 220),
-          child: _paid ? _successView(context) : _confirmView(context),
-        ),
-      ),
-    );
-  }
-
-  Widget _confirmView(BuildContext context) {
-    return Column(
-      key: const ValueKey('confirm'),
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Confirm Saving Circle Contribution',
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 6),
-        const Text('Review the contribution details before confirming.'),
-        const SizedBox(height: 16),
-        _PaymentRow(
-          label: 'Amount',
-          value: money(widget.contribution.amountMinor),
-        ),
-        _PaymentRow(label: 'Pool', value: widget.pool.name),
-        _PaymentRow(
-          label: 'Cycle',
-          value: 'Cycle ${widget.contribution.cycleNumber}',
-        ),
-        const _PaymentRow(label: 'Payment method', value: 'eSewa Wallet'),
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          onPressed: () {
-            widget.store.payDhukutiContribution(widget.contribution.id);
-            setState(() => _paid = true);
-          },
-          icon: const Icon(Icons.account_balance_wallet_outlined),
-          label: const Text('Pay with eSewa'),
-        ),
-      ],
-    );
-  }
-
-  Widget _successView(BuildContext context) {
-    return Column(
-      key: const ValueKey('success'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 76,
-          height: 76,
-          decoration: BoxDecoration(
-            color: dhukutiPrimary.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(
-            Icons.check_circle_outline,
-            size: 44,
-            color: dhukutiPrimary,
-          ),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          'Contribution Paid',
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Your ${money(widget.contribution.amountMinor)} contribution was recorded in the transparent ledger.',
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 16),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('Done'),
-        ),
-      ],
-    );
-  }
-}
-
-class _PaymentRow extends StatelessWidget {
-  const _PaymentRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Expanded(child: Text(label)),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: const TextStyle(fontWeight: FontWeight.w800),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'I Have Paid',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
             ),
-          ),
-        ],
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Submit a note for a monthly contribution paid outside the app. The available fund balance updates only after admin confirmation.',
+              style: AppTextStyles.bodySecondary,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            InputDecorator(
+              decoration: const InputDecoration(labelText: 'Group'),
+              child: Text(
+                widget.groupName,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            InputDecorator(
+              decoration: const InputDecoration(labelText: 'Month'),
+              child: Text(
+                widget.monthLabel,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _amount,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Amount paid',
+                prefixText: 'Rs. ',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            DropdownButtonFormField<String>(
+              initialValue: _method,
+              decoration: const InputDecoration(labelText: 'Payment method'),
+              items: [
+                for (final method in _paymentMethods)
+                  DropdownMenuItem(value: method, child: Text(method)),
+              ],
+              onChanged: (value) => setState(() => _method = value ?? _method),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _note,
+              decoration: const InputDecoration(labelText: 'Optional note'),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _reference,
+              decoration: const InputDecoration(
+                labelText: 'Optional reference number',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => Navigator.pop(context, true),
+                icon: const Icon(Icons.verified_user_outlined),
+                label: const Text('Submit for Admin Confirmation'),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Your payment note has been submitted. The fund balance will update after the admin confirms the money was received.',
+              style: AppTextStyles.caption,
+            ),
+          ],
+        ),
       ),
     );
   }

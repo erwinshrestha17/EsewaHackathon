@@ -36,7 +36,7 @@ class DhukutiMemberRow extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: DhukutiAvatar(label: user.avatar),
       title: Text(user.displayName),
-      subtitle: Text('$memberStatus • Payout order #${member.payoutOrder}'),
+      subtitle: Text(memberStatus),
       trailing: Wrap(
         spacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,

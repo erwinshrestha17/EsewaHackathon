@@ -328,13 +328,13 @@ void main() {
     );
   });
 
-  test('upcoming Saving Circle card skips paid past cycles', () {
+  test('upcoming savings tracker card skips paid past months', () {
     final store = AppStore();
     final now = DateTime.now();
     final pool = DhukutiPool(
       id: 'd-test-upcoming',
       groupId: 'g-test',
-      name: 'Future Office Saving Circle',
+      name: 'Future Office Community Fund',
       contributionAmountMinor: npr(1000),
       frequency: 'Monthly',
       startDate: now.add(const Duration(days: 12)),
@@ -627,7 +627,7 @@ void main() {
   });
 
   testWidgets(
-    'Saving Circle quick action opens Saving Circle Groups inside Groups tab',
+    'Savings Tracker quick action opens Community Savings inside Groups tab',
     (tester) async {
       tester.view.physicalSize = const Size(800, 900);
       tester.view.devicePixelRatio = 1;
@@ -653,17 +653,15 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();
 
-      final savingCircleAction = find.text('Saving Circle').first;
-      await tester.ensureVisible(savingCircleAction);
-      await tester.tap(savingCircleAction);
+      final savingsTrackerAction = find.text('Savings Tracker').first;
+      await tester.ensureVisible(savingsTrackerAction);
+      await tester.tap(savingsTrackerAction);
       await tester.pumpAndSettle();
 
-      expect(find.text('Saving Circle Groups'), findsOneWidget);
-      expect(find.text('Saving Circle'), findsWidgets);
+      expect(find.text('Community Savings'), findsOneWidget);
+      expect(find.text('Community Savings Tracker'), findsWidgets);
       expect(
-        find.text(
-          'Expense groups stay separate from Saving Circle commitments.',
-        ),
+        find.text('Expense groups stay separate from community fund tracking.'),
         findsNothing,
       );
       expect(tester.takeException(), isNull);
@@ -774,7 +772,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Create Expense Group'), findsWidgets);
-    expect(find.text('Saving Circle Group'), findsNothing);
+    expect(find.text('Community Savings Tracker Group'), findsNothing);
     final memberChips = tester.widgetList<FilterChip>(find.byType(FilterChip));
     expect(memberChips, isNotEmpty);
     expect(memberChips.every((chip) => !chip.selected), isTrue);
@@ -786,7 +784,7 @@ void main() {
     );
   });
 
-  testWidgets('Saving Circle create flow uses circle-specific setup', (
+  testWidgets('Community Savings create flow uses tracker-specific setup', (
     tester,
   ) async {
     final store = AppStore();
@@ -800,7 +798,7 @@ void main() {
               return Scaffold(
                 body: FilledButton(
                   onPressed: () => showCreateDhukutiGroupDialog(context),
-                  child: const Text('Open Saving Circle create'),
+                  child: const Text('Open tracker create'),
                 ),
               );
             },
@@ -809,14 +807,12 @@ void main() {
       ),
     );
 
-    await tester.tap(
-      find.widgetWithText(FilledButton, 'Open Saving Circle create'),
-    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Open tracker create'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Create Saving Circle Group'), findsWidgets);
+    expect(find.text('Create Community Savings Tracker Group'), findsWidgets);
     expect(find.text('Contribution amount'), findsOneWidget);
-    expect(find.text('Gross pot per cycle'), findsOneWidget);
+    expect(find.text('Expected monthly total'), findsOneWidget);
     expect(find.text('Default split: Equal'), findsNothing);
     final memberCards = tester
         .widgetList<ParticipantSelectorCard>(
@@ -830,7 +826,7 @@ void main() {
     expect(memberCards.first.enabled, isFalse);
   });
 
-  testWidgets('Groups screen separates expense and Saving Circle groups', (
+  testWidgets('Groups screen separates expense and community savings groups', (
     tester,
   ) async {
     final store = AppStore();
@@ -850,18 +846,18 @@ void main() {
     expect(find.text('Dashain Khasi Split'), findsOneWidget);
     expect(find.text('Shrestha Family'), findsNothing);
 
-    final savingCircleTab = find.text('Saving Circle Groups');
-    await tester.ensureVisible(savingCircleTab);
-    await tester.tapAt(tester.getCenter(savingCircleTab));
+    final savingsTrackerTab = find.text('Community Savings');
+    await tester.ensureVisible(savingsTrackerTab);
+    await tester.tapAt(tester.getCenter(savingsTrackerTab));
     await tester.pump();
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.text('Family Dashain Saving Circle'),
+      find.text('Family Dashain Community Fund'),
       300,
       scrollable: find.byType(Scrollable).last,
     );
-    expect(find.text('Family Dashain Saving Circle'), findsOneWidget);
+    expect(find.text('Family Dashain Community Fund'), findsOneWidget);
     expect(find.text('Dashain Khasi Split'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -992,7 +988,7 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, 'Rename'), findsOneWidget);
   });
 
-  testWidgets('admin sees rename action in Saving Circle group detail', (
+  testWidgets('admin sees rename action in community savings group detail', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 1400);
@@ -1010,11 +1006,11 @@ void main() {
       ),
     );
 
-    final savingCircleTab = find.text('Saving Circle Groups');
-    await tester.tapAt(tester.getCenter(savingCircleTab));
+    final savingsTrackerTab = find.text('Community Savings');
+    await tester.tapAt(tester.getCenter(savingsTrackerTab));
     await tester.pumpAndSettle();
 
-    expect(find.text('Family Dashain Saving Circle'), findsWidgets);
+    expect(find.text('Family Dashain Community Fund'), findsWidgets);
     final renameButton = tester.widget<OutlinedButton>(
       find.widgetWithText(OutlinedButton, 'Rename'),
     );
