@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../auth/auth_controller.dart';
+import '../../shared/payments/esewa_payment_service.dart';
 import '../../shared/design_system/app_components.dart' as ds;
 import '../../shared/design_system/app_spacing.dart';
 import '../../shared/design_system/app_text_styles.dart';
+import '../../shared/transactions/transaction_confirmation_controller.dart';
+import '../../shared/transactions/transaction_confirmation_data.dart';
+import '../../shared/transactions/transaction_status.dart';
+import '../../shared/transactions/transaction_type.dart';
 import '../../src/app_state.dart';
 import '../../src/finance.dart';
 import '../../src/models.dart';
@@ -12,9 +17,9 @@ import 'widgets/dhukuti_status_badge.dart';
 import 'widgets/dhukuti_tokens.dart';
 
 const List<String> _paymentMethods = [
+  'eSewa',
   'Cash',
   'Bank Transfer',
-  'eSewa',
   'Khalti',
   'IME Pay',
   'Other',
@@ -377,15 +382,57 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
     if (submitted == null) {
       return;
     }
-    await _api.submitContribution(
-      groupId: widget.pool.id,
-      contributionId: target.id,
-      amountPaid: submitted.submittedAmount,
-      paymentMethod: submitted.paymentMethod,
+    if (!mounted) {
+      return;
+    }
+    final data = TransactionConfirmationData(
+      id: 'community-savings-${target.id}-${submitted.submittedAmount}',
+      transactionType: TransactionType.dhukutiContribution,
+      title: 'Pay Contribution',
+      subtitle: '${widget.pool.name} • ${_monthLabel(DateTime.now())}',
+      amount: submitted.submittedAmount,
+      payerName: widget.store.nameOf(widget.store.currentUserId),
+      payerAvatarUrl: widget.store.currentUser.avatar,
+      groupName: widget.pool.name,
+      poolName: widget.pool.name,
       note: submitted.note,
-      referenceNumber: submitted.referenceNumber,
-      accessToken: await _accessToken(),
+      confirmationButtonText: 'Pay with eSewa',
+      createdAt: DateTime.now(),
+      idempotencyKey:
+          'community-savings-${target.id}-${submitted.submittedAmount}',
+      operationType: 'community_savings_contribution',
+      details: [
+        TransactionDetail('Member', target.memberName),
+        TransactionDetail('Month', _monthLabel(DateTime.now())),
+      ],
     );
+    final result = await openTransactionConfirmation(context, data, () {
+      return confirmWithEsewa(
+        context: context,
+        data: data,
+        onSuccess: (receipt) async {
+          await _api.submitContribution(
+            groupId: widget.pool.id,
+            contributionId: target.id,
+            amountPaid: submitted.submittedAmount,
+            paymentMethod: 'eSewa',
+            note: submitted.note,
+            referenceNumber: receipt.reference,
+            accessToken: await _accessToken(),
+          );
+          return TransactionResult.success(
+            title: 'Contribution Paid',
+            message: 'Your eSewa payment has been submitted to the tracker.',
+            amount: submitted.submittedAmount,
+            transactionReference: receipt.reference,
+            createdAt: DateTime.now(),
+          );
+        },
+      );
+    });
+    if (result?.isSuccess != true) {
+      return;
+    }
     await _loadDashboard();
     if (!mounted) {
       return;
@@ -393,7 +440,7 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Your payment note has been submitted. The fund balance will update after the admin confirms the money was received.',
+          'Your eSewa payment was submitted. The fund balance updates after admin reconciliation.',
         ),
       ),
     );
@@ -625,8 +672,8 @@ class _DashboardView extends StatelessWidget {
           title: 'Member actions',
           actions: [
             _TrackerAction(
-              icon: Icons.upload_file_outlined,
-              label: 'I Have Paid',
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Pay with eSewa',
               onTap: onHavePaid,
             ),
             _TrackerAction(
@@ -804,8 +851,11 @@ class _ContributionRow extends StatelessWidget {
               ],
               OutlinedButton.icon(
                 onPressed: isCurrentUser ? onHavePaid : null,
-                icon: const Icon(Icons.upload_file_outlined, size: 18),
-                label: const Text('I Have Paid'),
+                icon: const Icon(
+                  Icons.account_balance_wallet_outlined,
+                  size: 18,
+                ),
+                label: const Text('Pay with eSewa'),
               ),
             ],
           ),
@@ -967,8 +1017,6 @@ class _MemberPaidSheet extends StatefulWidget {
 class _MemberPaidSheetState extends State<_MemberPaidSheet> {
   late final TextEditingController _amount;
   final _note = TextEditingController();
-  final _reference = TextEditingController();
-  var _method = _paymentMethods.first;
 
   @override
   void initState() {
@@ -982,16 +1030,15 @@ class _MemberPaidSheetState extends State<_MemberPaidSheet> {
   void dispose() {
     _amount.dispose();
     _note.dispose();
-    _reference.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return _SheetScaffold(
-      title: 'I Have Paid',
+      title: 'Pay with eSewa',
       helper:
-          'Submit a note for money paid outside the app. Submitted payments do not change the fund balance.',
+          'Confirm the contribution amount, then complete the payment in eSewa.',
       child: Column(
         children: [
           _ReadOnlyField(label: 'Month', value: widget.month),
@@ -1004,25 +1051,10 @@ class _MemberPaidSheetState extends State<_MemberPaidSheet> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          DropdownButtonFormField<String>(
-            initialValue: _method,
-            decoration: const InputDecoration(labelText: 'Payment method'),
-            items: [
-              for (final item in _paymentMethods)
-                DropdownMenuItem(value: item, child: Text(item)),
-            ],
-            onChanged: (value) => setState(() => _method = value ?? _method),
-          ),
-          const SizedBox(height: AppSpacing.md),
           TextField(
             controller: _note,
-            decoration: const InputDecoration(labelText: 'Optional admin note'),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextField(
-            controller: _reference,
             decoration: const InputDecoration(
-              labelText: 'Optional reference number',
+              labelText: 'Optional note for the tracker admin',
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -1034,14 +1066,13 @@ class _MemberPaidSheetState extends State<_MemberPaidSheet> {
                   context,
                   widget.record.copyWith(
                     submittedAmount: parseMoneyToMinor(_amount.text),
-                    paymentMethod: _method,
+                    paymentMethod: 'eSewa',
                     note: _note.text.trim(),
-                    referenceNumber: _reference.text.trim(),
                   ),
                 );
               },
-              icon: const Icon(Icons.verified_user_outlined),
-              label: const Text('Submit for Admin Confirmation'),
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+              label: const Text('Continue to eSewa'),
             ),
           ),
         ],
@@ -1105,7 +1136,7 @@ class _AdminConfirmSheetState extends State<_AdminConfirmSheet> {
     return _SheetScaffold(
       title: 'Confirm Received Contribution',
       helper:
-          'This only records a payment received outside the app. No money is processed by the app.',
+          'Reconcile a member contribution after the eSewa payment is available in the tracker.',
       child: Column(
         children: [
           DropdownButtonFormField<String>(
@@ -1486,7 +1517,7 @@ class _PaymentNotice extends StatelessWidget {
           SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
-              'Payments are made outside the app. The fund balance updates only after an admin confirms money was received.',
+              'Contributions are paid through eSewa. The fund balance updates after admin reconciliation.',
             ),
           ),
         ],

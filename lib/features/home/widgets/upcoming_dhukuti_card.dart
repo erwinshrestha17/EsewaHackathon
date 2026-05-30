@@ -56,7 +56,7 @@ class UpcomingDhukutiCard extends StatelessWidget {
                             ?.copyWith(fontWeight: FontWeight.w900),
                       ),
                       Text(
-                        '${item.cycleLabel} · Paid outside the app',
+                        '${item.cycleLabel} · eSewa payment',
                         style: TextStyle(color: scheme.onSurfaceVariant),
                       ),
                     ],
@@ -78,7 +78,7 @@ class UpcomingDhukutiCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Submit a payment note after paying outside the app. Balance updates after admin confirmation.',
+              'Pay securely with eSewa. The tracker updates as soon as the payment succeeds.',
               style: TextStyle(
                 color: scheme.onSurfaceVariant,
                 fontSize: 12,
@@ -93,7 +93,7 @@ class UpcomingDhukutiCard extends StatelessWidget {
                     ? Icons.account_balance_wallet_outlined
                     : Icons.receipt_long_outlined,
               ),
-              label: Text(item.isPayable ? 'I Have Paid' : 'View History'),
+              label: Text(item.isPayable ? 'Pay with eSewa' : 'View History'),
             ),
           ],
         ),

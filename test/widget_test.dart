@@ -1045,7 +1045,7 @@ void main() {
     );
   });
 
-  testWidgets('external settlement request requires recipient approval', (
+  testWidgets('settlement prompt routes payer to eSewa confirmation', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1000, 7000);
@@ -1083,36 +1083,14 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Settle Now'), findsOneWidget);
     expect(
       find.widgetWithText(OutlinedButton, 'Paid outside app'),
-      findsOneWidget,
+      findsNothing,
     );
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Paid outside app'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Settle Now'));
     await tester.pumpAndSettle();
-    expect(find.text('Record external settlement'), findsOneWidget);
-
-    await tester.tap(
-      find.widgetWithText(FilledButton, 'Send Approval Request'),
-    );
-    await tester.pumpAndSettle();
-
-    final request = store.settlements.singleWhere((item) => item.isExternal);
-    expect(request.status, PaymentStatus.pending);
-    expect(find.text('Approval pending'), findsOneWidget);
-
-    store.switchUser('u-sita');
-    await tester.pumpAndSettle();
-
-    expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Approve'));
-    await tester.pumpAndSettle();
-    expect(find.text('Approve external settlement'), findsOneWidget);
-
-    await tester.tap(find.widgetWithText(FilledButton, 'Approve Settlement'));
-    await tester.pumpAndSettle();
-
-    expect(request.status, PaymentStatus.paid);
-    expect(store.balancesForGroup(groupId), isEmpty);
-    expect(find.text('Nothing to settle'), findsOneWidget);
+    expect(find.text('Confirm Settlement'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Pay with eSewa'), findsOneWidget);
+    expect(store.settlements.where((item) => item.isExternal), isEmpty);
     expect(tester.takeException(), isNull);
   });
 

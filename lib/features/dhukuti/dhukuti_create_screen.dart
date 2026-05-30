@@ -58,7 +58,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
           DhukutiHeader(
             title: 'Create Community Savings Tracker',
             subtitle:
-                'Set up a trusted contribution tracker for money collected outside the app.',
+                'Set up a trusted contribution tracker with in-app eSewa payments.',
           ),
           DhukutiSection(
             title: 'Tracker Details',
@@ -186,7 +186,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                     ),
                   ),
                   child: const Text(
-                    'Community Savings Tracker records contributions paid outside the app. It does not process money.',
+                    'Community Savings Tracker records contributions paid through eSewa and keeps the fund ledger transparent.',
                   ),
                 ),
                 const SizedBox(height: 14),

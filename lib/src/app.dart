@@ -24,6 +24,7 @@ import '../shared/design_system/app_spacing.dart';
 import '../shared/design_system/app_text_styles.dart';
 import '../shared/design_system/app_theme.dart';
 import '../shared/localization/app_localizations.dart';
+import '../shared/payments/esewa_payment_service.dart';
 import '../shared/spending/spending_habits.dart';
 import '../shared/transactions/transaction_confirmation_controller.dart';
 import '../shared/transactions/transaction_confirmation_data.dart';
@@ -168,7 +169,7 @@ TransactionConfirmationData _giftConfirmationData({
     recipientAvatarUrl: store.userById(recipientId).avatar,
     note: message,
     warningMessage: 'Gift messages are visible only to sender and recipient.',
-    confirmationButtonText: 'Confirm & Send Gift',
+    confirmationButtonText: 'Pay with eSewa',
     createdAt: DateTime.now(),
     idempotencyKey: '$recipientId-$amountMinor-$template',
     operationType: 'gift',
@@ -200,27 +201,88 @@ class _SettlementOption {
   final SettlementSuggestion suggestion;
 }
 
-void _openSettlementConfirmation(
+Future<TransactionResult?> _openSettlementConfirmation(
   BuildContext context,
   AppStore store,
   SettlementSuggestion suggestion,
 ) {
-  unawaited(
-    openTransactionConfirmation(
-      context,
-      _settlementConfirmationData(store, suggestion),
-      () async {
+  final data = _settlementConfirmationData(store, suggestion);
+  return openTransactionConfirmation(context, data, () {
+    return confirmWithEsewa(
+      context: context,
+      data: data,
+      onSuccess: (receipt) async {
         final settlement = store.createOrReuseSettlement(suggestion);
-        store.confirmSettlement(settlement.id);
+        store.confirmSettlement(
+          settlement.id,
+          paymentProvider: 'esewa',
+          paymentReference: receipt.reference,
+          rawPayload: receipt.rawPayload,
+        );
         return _successResult(
           title: 'Payment Successful',
-          message: 'Your settlement has been marked as paid.',
+          message: 'Your settlement was paid through eSewa.',
           amount: suggestion.amountMinor,
-          reference: settlement.id,
+          reference: receipt.reference,
         );
       },
-    ),
+    );
+  });
+}
+
+TransactionConfirmationData _dhukutiContributionConfirmationData(
+  AppStore store,
+  DhukutiPool pool,
+  DhukutiContribution contribution,
+) {
+  return TransactionConfirmationData(
+    id: 'dhukuti-${contribution.id}',
+    transactionType: TransactionType.dhukutiContribution,
+    title: 'Confirm Contribution',
+    subtitle: '${pool.name} • Month ${contribution.cycleNumber}',
+    amount: contribution.amountMinor,
+    payerName: store.nameOf(store.currentUserId),
+    payerAvatarUrl: store.currentUser.avatar,
+    groupName: store.groupById(pool.groupId).name,
+    poolName: pool.name,
+    confirmationButtonText: 'Pay with eSewa',
+    createdAt: DateTime.now(),
+    idempotencyKey: contribution.idempotencyKey,
+    operationType: contribution.operationType,
+    details: [
+      TransactionDetail('Cycle', 'Month ${contribution.cycleNumber}'),
+      TransactionDetail('Due date', dateLabel(contribution.dueDate)),
+    ],
   );
+}
+
+Future<TransactionResult?> _openDhukutiContributionConfirmation(
+  BuildContext context,
+  AppStore store,
+  DhukutiPool pool,
+  DhukutiContribution contribution,
+) {
+  final data = _dhukutiContributionConfirmationData(store, pool, contribution);
+  return openTransactionConfirmation(context, data, () {
+    return confirmWithEsewa(
+      context: context,
+      data: data,
+      onSuccess: (receipt) async {
+        store.payDhukutiContribution(
+          contribution.id,
+          paymentProvider: 'esewa',
+          paymentReference: receipt.reference,
+          rawPayload: receipt.rawPayload,
+        );
+        return _successResult(
+          title: 'Contribution Paid',
+          message: 'Your community savings contribution was paid via eSewa.',
+          amount: contribution.amountMinor,
+          reference: receipt.reference,
+        );
+      },
+    );
+  });
 }
 
 Future<void> _openRemainingSettlementPicker(
@@ -314,7 +376,7 @@ Future<void> _openRemainingSettlementPicker(
   if (selected == null || !context.mounted) {
     return;
   }
-  _openSettlementConfirmation(context, store, selected.suggestion);
+  unawaited(_openSettlementConfirmation(context, store, selected.suggestion));
 }
 
 Future<void> showExternalSettlementRequestDialog(
@@ -2074,29 +2136,12 @@ class GroupDetail extends StatelessWidget {
                       onSettle:
                           suggestion.payerId == store.currentUserId &&
                               !suggestion.hasPending
-                          ? () => openTransactionConfirmation(
-                              context,
-                              _settlementConfirmationData(store, suggestion),
-                              () async {
-                                final settlement = store
-                                    .createOrReuseSettlement(suggestion);
-                                store.confirmSettlement(settlement.id);
-                                return _successResult(
-                                  title: 'Payment Successful',
-                                  message:
-                                      'Payment completed. Your group balance is updated.',
-                                  amount: suggestion.amountMinor,
-                                  reference: settlement.id,
-                                );
-                              },
-                            )
-                          : null,
-                      onExternalSettle:
-                          suggestion.payerId == store.currentUserId &&
-                              !suggestion.hasPending
-                          ? () => showExternalSettlementRequestDialog(
-                              context,
-                              suggestion,
+                          ? () => unawaited(
+                              _openSettlementConfirmation(
+                                context,
+                                store,
+                                suggestion,
+                              ),
                             )
                           : null,
                       onApproveExternal:
@@ -2564,40 +2609,46 @@ class _GiftsScreenState extends State<GiftsScreen> {
   ) async {
     final toName = store.nameOf(_recipientId!);
     final giftMessage = _message.text;
-    final result = await openTransactionConfirmation(
-      context,
-      _giftConfirmationData(
-        store: store,
-        recipientId: _recipientId!,
-        template: _theme.label,
-        amountMinor: amountMinor,
-        message: giftMessage,
-      ),
-      () async {
-        final message = store.sendGift(
-          recipientId: _recipientId!,
-          template: _theme.label,
-          amountMinor: amountMinor,
-          message: giftMessage,
-        );
-        if (!message.startsWith('Gift sent')) {
-          return TransactionResult.failure(
-            reason: message,
-            amount: amountMinor,
-            transactionReference: 'gift-failed',
-            createdAt: DateTime.now(),
-            status: TransactionStatus.failedReview,
-          );
-        }
-        return _successResult(
-          title: 'Gift Sent',
-          message: 'Your gift envelope has been delivered.',
-          amount: amountMinor,
-          reference: 'gift-${DateTime.now().millisecondsSinceEpoch}',
-          status: TransactionStatus.sent,
-        );
-      },
+    final data = _giftConfirmationData(
+      store: store,
+      recipientId: _recipientId!,
+      template: _theme.label,
+      amountMinor: amountMinor,
+      message: giftMessage,
     );
+    final result = await openTransactionConfirmation(context, data, () {
+      return confirmWithEsewa(
+        context: context,
+        data: data,
+        onSuccess: (receipt) async {
+          final message = store.sendGift(
+            recipientId: _recipientId!,
+            template: _theme.label,
+            amountMinor: amountMinor,
+            message: giftMessage,
+            paymentProvider: 'esewa',
+            paymentReference: receipt.reference,
+            rawPayload: receipt.rawPayload,
+          );
+          if (!message.startsWith('Gift sent')) {
+            return TransactionResult.failure(
+              reason: message,
+              amount: amountMinor,
+              transactionReference: receipt.reference,
+              createdAt: DateTime.now(),
+              status: TransactionStatus.failedReview,
+            );
+          }
+          return _successResult(
+            title: 'Gift Sent',
+            message: 'Your gift envelope was paid through eSewa.',
+            amount: amountMinor,
+            reference: receipt.reference,
+            status: TransactionStatus.sent,
+          );
+        },
+      );
+    });
     if (result?.isSuccess == true && mounted) {
       setState(() {
         _sent = true;
@@ -3315,7 +3366,7 @@ class _DhukutiScreenState extends State<DhukutiScreen> {
             ScreenHeader(
               title: 'Community Savings Tracker',
               subtitle:
-                  'Track monthly contributions paid outside the app, admin confirmations, expenses, and fund balance.',
+                  'Track eSewa-paid monthly contributions, admin confirmations, expenses, and fund balance.',
               icon: Icons.account_balance_wallet,
               action: FilledButton.icon(
                 onPressed: () => showCreateDhukutiDialog(context),
@@ -3410,7 +3461,7 @@ class DhukutiDetail extends StatelessWidget {
         ScreenHeader(
           title: pool.name,
           subtitle:
-              '${money(pool.contributionAmountMinor)} ${pool.frequency} • Paid outside the app',
+              '${money(pool.contributionAmountMinor)} ${pool.frequency} • eSewa payments',
           icon: Icons.account_balance_wallet,
           action: Wrap(
             spacing: 8,
@@ -3536,10 +3587,15 @@ class DhukutiDetail extends StatelessWidget {
                             if (contribution.userId == store.currentUserId &&
                                 contribution.status != ContributionStatus.paid)
                               FilledButton(
-                                onPressed: () => store.payDhukutiContribution(
-                                  contribution.id,
+                                onPressed: () => unawaited(
+                                  _openDhukutiContributionConfirmation(
+                                    context,
+                                    store,
+                                    pool,
+                                    contribution,
+                                  ),
                                 ),
-                                child: const Text('I Have Paid'),
+                                child: const Text('Pay with eSewa'),
                               ),
                           ],
                         ),
@@ -7379,7 +7435,7 @@ Future<void> showCreateDhukutiGroupDialog(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'Use this to track monthly contributions paid outside the app, admin confirmations, expenses, and fund balance.',
+                      'Use this to track eSewa-paid monthly contributions, admin confirmations, expenses, and fund balance.',
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -7473,7 +7529,7 @@ Future<void> showCreateDhukutiGroupDialog(
                       contentPadding: EdgeInsets.zero,
                       value: agreementAccepted,
                       title: const Text(
-                        'I understand payments are made outside the app and require admin confirmation.',
+                        'I understand contributions are paid through eSewa and may still require admin reconciliation.',
                       ),
                       onChanged: (value) =>
                           setState(() => agreementAccepted = value ?? false),
@@ -7642,6 +7698,7 @@ Future<void> showAddMemberDialog(BuildContext context, String groupId) async {
 }
 
 Future<void> showLeaveGroupDialog(BuildContext context, String groupId) async {
+  final rootContext = context;
   final store = StoreScope.of(context);
   final group = store.groupById(groupId);
   final adminCandidates = store
@@ -7652,7 +7709,7 @@ Future<void> showLeaveGroupDialog(BuildContext context, String groupId) async {
       ? null
       : adminCandidates.first.userId;
   await showDialog<void>(
-    context: context,
+    context: rootContext,
     builder: (dialogContext) {
       return StatefulBuilder(
         builder: (context, setState) {
@@ -7713,19 +7770,58 @@ Future<void> showLeaveGroupDialog(BuildContext context, String groupId) async {
                 TextButton(
                   onPressed: () {
                     Navigator.pop(dialogContext);
-                    showSnack(context, 'Open balances remain visible below.');
+                    showSnack(
+                      rootContext,
+                      'Open balances remain visible below.',
+                    );
                   },
                   child: Text(decision.secondaryAction!),
                 ),
               FilledButton(
                 onPressed: canPrimary
-                    ? () {
+                    ? () async {
                         String? error;
                         if (decision.type == GroupLeaveDecisionType.owesMoney) {
-                          final count = store.settleCurrentUserInGroup(groupId);
-                          error = count == 0
-                              ? 'No payable settlement is open for this user.'
-                              : store.leaveGroup(groupId);
+                          final payable = store
+                              .suggestionsForGroup(groupId)
+                              .where(
+                                (item) =>
+                                    item.payerId == store.currentUserId &&
+                                    !item.hasPending,
+                              )
+                              .toList();
+                          Navigator.pop(dialogContext);
+                          if (payable.isEmpty) {
+                            showSnack(
+                              rootContext,
+                              'No payable settlement is open for this user.',
+                            );
+                            return;
+                          }
+                          final result = await _openSettlementConfirmation(
+                            rootContext,
+                            store,
+                            payable.first,
+                          );
+                          if (!rootContext.mounted) {
+                            return;
+                          }
+                          if (result?.isSuccess == true) {
+                            final remaining = store
+                                .suggestionsForGroup(groupId)
+                                .where(
+                                  (item) => item.payerId == store.currentUserId,
+                                )
+                                .toList();
+                            error = remaining.isEmpty
+                                ? store.leaveGroup(groupId)
+                                : 'Pay the remaining settlement before leaving.';
+                            showSnack(
+                              rootContext,
+                              error ?? 'You left ${group.name}.',
+                            );
+                          }
+                          return;
                         } else if (isAdminTransfer && newAdminId != null) {
                           store.updateMemberRole(
                             groupId,
@@ -7737,7 +7833,10 @@ Future<void> showLeaveGroupDialog(BuildContext context, String groupId) async {
                           error = store.leaveGroup(groupId);
                         }
                         Navigator.pop(dialogContext);
-                        showSnack(context, error ?? 'You left ${group.name}.');
+                        showSnack(
+                          rootContext,
+                          error ?? 'You left ${group.name}.',
+                        );
                       }
                     : null,
                 child: Text(decision.primaryAction ?? 'Leave group'),
@@ -10469,74 +10568,78 @@ Future<void> showContributeToGiftPoolDialog(
               FilledButton(
                 onPressed: canContribute
                     ? () {
+                        final data = TransactionConfirmationData(
+                          id: 'gift-pool-${pool.id}-${store.currentUserId}-$amountMinor',
+                          transactionType: TransactionType.giftPoolContribution,
+                          title: 'Confirm Gift Pool',
+                          subtitle: pool.title,
+                          amount: amountMinor,
+                          payerName: store.nameOf(store.currentUserId),
+                          payerAvatarUrl: store.currentUser.avatar,
+                          recipientName: store.nameOf(pool.recipientId),
+                          recipientAvatarUrl: store
+                              .userById(pool.recipientId)
+                              .avatar,
+                          groupName: store.groupById(pool.groupId).name,
+                          poolName: pool.title,
+                          confirmationButtonText: 'Pay with eSewa',
+                          createdAt: DateTime.now(),
+                          idempotencyKey:
+                              '${pool.id}-${store.currentUserId}-$amountMinor',
+                          operationType: 'gift_pool_contribution',
+                          details: [
+                            TransactionDetail(
+                              'Contribution rule',
+                              giftPoolContributionRuleLabel(pool),
+                            ),
+                            TransactionDetail(
+                              'Raised so far',
+                              money(store.giftPoolTotal(pool.id)),
+                            ),
+                            TransactionDetail(
+                              'Target',
+                              money(pool.targetAmountMinor),
+                            ),
+                          ],
+                        );
                         Navigator.pop(dialogContext);
                         unawaited(
-                          openTransactionConfirmation(
-                            context,
-                            TransactionConfirmationData(
-                              id: 'gift-pool-${pool.id}-${store.currentUserId}-$amountMinor',
-                              transactionType:
-                                  TransactionType.giftPoolContribution,
-                              title: 'Confirm Gift Pool',
-                              subtitle: pool.title,
-                              amount: amountMinor,
-                              payerName: store.nameOf(store.currentUserId),
-                              payerAvatarUrl: store.currentUser.avatar,
-                              recipientName: store.nameOf(pool.recipientId),
-                              recipientAvatarUrl: store
-                                  .userById(pool.recipientId)
-                                  .avatar,
-                              groupName: store.groupById(pool.groupId).name,
-                              poolName: pool.title,
-                              confirmationButtonText: 'Confirm Contribution',
-                              createdAt: DateTime.now(),
-                              idempotencyKey:
-                                  '${pool.id}-${store.currentUserId}-$amountMinor',
-                              operationType: 'gift_pool_contribution',
-                              details: [
-                                TransactionDetail(
-                                  'Contribution rule',
-                                  giftPoolContributionRuleLabel(pool),
-                                ),
-                                TransactionDetail(
-                                  'Raised so far',
-                                  money(store.giftPoolTotal(pool.id)),
-                                ),
-                                TransactionDetail(
-                                  'Target',
-                                  money(pool.targetAmountMinor),
-                                ),
-                              ],
-                            ),
-                            () async {
-                              final message = store.contributeToGiftPool(
-                                pool.id,
-                                amountMinor,
-                              );
-                              if (!message.startsWith('Added')) {
-                                return TransactionResult.failure(
-                                  reason: message,
+                          openTransactionConfirmation(context, data, () {
+                            return confirmWithEsewa(
+                              context: context,
+                              data: data,
+                              onSuccess: (receipt) async {
+                                final message = store.contributeToGiftPool(
+                                  pool.id,
+                                  amountMinor,
+                                  paymentProvider: 'esewa',
+                                  paymentReference: receipt.reference,
+                                  rawPayload: receipt.rawPayload,
+                                );
+                                if (!message.startsWith('Added')) {
+                                  return TransactionResult.failure(
+                                    reason: message,
+                                    amount: amountMinor,
+                                    transactionReference: receipt.reference,
+                                    createdAt: DateTime.now(),
+                                    status: TransactionStatus.failedReview,
+                                  );
+                                }
+                                messenger
+                                  ..hideCurrentSnackBar()
+                                  ..showSnackBar(
+                                    SnackBar(content: Text(message)),
+                                  );
+                                return _successResult(
+                                  title: 'Contribution Added',
+                                  message:
+                                      'Your group gift pool contribution was paid through eSewa.',
                                   amount: amountMinor,
-                                  transactionReference: 'gift-pool-failed',
-                                  createdAt: DateTime.now(),
-                                  status: TransactionStatus.failedReview,
+                                  reference: receipt.reference,
                                 );
-                              }
-                              messenger
-                                ..hideCurrentSnackBar()
-                                ..showSnackBar(
-                                  SnackBar(content: Text(message)),
-                                );
-                              return _successResult(
-                                title: 'Contribution Added',
-                                message:
-                                    'Your group gift pool contribution has been recorded.',
-                                amount: amountMinor,
-                                reference:
-                                    'gift-pool-${DateTime.now().millisecondsSinceEpoch}',
-                              );
-                            },
-                          ),
+                              },
+                            );
+                          }),
                         );
                       }
                     : null,

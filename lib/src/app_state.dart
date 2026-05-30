@@ -2035,7 +2035,13 @@ class AppStore extends ChangeNotifier {
     return null;
   }
 
-  void confirmSettlement(String settlementId, {bool fail = false}) {
+  void confirmSettlement(
+    String settlementId, {
+    bool fail = false,
+    String paymentProvider = 'sajha_kharcha_pay',
+    String? paymentReference,
+    String? rawPayload,
+  }) {
     final settlement = settlements.firstWhere(
       (item) => item.id == settlementId,
     );
@@ -2046,6 +2052,9 @@ class AppStore extends ChangeNotifier {
       operationType: settlement.operationType,
       amountMinor: settlement.amountMinor,
       status: fail ? PaymentStatus.failed : PaymentStatus.paid,
+      paymentProvider: paymentProvider,
+      paymentReference: paymentReference,
+      rawPayload: rawPayload,
     );
     settlement.paymentTransactionId = payment.id;
     if (fail) {
@@ -2084,7 +2093,7 @@ class AppStore extends ChangeNotifier {
         entityId: settlement.id,
         title: 'Settlement paid',
         body:
-            '${nameOf(settlement.payerId)} paid ${nameOf(settlement.payeeId)} ${money(settlement.amountMinor)} via Sajha Kharcha Pay.',
+            '${nameOf(settlement.payerId)} paid ${nameOf(settlement.payeeId)} ${money(settlement.amountMinor)} via eSewa.',
       );
     }
     notifyListeners();
@@ -2138,6 +2147,9 @@ class AppStore extends ChangeNotifier {
     required String template,
     required int amountMinor,
     required String message,
+    String paymentProvider = 'sajha_kharcha_pay',
+    String? paymentReference,
+    String? rawPayload,
   }) {
     if (!canInviteOrGift(currentUserId, recipientId)) {
       return 'Gifts can only be sent to active, unblocked connections.';
@@ -2175,6 +2187,9 @@ class AppStore extends ChangeNotifier {
       operationType: 'gift',
       amountMinor: amountMinor,
       status: PaymentStatus.paid,
+      paymentProvider: paymentProvider,
+      paymentReference: paymentReference,
+      rawPayload: rawPayload,
     );
     gift.paymentTransactionId = payment.id;
     gifts.add(gift);
@@ -2328,7 +2343,13 @@ class AppStore extends ChangeNotifier {
     return null;
   }
 
-  String contributeToGiftPool(String giftPoolId, int amountMinor) {
+  String contributeToGiftPool(
+    String giftPoolId,
+    int amountMinor, {
+    String paymentProvider = 'sajha_kharcha_pay',
+    String? paymentReference,
+    String? rawPayload,
+  }) {
     final pool = giftPools.firstWhere((item) => item.id == giftPoolId);
     final error = giftPoolContributionError(giftPoolId, amountMinor);
     if (error != null) {
@@ -2353,6 +2374,9 @@ class AppStore extends ChangeNotifier {
       operationType: 'gift_pool_contribution',
       amountMinor: amountMinor,
       status: PaymentStatus.paid,
+      paymentProvider: paymentProvider,
+      paymentReference: paymentReference,
+      rawPayload: rawPayload,
     );
     contribution.paymentTransactionId = payment.id;
     giftPoolContributions.add(contribution);
@@ -2535,7 +2559,12 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void payDhukutiContribution(String contributionId) {
+  void payDhukutiContribution(
+    String contributionId, {
+    String paymentProvider = 'sajha_kharcha_pay',
+    String? paymentReference,
+    String? rawPayload,
+  }) {
     final contribution = dhukutiContributions.firstWhere(
       (item) => item.id == contributionId,
     );
@@ -2556,6 +2585,9 @@ class AppStore extends ChangeNotifier {
       operationType: contribution.operationType,
       amountMinor: contribution.amountMinor,
       status: PaymentStatus.paid,
+      paymentProvider: paymentProvider,
+      paymentReference: paymentReference,
+      rawPayload: rawPayload,
     );
     contribution
       ..status = ContributionStatus.paid
@@ -3046,12 +3078,13 @@ class AppStore extends ChangeNotifier {
     required int amountMinor,
     required PaymentStatus status,
     String paymentProvider = 'sajha_kharcha_pay',
+    String? paymentReference,
     String? rawPayload,
   }) {
     final payment = PaymentTransaction(
       id: _id('payment'),
       paymentProvider: paymentProvider,
-      paymentReference: 'TXN-${_sequence + 777}',
+      paymentReference: paymentReference ?? 'TXN-${_sequence + 777}',
       operationType: operationType,
       entityType: entityType,
       entityId: entityId,

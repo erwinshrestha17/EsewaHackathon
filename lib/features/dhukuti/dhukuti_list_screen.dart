@@ -119,7 +119,7 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Community Savings Tracker records monthly contributions paid outside the app, admin confirmations, expenses, and available fund balance.',
+                  'Community Savings Tracker records monthly eSewa contributions, admin confirmations, expenses, and available fund balance.',
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -169,7 +169,7 @@ class _DhukutiPoolList extends StatelessWidget {
         DhukutiSection(
           title: 'About Community Savings Tracker',
           child: const Text(
-            'Payments are made outside the app. The app only tracks submitted notes, admin confirmations, expenses, and the available community fund balance.',
+            'Contributions are paid with eSewa in the app, then reconciled with admin confirmations, expenses, and the available community fund balance.',
           ),
         ),
         DhukutiSection(
