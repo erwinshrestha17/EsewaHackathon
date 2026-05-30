@@ -27,12 +27,39 @@ function connectionDto(row) {
   };
 }
 
+function connectionParticipants(connection) {
+  return [connection.requester_id, connection.recipient_id];
+}
+
+function otherParticipant(connection, userId) {
+  return connection.requester_id === userId ? connection.recipient_id : connection.requester_id;
+}
+
+async function touchConnection(connectionId) {
+  const { error } = await db()
+    .from('connections')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', connectionId);
+  assertDb(error);
+}
+
 async function profileForLookup(value) {
   let query = db().from('profiles').select('*');
   if (value.includes('@')) query = query.eq('email', value);
   else if (value.startsWith('+') || /^\d+$/.test(value)) query = query.eq('phone', value);
   else query = isUuid(value) ? query.eq('id', value) : query.eq('legacy_user_id', value);
   return single(query, 'User profile not found.');
+}
+
+async function connectionForUser(userId, connectionId) {
+  return single(
+    db()
+      .from('connections')
+      .select('*')
+      .eq('id', connectionId)
+      .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`),
+    'Connection not found.',
+  );
 }
 
 export async function listConnections(userId, status) {
@@ -90,6 +117,16 @@ export async function requestConnection(userId, body) {
     .select(connectionSelect)
     .single();
   assertDb(error);
+  const event = await db()
+    .from('connection_events')
+    .insert({
+      connection_id: data.id,
+      actor_id: userId,
+      event_type: 'requested',
+      previous_status: existing?.status ?? null,
+      next_status: data.status,
+    });
+  assertDb(event.error);
   await createNotification({
     userId: target.id,
     title: 'Connection request',
@@ -118,14 +155,7 @@ export async function requestConnection(userId, body) {
 
 export async function updateConnection(userId, connectionId, status) {
   assertChoice(status, statuses, 'status');
-  const current = await single(
-    db()
-      .from('connections')
-      .select('*')
-      .eq('id', connectionId)
-      .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`),
-    'Connection not found.',
-  );
+  const current = await connectionForUser(userId, connectionId);
   if (status === 'approved' || status === 'declined') {
     if (current.recipient_id !== userId) {
       throw new ApiError(
@@ -144,6 +174,16 @@ export async function updateConnection(userId, connectionId, status) {
     .select(connectionSelect)
     .single();
   assertDb(error);
+  const event = await db()
+    .from('connection_events')
+    .insert({
+      connection_id: data.id,
+      actor_id: userId,
+      event_type: status,
+      previous_status: current.status,
+      next_status: data.status,
+    });
+  assertDb(event.error);
   await logActivity({
     actorId: userId,
     action: `connection_${status}`,
@@ -173,4 +213,157 @@ export async function updateConnection(userId, connectionId, status) {
     },
   });
   return connectionDto(data);
+}
+
+export async function blockConnection(userId, connectionId, body = {}) {
+  const current = await connectionForUser(userId, connectionId);
+  const blockedUserId = body.blockedUserId?.toString() || otherParticipant(current, userId);
+  if (!connectionParticipants(current).includes(blockedUserId) || blockedUserId === userId) {
+    throw new ApiError(400, 'This connection cannot be blocked.');
+  }
+
+  const existing = await maybeSingle(
+    db()
+      .from('connection_blocks')
+      .select('*')
+      .eq('connection_id', connectionId)
+      .eq('blocker_id', userId)
+      .eq('blocked_user_id', blockedUserId)
+      .eq('active', true),
+  );
+  if (existing) {
+    return existing;
+  }
+
+  const { data, error } = await db()
+    .from('connection_blocks')
+    .insert({
+      connection_id: connectionId,
+      blocker_id: userId,
+      blocked_user_id: blockedUserId,
+    })
+    .select('*')
+    .single();
+  assertDb(error);
+  const event = await db()
+    .from('connection_events')
+    .insert({
+      connection_id: connectionId,
+      actor_id: userId,
+      event_type: 'blocked',
+      previous_status: current.status,
+      next_status: current.status,
+    });
+  assertDb(event.error);
+  await logActivity({
+    actorId: userId,
+    action: 'connection_blocked',
+    entityType: 'connection',
+    entityId: connectionId,
+    title: 'Connection blocked',
+    body: 'Connection blocked.',
+  });
+  await touchConnection(connectionId);
+  publishAppEvent(connectionParticipants(current), {
+    type: 'connection_changed',
+    payload: { connectionId, status: current.status, actorId: userId },
+  });
+  return data;
+}
+
+export async function unblockConnection(userId, connectionId, body = {}) {
+  const current = await connectionForUser(userId, connectionId);
+  const blockedUserId = body.blockedUserId?.toString() || otherParticipant(current, userId);
+  if (!connectionParticipants(current).includes(blockedUserId) || blockedUserId === userId) {
+    throw new ApiError(400, 'This connection cannot be unblocked.');
+  }
+
+  const { data, error } = await db()
+    .from('connection_blocks')
+    .update({ active: false, lifted_at: new Date().toISOString() })
+    .eq('connection_id', connectionId)
+    .eq('blocker_id', userId)
+    .eq('blocked_user_id', blockedUserId)
+    .eq('active', true)
+    .select('*')
+    .maybeSingle();
+  assertDb(error);
+  const event = await db()
+    .from('connection_events')
+    .insert({
+      connection_id: connectionId,
+      actor_id: userId,
+      event_type: 'unblocked',
+      previous_status: current.status,
+      next_status: current.status,
+    });
+  assertDb(event.error);
+  await touchConnection(connectionId);
+  publishAppEvent(connectionParticipants(current), {
+    type: 'connection_changed',
+    payload: { connectionId, status: current.status, actorId: userId },
+  });
+  return data;
+}
+
+export async function reportConnection(userId, connectionId, body) {
+  requireFields(body, ['reportedUserId', 'note']);
+  const current = await connectionForUser(userId, connectionId);
+  const reportedUser = await profileForLookup(body.reportedUserId.toString());
+  const note = body.note?.toString().trim();
+  if (!note) {
+    throw new ApiError(400, 'Add a note before submitting a report.');
+  }
+  if (!connectionParticipants(current).includes(reportedUser.id) || reportedUser.id === userId) {
+    throw new ApiError(400, 'This connection cannot be reported.');
+  }
+  const existing = await maybeSingle(
+    db()
+      .from('connection_reports')
+      .select('*')
+      .eq('connection_id', connectionId)
+      .eq('reporter_id', userId)
+      .eq('reported_user_id', reportedUser.id),
+  );
+  if (existing) {
+    throw new ApiError(409, 'You have already reported this connection.');
+  }
+
+  const { data, error } = await db()
+    .from('connection_reports')
+    .insert({
+      connection_id: connectionId,
+      reporter_id: userId,
+      reported_user_id: reportedUser.id,
+      reason_code: body.reasonCode?.toString() || 'safety_review',
+      details: note,
+    })
+    .select('*')
+    .single();
+  assertDb(error);
+  const event = await db()
+    .from('connection_events')
+    .insert({
+      connection_id: connectionId,
+      actor_id: userId,
+      event_type: 'reported',
+      previous_status: current.status,
+      next_status: current.status,
+      note,
+    });
+  assertDb(event.error);
+  await logActivity({
+    actorId: userId,
+    action: 'connection_reported',
+    entityType: 'connection_report',
+    entityId: data.id,
+    title: 'Safety report opened',
+    body: 'Connection safety report opened.',
+  });
+  await touchConnection(connectionId);
+  publishAppEvent(connectionParticipants(current), {
+    type: 'connection_changed',
+    payload: { connectionId, status: current.status, actorId: userId },
+  });
+  return data;
 }

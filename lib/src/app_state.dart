@@ -179,6 +179,59 @@ class AppStore extends ChangeNotifier {
         ),
       );
     }
+    for (final row in _rows(snapshot, 'connectionEvents')) {
+      final connection = connectionByIdOrNull(_string(row, 'connectionId'));
+      if (connection == null) {
+        continue;
+      }
+      connection.events.add(
+        ConnectionEvent(
+          id: _string(row, 'id'),
+          connectionId: connection.id,
+          actorId: _string(row, 'actorId'),
+          eventType: _string(row, 'eventType'),
+          previousStatus: _connectionStatusOrNull(row['previousStatus']),
+          nextStatus: _connectionStatusOrNull(row['nextStatus']),
+          note: _nullableString(row['note']),
+          createdAt: _date(row['createdAt']),
+        ),
+      );
+    }
+    for (final row in _rows(snapshot, 'connectionBlocks')) {
+      final connection = connectionByIdOrNull(_string(row, 'connectionId'));
+      if (connection == null) {
+        continue;
+      }
+      connection.blocks.add(
+        ConnectionBlock(
+          id: _string(row, 'id'),
+          connectionId: connection.id,
+          blockerId: _string(row, 'blockerId'),
+          blockedUserId: _string(row, 'blockedUserId'),
+          active: _bool(row, 'active', fallback: true),
+          liftedAt: _optionalDate(row['liftedAt']),
+          createdAt: _date(row['createdAt']),
+        ),
+      );
+    }
+    for (final row in _rows(snapshot, 'connectionReports')) {
+      final connection = connectionByIdOrNull(_string(row, 'connectionId'));
+      if (connection == null) {
+        continue;
+      }
+      connection.reports.add(
+        ConnectionReport(
+          id: _string(row, 'id'),
+          connectionId: connection.id,
+          reporterId: _string(row, 'reporterId'),
+          reportedUserId: _string(row, 'reportedUserId'),
+          reasonCode: _string(row, 'reasonCode', fallback: 'safety_review'),
+          details: _nullableString(row['details']),
+          status: _string(row, 'status', fallback: 'open'),
+          createdAt: _date(row['createdAt']),
+        ),
+      );
+    }
 
     for (final row in _rows(snapshot, 'groups')) {
       groups.add(
@@ -696,6 +749,19 @@ class AppStore extends ChangeNotifier {
         : MemberStatus.active;
   }
 
+  ConnectionStatus? _connectionStatusOrNull(Object? value) {
+    final text = _canonicalEnum(value?.toString() ?? '');
+    if (text.isEmpty) {
+      return null;
+    }
+    for (final item in ConnectionStatus.values) {
+      if (_canonicalEnum(item.name) == text) {
+        return item;
+      }
+    }
+    return null;
+  }
+
   String _canonicalEnum(String value) {
     return value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
   }
@@ -773,6 +839,15 @@ class AppStore extends ChangeNotifier {
     final pair = _pair(a, b);
     for (final connection in connections) {
       if (connection.userLowId == pair.$1 && connection.userHighId == pair.$2) {
+        return connection;
+      }
+    }
+    return null;
+  }
+
+  Connection? connectionByIdOrNull(String id) {
+    for (final connection in connections) {
+      if (connection.id == id) {
         return connection;
       }
     }

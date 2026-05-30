@@ -182,6 +182,47 @@ class BackendApi {
     );
   }
 
+  Future<Map<String, dynamic>> removeConnection({
+    required String accessToken,
+    required String connectionId,
+  }) {
+    return _delete('/api/connections/$connectionId', accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> blockConnection({
+    required String accessToken,
+    required String connectionId,
+    required String blockedUserId,
+  }) {
+    return _post('/api/connections/$connectionId/block', {
+      'blockedUserId': blockedUserId,
+    }, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> unblockConnection({
+    required String accessToken,
+    required String connectionId,
+    required String blockedUserId,
+  }) {
+    return _post('/api/connections/$connectionId/unblock', {
+      'blockedUserId': blockedUserId,
+    }, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> reportConnection({
+    required String accessToken,
+    required String connectionId,
+    required String reportedUserId,
+    required String reasonCode,
+    required String note,
+  }) {
+    return _post('/api/connections/$connectionId/report', {
+      'reportedUserId': reportedUserId,
+      'reasonCode': reasonCode,
+      'note': note,
+    }, accessToken: accessToken);
+  }
+
   Future<Map<String, dynamic>> appBootstrap({required String accessToken}) {
     return get('/api/app/bootstrap', accessToken: accessToken);
   }
@@ -197,7 +238,14 @@ class BackendApi {
     final response = await _sendStream(request);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final body = await response.stream.bytesToString();
-      final decoded = _decodeBodyOrEmpty(body);
+      final Map<String, dynamic> decoded;
+      try {
+        decoded = _decodeBodyOrEmpty(body);
+      } on FormatException {
+        throw BackendApiException(
+          'Backend stream failed (${response.statusCode}).',
+        );
+      }
       throw BackendApiException(
         decoded['error']?.toString() ??
             'Backend stream failed (${response.statusCode}).',
@@ -263,6 +311,16 @@ class BackendApi {
   Future<Map<String, dynamic>> get(String path, {String? accessToken}) async {
     final response = await _send(
       () => _client.get(_uri(path), headers: _headers(accessToken)),
+    );
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> _delete(
+    String path, {
+    String? accessToken,
+  }) async {
+    final response = await _send(
+      () => _client.delete(_uri(path), headers: _headers(accessToken)),
     );
     return _decode(response);
   }

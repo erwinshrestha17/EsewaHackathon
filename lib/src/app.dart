@@ -574,6 +574,10 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         onRequestConnection: _requestConnection,
         onApproveConnection: _approveConnection,
         onDeclineConnection: _declineConnection,
+        onRemoveConnection: _removeConnection,
+        onBlockConnection: _blockConnection,
+        onUnblockConnection: _unblockConnection,
+        onReportConnection: _reportConnection,
       ),
       3 => const GiftsScreen(),
       4 => SettingsScreen(
@@ -976,6 +980,118 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     return 'Request from ${other.displayName} declined.';
   }
 
+  Future<String> _removeConnection(String connectionId) async {
+    final store = _store;
+    final authController = _authController;
+    if (store == null) {
+      throw const BackendApiException('Store is not ready yet.');
+    }
+    final connection = store.connections.firstWhere(
+      (item) => item.id == connectionId,
+    );
+    final other = store.userById(connection.otherUserId(store.currentUserId));
+    if (_backendApi.isConfigured && authController != null) {
+      final token = await authController.backendAccessToken();
+      if (token != null) {
+        await _backendApi.removeConnection(
+          accessToken: token,
+          connectionId: connectionId,
+        );
+        await _loadBackendSnapshot(force: true);
+        return '${other.displayName} removed from active connections.';
+      }
+    }
+    store.removeConnection(connectionId);
+    return '${other.displayName} removed from active connections.';
+  }
+
+  Future<String> _blockConnection(
+    String connectionId,
+    String blockedUserId,
+  ) async {
+    final store = _store;
+    final authController = _authController;
+    if (store == null) {
+      throw const BackendApiException('Store is not ready yet.');
+    }
+    final blocked = store.userById(blockedUserId);
+    if (_backendApi.isConfigured && authController != null) {
+      final token = await authController.backendAccessToken();
+      if (token != null) {
+        await _backendApi.blockConnection(
+          accessToken: token,
+          connectionId: connectionId,
+          blockedUserId: blockedUserId,
+        );
+        await _loadBackendSnapshot(force: true);
+        return '${blocked.displayName} blocked.';
+      }
+    }
+    store.blockConnection(connectionId, blockedUserId);
+    return '${blocked.displayName} blocked.';
+  }
+
+  Future<String> _unblockConnection(
+    String connectionId,
+    String blockedUserId,
+  ) async {
+    final store = _store;
+    final authController = _authController;
+    if (store == null) {
+      throw const BackendApiException('Store is not ready yet.');
+    }
+    final blocked = store.userById(blockedUserId);
+    if (_backendApi.isConfigured && authController != null) {
+      final token = await authController.backendAccessToken();
+      if (token != null) {
+        await _backendApi.unblockConnection(
+          accessToken: token,
+          connectionId: connectionId,
+          blockedUserId: blockedUserId,
+        );
+        await _loadBackendSnapshot(force: true);
+        return '${blocked.displayName} unblocked.';
+      }
+    }
+    store.unblockConnection(connectionId, blockedUserId);
+    return '${blocked.displayName} unblocked.';
+  }
+
+  Future<String> _reportConnection(
+    String connectionId,
+    String reportedUserId,
+    String reason, {
+    required String note,
+  }) async {
+    final store = _store;
+    final authController = _authController;
+    if (store == null) {
+      throw const BackendApiException('Store is not ready yet.');
+    }
+    final reported = store.userById(reportedUserId);
+    if (_backendApi.isConfigured && authController != null) {
+      final token = await authController.backendAccessToken();
+      if (token != null) {
+        await _backendApi.reportConnection(
+          accessToken: token,
+          connectionId: connectionId,
+          reportedUserId: reportedUserId,
+          reasonCode: reason,
+          note: note,
+        );
+        await _loadBackendSnapshot(force: true);
+        return 'Report submitted for ${reported.displayName}.';
+      }
+    }
+    final error = store.reportConnection(
+      connectionId,
+      reportedUserId,
+      reason,
+      note: note,
+    );
+    return error ?? 'Report submitted for ${reported.displayName}.';
+  }
+
   Connection? _incomingConnection(AppStore store) {
     for (final connection in store.connectionsFor(store.currentUserId)) {
       if (connection.recipientId == store.currentUserId &&
@@ -1144,17 +1260,35 @@ class ActivityScreen extends StatelessWidget {
   }
 }
 
+typedef ConnectionReportAction =
+    Future<String> Function(
+      String connectionId,
+      String reportedUserId,
+      String reason, {
+      required String note,
+    });
+
 class ConnectionsScreen extends StatefulWidget {
   const ConnectionsScreen({
     this.onRequestConnection,
     this.onApproveConnection,
     this.onDeclineConnection,
+    this.onRemoveConnection,
+    this.onBlockConnection,
+    this.onUnblockConnection,
+    this.onReportConnection,
     super.key,
   });
 
   final Future<String> Function(String targetUserId)? onRequestConnection;
   final Future<String> Function(String connectionId)? onApproveConnection;
   final Future<String> Function(String connectionId)? onDeclineConnection;
+  final Future<String> Function(String connectionId)? onRemoveConnection;
+  final Future<String> Function(String connectionId, String blockedUserId)?
+  onBlockConnection;
+  final Future<String> Function(String connectionId, String blockedUserId)?
+  onUnblockConnection;
+  final ConnectionReportAction? onReportConnection;
 
   @override
   State<ConnectionsScreen> createState() => _ConnectionsScreenState();
@@ -1253,6 +1387,10 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
                     actioning: _actioningConnectionIds.contains(connection.id),
                     onApprove: () => _approveConnection(connection),
                     onDecline: () => _declineConnection(connection),
+                    onRemove: () => _removeConnection(connection),
+                    onBlock: () => _blockConnection(connection),
+                    onUnblock: () => _unblockConnection(connection),
+                    onReportConnection: widget.onReportConnection,
                   ),
               ],
             ),
@@ -1275,6 +1413,10 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
                         actioning: _actioningConnectionIds.contains(
                           connection.id,
                         ),
+                        onRemove: () => _removeConnection(connection),
+                        onBlock: () => _blockConnection(connection),
+                        onUnblock: () => _unblockConnection(connection),
+                        onReportConnection: widget.onReportConnection,
                       ),
                   ],
                 ),
@@ -1330,6 +1472,47 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
     );
   }
 
+  Future<void> _removeConnection(Connection connection) async {
+    await _updateConnection(
+      connection,
+      fallback: () {
+        final store = StoreScope.of(context);
+        final other = store.userById(
+          connection.otherUserId(store.currentUserId),
+        );
+        store.removeConnection(connection.id);
+        return '${other.displayName} removed from active connections.';
+      },
+      action: widget.onRemoveConnection,
+    );
+  }
+
+  Future<void> _blockConnection(Connection connection) async {
+    await _updateConnectionWithUser(
+      connection,
+      fallback: (blockedUserId) {
+        final store = StoreScope.of(context);
+        final blocked = store.userById(blockedUserId);
+        store.blockConnection(connection.id, blockedUserId);
+        return '${blocked.displayName} blocked.';
+      },
+      action: widget.onBlockConnection,
+    );
+  }
+
+  Future<void> _unblockConnection(Connection connection) async {
+    await _updateConnectionWithUser(
+      connection,
+      fallback: (blockedUserId) {
+        final store = StoreScope.of(context);
+        final blocked = store.userById(blockedUserId);
+        store.unblockConnection(connection.id, blockedUserId);
+        return '${blocked.displayName} unblocked.';
+      },
+      action: widget.onUnblockConnection,
+    );
+  }
+
   Future<void> _updateConnection(
     Connection connection, {
     required String Function() fallback,
@@ -1341,6 +1524,37 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
     setState(() => _actioningConnectionIds.add(connection.id));
     try {
       final message = action == null ? fallback() : await action(connection.id);
+      if (!mounted) {
+        return;
+      }
+      showSnack(context, message);
+    } on BackendApiException catch (error) {
+      if (mounted) {
+        showSnack(context, error.message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _actioningConnectionIds.remove(connection.id));
+      }
+    }
+  }
+
+  Future<void> _updateConnectionWithUser(
+    Connection connection, {
+    required String Function(String otherUserId) fallback,
+    required Future<String> Function(String connectionId, String otherUserId)?
+    action,
+  }) async {
+    final store = StoreScope.of(context);
+    final otherUserId = connection.otherUserId(store.currentUserId);
+    if (_actioningConnectionIds.contains(connection.id)) {
+      return;
+    }
+    setState(() => _actioningConnectionIds.add(connection.id));
+    try {
+      final message = action == null
+          ? fallback(otherUserId)
+          : await action(connection.id, otherUserId);
       if (!mounted) {
         return;
       }
@@ -1499,6 +1713,10 @@ class _ConnectionTile extends StatelessWidget {
     this.actioning = false,
     this.onApprove,
     this.onDecline,
+    this.onRemove,
+    this.onBlock,
+    this.onUnblock,
+    this.onReportConnection,
   });
 
   final Connection connection;
@@ -1506,6 +1724,10 @@ class _ConnectionTile extends StatelessWidget {
   final bool actioning;
   final VoidCallback? onApprove;
   final VoidCallback? onDecline;
+  final VoidCallback? onRemove;
+  final VoidCallback? onBlock;
+  final VoidCallback? onUnblock;
+  final ConnectionReportAction? onReportConnection;
 
   @override
   Widget build(BuildContext context) {
@@ -1558,24 +1780,34 @@ class _ConnectionTile extends StatelessWidget {
                 if (connection.status == ConnectionStatus.approved)
                   IconButton.outlined(
                     tooltip: 'Remove',
-                    onPressed: () => store.removeConnection(connection.id),
+                    onPressed: actioning
+                        ? null
+                        : onRemove ??
+                              () => store.removeConnection(connection.id),
                     icon: const Icon(Icons.person_remove_outlined),
                   ),
                 IconButton.outlined(
                   tooltip: blockedByMe ? 'Unblock' : 'Block',
-                  onPressed: () => blockedByMe
-                      ? store.unblockConnection(connection.id, other.id)
-                      : store.blockConnection(connection.id, other.id),
+                  onPressed: actioning
+                      ? null
+                      : blockedByMe
+                      ? onUnblock ??
+                            () =>
+                                store.unblockConnection(connection.id, other.id)
+                      : onBlock ??
+                            () =>
+                                store.blockConnection(connection.id, other.id),
                   icon: Icon(blockedByMe ? Icons.lock_open : Icons.block),
                 ),
                 IconButton.outlined(
                   tooltip: reportedByMe ? 'Already reported' : 'Report',
-                  onPressed: reportedByMe
+                  onPressed: reportedByMe || actioning
                       ? null
                       : () => showReportConnectionDialog(
                           context,
                           connection,
                           other,
+                          onReportConnection: onReportConnection,
                         ),
                   icon: Icon(reportedByMe ? Icons.flag : Icons.flag_outlined),
                 ),
@@ -1588,8 +1820,9 @@ class _ConnectionTile extends StatelessWidget {
 Future<void> showReportConnectionDialog(
   BuildContext context,
   Connection connection,
-  AppUser reportedUser,
-) async {
+  AppUser reportedUser, {
+  ConnectionReportAction? onReportConnection,
+}) async {
   final store = StoreScope.of(context);
   if (connection.hasReportFrom(store.currentUserId, reportedUser.id)) {
     showSnack(
@@ -1605,6 +1838,7 @@ Future<void> showReportConnectionDialog(
       store: store,
       connection: connection,
       reportedUser: reportedUser,
+      onReportConnection: onReportConnection,
     ),
   );
   if (message != null && context.mounted) {
@@ -1617,11 +1851,13 @@ class _ReportConnectionDialog extends StatefulWidget {
     required this.store,
     required this.connection,
     required this.reportedUser,
+    this.onReportConnection,
   });
 
   final AppStore store;
   final Connection connection;
   final AppUser reportedUser;
+  final ConnectionReportAction? onReportConnection;
 
   @override
   State<_ReportConnectionDialog> createState() =>
@@ -1630,6 +1866,7 @@ class _ReportConnectionDialog extends StatefulWidget {
 
 class _ReportConnectionDialogState extends State<_ReportConnectionDialog> {
   final _noteController = TextEditingController();
+  var _submitting = false;
 
   @override
   void dispose() {
@@ -1670,26 +1907,49 @@ class _ReportConnectionDialogState extends State<_ReportConnectionDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton.icon(
-          onPressed: note.isEmpty
-              ? null
-              : () {
-                  final error = widget.store.reportConnection(
-                    widget.connection.id,
-                    widget.reportedUser.id,
-                    'safety_review',
-                    note: _noteController.text,
-                  );
-                  Navigator.pop(
-                    context,
-                    error ??
-                        'Report submitted for ${widget.reportedUser.displayName}.',
-                  );
-                },
-          icon: const Icon(Icons.flag_outlined),
+          onPressed: note.isEmpty || _submitting ? null : _submit,
+          icon: _submitting
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.flag_outlined),
           label: const Text('Submit report'),
         ),
       ],
     );
+  }
+
+  Future<void> _submit() async {
+    setState(() => _submitting = true);
+    try {
+      final action = widget.onReportConnection;
+      final message = action == null
+          ? widget.store.reportConnection(
+                  widget.connection.id,
+                  widget.reportedUser.id,
+                  'safety_review',
+                  note: _noteController.text,
+                ) ??
+                'Report submitted for ${widget.reportedUser.displayName}.'
+          : await action(
+              widget.connection.id,
+              widget.reportedUser.id,
+              'safety_review',
+              note: _noteController.text,
+            );
+      if (mounted) {
+        Navigator.pop(context, message);
+      }
+    } on BackendApiException catch (error) {
+      if (mounted) {
+        Navigator.pop(context, error.message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
   }
 }
 

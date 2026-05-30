@@ -58,6 +58,44 @@ function mapConnection(row, profileIds) {
   };
 }
 
+function mapConnectionEvent(row, profileIds) {
+  return {
+    id: row.id,
+    connectionId: row.connection_id,
+    actorId: profileIds.get(row.actor_id) ?? row.actor_id,
+    eventType: row.event_type,
+    previousStatus: row.previous_status,
+    nextStatus: row.next_status,
+    note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
+function mapConnectionBlock(row, profileIds) {
+  return {
+    id: row.id,
+    connectionId: row.connection_id,
+    blockerId: profileIds.get(row.blocker_id) ?? row.blocker_id,
+    blockedUserId: profileIds.get(row.blocked_user_id) ?? row.blocked_user_id,
+    active: row.active,
+    liftedAt: row.lifted_at,
+    createdAt: row.created_at,
+  };
+}
+
+function mapConnectionReport(row, profileIds) {
+  return {
+    id: row.id,
+    connectionId: row.connection_id,
+    reporterId: profileIds.get(row.reporter_id) ?? row.reporter_id,
+    reportedUserId: profileIds.get(row.reported_user_id) ?? row.reported_user_id,
+    reasonCode: row.reason_code,
+    details: row.details,
+    status: row.status,
+    createdAt: row.created_at,
+  };
+}
+
 function mapExpense(row, profileIds, groupIds) {
   return {
     id: row.id,
@@ -112,6 +150,9 @@ export async function appBootstrap(currentUserId) {
   const tables = await Promise.all([
     db().from('profiles').select('*').order('created_at', { ascending: true }),
     db().from('connections').select('*').order('created_at', { ascending: true }),
+    db().from('connection_events').select('*').order('created_at', { ascending: true }),
+    db().from('connection_blocks').select('*').order('created_at', { ascending: true }),
+    db().from('connection_reports').select('*').order('created_at', { ascending: true }),
     db().from('groups').select('*').eq('is_active', true).order('created_at', { ascending: true }),
     db().from('group_members').select('*').order('joined_at', { ascending: true }),
     db().from('expenses').select('*').order('created_at', { ascending: true }),
@@ -139,6 +180,9 @@ export async function appBootstrap(currentUserId) {
   const [
     profiles,
     connections,
+    connectionEvents,
+    connectionBlocks,
+    connectionReports,
     groups,
     groupMembers,
     expenses,
@@ -168,6 +212,9 @@ export async function appBootstrap(currentUserId) {
     currentUserId: profileIds.get(currentUserId) ?? currentUserId,
     users: profiles.map(mapProfile),
     connections: connections.map((row) => mapConnection(row, profileIds)),
+    connectionEvents: connectionEvents.map((row) => mapConnectionEvent(row, profileIds)),
+    connectionBlocks: connectionBlocks.map((row) => mapConnectionBlock(row, profileIds)),
+    connectionReports: connectionReports.map((row) => mapConnectionReport(row, profileIds)),
     groups: groups.map((row) => mapGroup(row, profileIds)),
     groupMembers: groupMembers.map((row) => mapGroupMember(row, profileIds, groupIds)),
     expenses: expenses.map((row) => mapExpense(row, profileIds, groupIds)),

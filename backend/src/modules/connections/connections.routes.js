@@ -3,9 +3,12 @@ import { Router } from 'express';
 import { requireBody } from '../../middleware/validate.middleware.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import {
+  blockConnection,
   listConnections,
+  reportConnection,
   requestConnection,
   searchProfiles,
+  unblockConnection,
   updateConnection,
 } from './connections.service.js';
 
@@ -60,6 +63,34 @@ connectionsRouter.delete(
   asyncHandler(async (req, res) => {
     res.json({
       connection: await updateConnection(req.userProfile.id, req.params.connectionId, 'removed'),
+    });
+  }),
+);
+
+connectionsRouter.post(
+  '/:connectionId/block',
+  asyncHandler(async (req, res) => {
+    res.status(201).json({
+      block: await blockConnection(req.userProfile.id, req.params.connectionId, req.body),
+    });
+  }),
+);
+
+connectionsRouter.post(
+  '/:connectionId/unblock',
+  asyncHandler(async (req, res) => {
+    res.json({
+      block: await unblockConnection(req.userProfile.id, req.params.connectionId, req.body),
+    });
+  }),
+);
+
+connectionsRouter.post(
+  '/:connectionId/report',
+  requireBody(['reportedUserId', 'note']),
+  asyncHandler(async (req, res) => {
+    res.status(201).json({
+      report: await reportConnection(req.userProfile.id, req.params.connectionId, req.body),
     });
   }),
 );

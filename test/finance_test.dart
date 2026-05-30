@@ -71,6 +71,86 @@ void main() {
     expect(store.expenses.single.title, 'Khasi purchase');
   });
 
+  test('AppStore hydrates connection safety records from backend snapshot', () {
+    final store = AppStore()
+      ..loadBackendSnapshot({
+        'currentUserId': 'u-sita',
+        'users': [
+          {
+            'id': 'u-sita',
+            'displayName': 'Sita Shrestha',
+            'phone': '9800000001',
+            'avatar': 'SS',
+            'district': 'Kathmandu',
+            'privacyMode': 'everyone',
+            'createdAt': '2026-05-01T00:00:00Z',
+          },
+          {
+            'id': 'u-utsav',
+            'displayName': 'Utsav Shrestha',
+            'phone': '9800000010',
+            'avatar': 'US',
+            'district': 'Kathmandu',
+            'privacyMode': 'everyone',
+            'createdAt': '2026-05-01T00:00:00Z',
+          },
+        ],
+        'connections': [
+          {
+            'id': 'conn-1',
+            'requesterId': 'u-sita',
+            'recipientId': 'u-utsav',
+            'userLowId': 'u-sita',
+            'userHighId': 'u-utsav',
+            'status': 'approved',
+            'createdAt': '2026-05-10T00:00:00Z',
+            'updatedAt': '2026-05-10T00:00:00Z',
+            'expiresAt': '2026-06-10T00:00:00Z',
+          },
+        ],
+        'connectionEvents': [
+          {
+            'id': 'event-1',
+            'connectionId': 'conn-1',
+            'actorId': 'u-sita',
+            'eventType': 'blocked',
+            'previousStatus': 'approved',
+            'nextStatus': 'approved',
+            'createdAt': '2026-05-11T00:00:00Z',
+          },
+        ],
+        'connectionBlocks': [
+          {
+            'id': 'block-1',
+            'connectionId': 'conn-1',
+            'blockerId': 'u-sita',
+            'blockedUserId': 'u-utsav',
+            'active': true,
+            'createdAt': '2026-05-11T00:00:00Z',
+          },
+        ],
+        'connectionReports': [
+          {
+            'id': 'report-1',
+            'connectionId': 'conn-1',
+            'reporterId': 'u-sita',
+            'reportedUserId': 'u-utsav',
+            'reasonCode': 'safety_review',
+            'details': 'Repeated messages',
+            'status': 'open',
+            'createdAt': '2026-05-11T00:00:00Z',
+          },
+        ],
+      });
+
+    final connection = store.connectionByIdOrNull('conn-1')!;
+
+    expect(connection.events.single.eventType, 'blocked');
+    expect(connection.isBlockedBy('u-sita', 'u-utsav'), isTrue);
+    expect(connection.hasReportFrom('u-sita', 'u-utsav'), isTrue);
+    expect(connection.reports.single.details, 'Repeated messages');
+  });
+
   test('equal shares keep integer paisa totals exact', () {
     final shares = equalShares(npr(100), const ['a', 'b', 'c']);
 
