@@ -13,7 +13,7 @@ class AuthController extends ChangeNotifier {
       _secureStorage =
           secureStorage ??
           const FlutterSecureStorage(
-            mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+            mOptions: MacOsOptions(usesDataProtectionKeychain: true),
           );
 
   static const _hasSeenIntroKey = 'auth.hasSeenIntro';
@@ -27,6 +27,7 @@ class AuthController extends ChangeNotifier {
   final FlutterSecureStorage _secureStorage;
   SharedPreferences? _preferences;
   AuthState _state = const AuthState.initial();
+  _StoredBackendSession? _session;
   Future<String?>? _refreshInFlight;
 
   AuthState get state => _state;
@@ -35,14 +36,9 @@ class AuthController extends ChangeNotifier {
     if (!_backendApi.isConfigured) {
       return null;
     }
-    final accessToken = await _secureStorage.read(key: _accessTokenKey);
-    final expiresAt = DateTime.tryParse(
-      await _secureStorage.read(key: _accessTokenExpiresAtKey) ?? '',
-    );
-    if (accessToken != null &&
-        expiresAt != null &&
-        expiresAt.isAfter(DateTime.now().add(const Duration(seconds: 45)))) {
-      return accessToken;
+    final session = _session ??= await _readStoredSession();
+    if (session != null && session.hasFreshAccessToken) {
+      return session.accessToken;
     }
     return _refreshInFlight ??= _refreshSession().whenComplete(() {
       _refreshInFlight = null;
@@ -66,6 +62,7 @@ class AuthController extends ChangeNotifier {
       }
     }
 
+    _session = activeUser == null ? null : await _readStoredSession();
     final token = activeUser == null ? null : await backendAccessToken();
     if (activeUser != null && token == null) {
       await _clearSession(notify: false);
@@ -170,8 +167,9 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    final accessToken = await _secureStorage.read(key: _accessTokenKey);
-    final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    final session = _session ??= await _readStoredSession();
+    final accessToken = session?.accessToken;
+    final refreshToken = session?.refreshToken;
     if (_backendApi.isConfigured &&
         (accessToken != null || refreshToken != null)) {
       try {
@@ -228,6 +226,7 @@ class AuthController extends ChangeNotifier {
       key: _activeUserProfileKey,
       value: profile.toJsonString(),
     );
+    _session = _StoredBackendSession.fromBackendSession(session);
     _state = AuthState(
       initialized: true,
       hasSeenIntro: true,
@@ -238,7 +237,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<String?> _refreshSession() async {
-    final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    final refreshToken = _session?.refreshToken;
     if (refreshToken == null) {
       return null;
     }
@@ -256,6 +255,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> _clearSession({bool notify = true}) async {
+    _session = null;
     await _secureStorage.delete(key: _activeUserProfileKey);
     await _secureStorage.delete(key: _accessTokenKey);
     await _secureStorage.delete(key: _refreshTokenKey);
@@ -269,6 +269,29 @@ class AuthController extends ChangeNotifier {
       );
       notifyListeners();
     }
+  }
+
+  Future<_StoredBackendSession?> _readStoredSession() async {
+    final accessToken = await _secureStorage.read(key: _accessTokenKey);
+    final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    final accessTokenExpiresAt = DateTime.tryParse(
+      await _secureStorage.read(key: _accessTokenExpiresAtKey) ?? '',
+    );
+    final refreshTokenExpiresAt = DateTime.tryParse(
+      await _secureStorage.read(key: _refreshTokenExpiresAtKey) ?? '',
+    );
+    if (accessToken == null ||
+        refreshToken == null ||
+        accessTokenExpiresAt == null ||
+        refreshTokenExpiresAt == null) {
+      return null;
+    }
+    return _StoredBackendSession(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      accessTokenExpiresAt: accessTokenExpiresAt,
+      refreshTokenExpiresAt: refreshTokenExpiresAt,
+    );
   }
 
   Future<SharedPreferences> _prefs() async {
@@ -323,6 +346,37 @@ class AuthController extends ChangeNotifier {
       createdAt:
           DateTime.tryParse(profile['createdAt']?.toString() ?? '') ??
           DateTime.now(),
+    );
+  }
+}
+
+class _StoredBackendSession {
+  const _StoredBackendSession({
+    required this.accessToken,
+    required this.refreshToken,
+    required this.accessTokenExpiresAt,
+    required this.refreshTokenExpiresAt,
+  });
+
+  factory _StoredBackendSession.fromBackendSession(BackendAuthSession session) {
+    return _StoredBackendSession(
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      accessTokenExpiresAt:
+          DateTime.tryParse(session.accessTokenExpiresAt) ?? DateTime.now(),
+      refreshTokenExpiresAt:
+          DateTime.tryParse(session.refreshTokenExpiresAt) ?? DateTime.now(),
+    );
+  }
+
+  final String accessToken;
+  final String refreshToken;
+  final DateTime accessTokenExpiresAt;
+  final DateTime refreshTokenExpiresAt;
+
+  bool get hasFreshAccessToken {
+    return accessTokenExpiresAt.isAfter(
+      DateTime.now().add(const Duration(seconds: 45)),
     );
   }
 }
