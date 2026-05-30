@@ -1,5 +1,3 @@
-import 'dart:ui' show Offset;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_paddle_ocr/flutter_paddle_ocr.dart';
 
@@ -43,8 +41,43 @@ class ReceiptOcrService {
     } catch (error) {
       throw ReceiptOcrException('Could not read the bill: $error');
     }
-    final lines = _groupIntoLines(regions);
-    return parseReceiptLines(lines);
+    return parseReceipt([
+      for (final region in regions)
+        if (region.text.trim().isNotEmpty) _wordFromRegion(region),
+    ]);
+  }
+
+  /// Converts an OCR region into a geometry-bearing [OcrWord] for the parser.
+  OcrWord _wordFromRegion(OcrResult region) {
+    final points = region.points;
+    if (points.isEmpty) {
+      return OcrWord(
+        text: region.text.trim(),
+        confidence: region.confidence,
+        left: 0,
+        right: 0,
+        centerY: 0,
+        height: 0,
+      );
+    }
+    var minX = points.first.dx;
+    var maxX = points.first.dx;
+    var minY = points.first.dy;
+    var maxY = points.first.dy;
+    for (final p in points) {
+      if (p.dx < minX) minX = p.dx;
+      if (p.dx > maxX) maxX = p.dx;
+      if (p.dy < minY) minY = p.dy;
+      if (p.dy > maxY) maxY = p.dy;
+    }
+    return OcrWord(
+      text: region.text.trim(),
+      confidence: region.confidence,
+      left: minX,
+      right: maxX,
+      centerY: (minY + maxY) / 2,
+      height: maxY - minY,
+    );
   }
 
   Future<PaddleOcr> _ensureEngine(void Function(String)? onStatus) {
@@ -69,75 +102,4 @@ class ReceiptOcrService {
     onStatus?.call('Loading the OCR engine…');
     return PaddleOcr.create(source: source);
   }
-
-  /// Groups detected text regions into reading-order lines.
-  ///
-  /// PaddleOCR detects each text region separately, so an item label and its
-  /// price often arrive as two boxes on the same row. We cluster boxes by
-  /// vertical position and join each row left-to-right, which reconstructs
-  /// lines like "Chicken Momo 300" that the parser can read.
-  List<OcrTextLine> _groupIntoLines(List<OcrResult> regions) {
-    final boxes = <_Box>[];
-    for (final region in regions) {
-      final text = region.text.trim();
-      if (text.isEmpty) {
-        continue;
-      }
-      boxes.add(_Box(text, region.confidence, region.points));
-    }
-    if (boxes.isEmpty) {
-      return const <OcrTextLine>[];
-    }
-
-    final avgHeight =
-        boxes.map((b) => b.height).fold<double>(0, (a, b) => a + b) /
-        boxes.length;
-    final rowGap = (avgHeight <= 0 ? 12.0 : avgHeight) * 0.6;
-
-    boxes.sort((a, b) => a.centerY.compareTo(b.centerY));
-
-    final lines = <OcrTextLine>[];
-    var row = <_Box>[boxes.first];
-    var rowY = boxes.first.centerY;
-    for (final box in boxes.skip(1)) {
-      if ((box.centerY - rowY).abs() <= rowGap) {
-        row.add(box);
-      } else {
-        lines.add(_composeLine(row));
-        row = <_Box>[box];
-      }
-      rowY = box.centerY;
-    }
-    lines.add(_composeLine(row));
-    return lines;
-  }
-
-  OcrTextLine _composeLine(List<_Box> row) {
-    row.sort((a, b) => a.left.compareTo(b.left));
-    final text = row.map((b) => b.text).join(' ');
-    final confidence =
-        row.map((b) => b.confidence).fold<double>(0, (a, b) => a + b) /
-        row.length;
-    return OcrTextLine(text, confidence);
-  }
-}
-
-class _Box {
-  _Box(this.text, this.confidence, List<Offset> points)
-    : left = points.isEmpty
-          ? 0
-          : points.map((p) => p.dx).reduce((a, b) => a < b ? a : b),
-      centerY = points.isEmpty
-          ? 0
-          : points.map((p) => p.dy).reduce((a, b) => a + b) / points.length,
-      height = points.isEmpty
-          ? 0
-          : points.map((p) => p.dy).reduce((a, b) => a > b ? a : b) -
-                points.map((p) => p.dy).reduce((a, b) => a < b ? a : b);
-
-  final String text;
-  final double confidence;
-  final double left;
-  final double centerY;
-  final double height;
 }
