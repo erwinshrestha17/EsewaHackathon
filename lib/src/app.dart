@@ -26,6 +26,7 @@ import '../shared/design_system/app_spacing.dart';
 import '../shared/design_system/app_text_styles.dart';
 import '../shared/design_system/app_theme.dart';
 import '../shared/localization/app_localizations.dart';
+import '../shared/ocr/live_receipt_stabilizer.dart';
 import '../shared/ocr/receipt_ocr_service.dart';
 import '../shared/payments/esewa_payment_service.dart';
 import '../shared/spending/spending_habits.dart';
@@ -4873,6 +4874,8 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
   final ReceiptOcrService _ocrService = ReceiptOcrService();
+  final LiveReceiptScanStabilizer _liveScanStabilizer =
+      LiveReceiptScanStabilizer();
   final ImagePicker _imagePicker = ImagePicker();
 
   camera.CameraController? _cameraController;
@@ -4908,6 +4911,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
 
   Future<void> _prepareCamera() async {
     _liveScanTimer?.cancel();
+    _liveScanStabilizer.reset();
     if (kIsWeb && !_hasSecureWebCameraContext()) {
       if (!mounted) {
         return;
@@ -5040,6 +5044,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
 
   void _startLiveBillScan() {
     _liveScanTimer?.cancel();
+    _liveScanStabilizer.reset();
     if (!_supportsLiveBillScanning) {
       return;
     }
@@ -5126,9 +5131,20 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
         });
         return;
       }
+      final stableResult = _liveScanStabilizer.add(result, manual: manual);
+      if (stableResult == null) {
+        setState(() {
+          _runningOcr = false;
+          _scanFailed = false;
+          _scanMessage =
+              'Keep the bill steady. Matching item names and prices...';
+        });
+        return;
+      }
       _liveScanTimer?.cancel();
       _liveScanFailedCount = 0;
-      _applyScanResult(result);
+      _liveScanStabilizer.reset();
+      _applyScanResult(stableResult);
     } on ReceiptOcrException catch (error) {
       if (!mounted) {
         return;
@@ -5160,6 +5176,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
     }
     _liveScanTimer?.cancel();
     _liveScanFailedCount = 0;
+    _liveScanStabilizer.reset();
 
     // Release flash/preview while a system picker is in front.
     if (_flashOn) {
@@ -5263,6 +5280,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
   }
 
   void _applyScanResult(ReceiptScanResult result) {
+    _liveScanStabilizer.reset();
     for (final item in _scannedItems) {
       item.dispose();
     }
