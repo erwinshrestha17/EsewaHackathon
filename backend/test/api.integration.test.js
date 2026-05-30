@@ -74,6 +74,44 @@ test(
 );
 
 test(
+  'remote API register stores separate users and preserves earlier logins',
+  { skip: !runRemoteTests || !env.hasSupabaseConfig },
+  async () => {
+    await withServer(async (baseUrl) => {
+      const suffix = String(Date.now() % 100000000).padStart(8, '0');
+      const users = [
+        { phone: `98${suffix}`, mPin: '1357' },
+        { phone: `97${suffix}`, mPin: '2468' },
+      ];
+
+      for (const user of users) {
+        const response = await fetch(`${baseUrl}/api/auth/mpin/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: user.phone,
+            mPin: user.mPin,
+            fullName: 'Remote Test User',
+          }),
+        });
+        assert.equal(response.status, 201);
+        assert.equal((await json(response)).profile.phone, user.phone);
+      }
+
+      for (const user of users) {
+        const login = await fetch(`${baseUrl}/api/auth/mpin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(user),
+        });
+        assert.equal(login.status, 200);
+        assert.equal((await json(login)).profile.phone, user.phone);
+      }
+    });
+  },
+);
+
+test(
   'remote API community savings admin flow: submit, confirm, waive, expense',
   { skip: !runRemoteTests || !env.hasSupabaseConfig },
   async () => {

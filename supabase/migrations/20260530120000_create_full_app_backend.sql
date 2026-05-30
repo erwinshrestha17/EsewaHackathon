@@ -39,6 +39,27 @@ create table if not exists public.user_settings (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.app_user_credentials (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  mpin_hash text not null,
+  failed_attempts integer not null default 0 check (failed_attempts >= 0),
+  locked_until timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.app_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  token_hash text not null unique,
+  user_agent text,
+  ip_address inet,
+  expires_at timestamptz not null,
+  revoked_at timestamptz,
+  created_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+
 create table if not exists public.connections (
   id uuid primary key default gen_random_uuid(),
   requester_id uuid not null references public.profiles(id) on delete cascade,
@@ -357,17 +378,25 @@ create table if not exists public.notifications (
   created_at timestamptz not null default now()
 );
 
+create index if not exists app_sessions_user_id_idx
+  on public.app_sessions(user_id);
+
+create index if not exists app_sessions_valid_idx
+  on public.app_sessions(user_id, expires_at)
+  where revoked_at is null;
+
 do $$
 declare
   t text;
 begin
   foreach t in array array[
-    'profiles', 'user_settings', 'connections', 'connection_events', 'groups',
-    'group_members', 'expenses', 'expense_payers', 'expense_shares',
-    'expense_items', 'expense_item_assignments', 'payment_transactions',
-    'settlements', 'gifts', 'gift_pools', 'gift_pool_contributions',
-    'community_savings_groups', 'contribution_records', 'community_expenses',
-    'activity_logs', 'notifications'
+    'profiles', 'user_settings', 'app_user_credentials', 'app_sessions',
+    'connections', 'connection_events', 'groups', 'group_members', 'expenses',
+    'expense_payers', 'expense_shares', 'expense_items',
+    'expense_item_assignments', 'payment_transactions', 'settlements', 'gifts',
+    'gift_pools', 'gift_pool_contributions', 'community_savings_groups',
+    'contribution_records', 'community_expenses', 'activity_logs',
+    'notifications'
   ] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "Server role manages %s" on public.%I', t, t);
@@ -385,8 +414,8 @@ declare
   t text;
 begin
   foreach t in array array[
-    'profiles', 'user_settings', 'connections', 'groups', 'group_members',
-    'expenses', 'payment_transactions', 'gift_pools',
+    'profiles', 'user_settings', 'app_user_credentials', 'connections',
+    'groups', 'group_members', 'expenses', 'payment_transactions', 'gift_pools',
     'community_savings_groups', 'contribution_records', 'community_expenses'
   ] loop
     execute format('drop trigger if exists %I on public.%I', 'touch_' || t || '_updated_at', t);

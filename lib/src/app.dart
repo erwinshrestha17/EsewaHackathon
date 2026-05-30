@@ -691,6 +691,9 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         accessTokenProvider: _authController!.backendAccessToken,
       );
       store.applyActiveUserProfile(activeUser, notify: false);
+      if (!_backendApi.isConfigured) {
+        unawaited(store.restoreLocalCacheForUser(activeUser.id));
+      }
       unawaited(_loadBackendSnapshot());
     }
   }

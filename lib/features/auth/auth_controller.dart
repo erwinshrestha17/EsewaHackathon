@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,6 +17,7 @@ class AuthController extends ChangeNotifier {
   static const _activeUserProfileKey = 'auth.activeUserProfile';
   static const _mPinKey = 'auth.mPin';
   static const _biometricEnabledKey = 'auth.biometricEnabled';
+  static const _localUsersKey = 'auth.localUsers';
   static const _backendAccessTokenKey = 'auth.backendAccessToken';
   static const _backendSessionExpiresAtKey = 'auth.backendSessionExpiresAt';
   static const demoOtp = '123456';
@@ -116,16 +119,20 @@ class AuthController extends ChangeNotifier {
       }
     }
     final preferences = await _prefs();
-    final savedMpin = preferences.getString(_mPinKey) ?? demoMpin;
-    if (mPin.trim() != savedMpin) {
+    final localUsers = _localUsers(preferences);
+    final localUser = localUsers[mobile];
+    if (localUser != null) {
+      if (mPin.trim() != localUser.mPin) {
+        throw const AuthValidationException('M-PIN does not match.');
+      }
+      await _saveLoggedInProfile(localUser.profile.copyWith(phone: mobile));
+      return;
+    }
+
+    if (localUsers.isNotEmpty || mPin.trim() != demoMpin) {
       throw const AuthValidationException('M-PIN does not match.');
     }
-    final profile = _storedOrDemoProfile(preferences);
-    final savedMobile = normalizeNepalMobile(profile.phone);
-    if (savedMobile != null && savedMobile != mobile) {
-      throw const AuthValidationException('Phone number does not match.');
-    }
-    await _saveLoggedInProfile(profile.copyWith(phone: mobile));
+    await _saveLoggedInProfile(UserProfile.demo().copyWith(phone: mobile));
   }
 
   Future<void> loginWithBiometric({required String phone}) async {
@@ -134,16 +141,21 @@ class AuthController extends ChangeNotifier {
       throw const AuthValidationException('Enter a valid Nepal mobile number.');
     }
     final preferences = await _prefs();
-    final biometricEnabled = preferences.getBool(_biometricEnabledKey) ?? true;
-    if (!biometricEnabled) {
+    final localUsers = _localUsers(preferences);
+    final localUser = localUsers[mobile];
+    if (localUser != null) {
+      if (!localUser.biometricEnabled) {
+        throw const AuthValidationException('Biometric login is not enabled.');
+      }
+      await _saveLoggedInProfile(localUser.profile.copyWith(phone: mobile));
+      return;
+    }
+
+    if (localUsers.isNotEmpty ||
+        !(preferences.getBool(_biometricEnabledKey) ?? true)) {
       throw const AuthValidationException('Biometric login is not enabled.');
     }
-    final profile = _storedOrDemoProfile(preferences);
-    final savedMobile = normalizeNepalMobile(profile.phone);
-    if (savedMobile != null && savedMobile != mobile) {
-      throw const AuthValidationException('Phone number does not match.');
-    }
-    await _saveLoggedInProfile(profile.copyWith(phone: mobile));
+    await _saveLoggedInProfile(UserProfile.demo().copyWith(phone: mobile));
   }
 
   Future<void> register({
@@ -204,6 +216,13 @@ class AuthController extends ChangeNotifier {
       createdAt: now,
     );
     final preferences = await _prefs();
+    final localUsers = _localUsers(preferences);
+    localUsers[mobile] = _LocalAuthUser(
+      profile: profile,
+      mPin: mPin.trim(),
+      biometricEnabled: biometricEnabled,
+    );
+    await _saveLocalUsers(preferences, localUsers);
     await preferences.setString(_mPinKey, mPin.trim());
     await preferences.setBool(_biometricEnabledKey, biometricEnabled);
     await _saveLoggedInProfile(profile);
@@ -215,6 +234,29 @@ class AuthController extends ChangeNotifier {
 
   Future<void> updateProfile(UserProfile profile) async {
     final preferences = await _prefs();
+    final localUsers = _localUsers(preferences);
+    final previousPhone = _state.activeUser == null
+        ? null
+        : normalizeNepalMobile(_state.activeUser!.phone);
+    final mobile = normalizeNepalMobile(profile.phone);
+    if (mobile != null) {
+      final previousUser = previousPhone == null
+          ? null
+          : localUsers.remove(previousPhone);
+      final existing = localUsers[mobile] ?? previousUser;
+      localUsers[mobile] = _LocalAuthUser(
+        profile: profile.copyWith(phone: mobile),
+        mPin:
+            existing?.mPin ??
+            preferences.getString(_mPinKey) ??
+            AuthController.demoMpin,
+        biometricEnabled:
+            existing?.biometricEnabled ??
+            preferences.getBool(_biometricEnabledKey) ??
+            true,
+      );
+      await _saveLocalUsers(preferences, localUsers);
+    }
     await preferences.setString(_activeUserProfileKey, profile.toJsonString());
     _state = _state.copyWith(activeUser: profile);
     notifyListeners();
@@ -231,6 +273,14 @@ class AuthController extends ChangeNotifier {
 
   Future<void> deleteAccount() async {
     final preferences = await _prefs();
+    final localUsers = _localUsers(preferences);
+    final mobile = _state.activeUser == null
+        ? null
+        : normalizeNepalMobile(_state.activeUser!.phone);
+    if (mobile != null) {
+      localUsers.remove(mobile);
+      await _saveLocalUsers(preferences, localUsers);
+    }
     await preferences.setBool(_hasSeenIntroKey, true);
     await preferences.setBool(_isLoggedInKey, false);
     await preferences.remove(_activeUserProfileKey);
@@ -268,6 +318,50 @@ class AuthController extends ChangeNotifier {
     return RegExp(r'^\d{4}$').hasMatch(value.trim());
   }
 
+  Map<String, _LocalAuthUser> _localUsers(SharedPreferences preferences) {
+    final users = <String, _LocalAuthUser>{};
+    final rawUsers = preferences.getString(_localUsersKey);
+    if (rawUsers != null) {
+      try {
+        final decoded = jsonDecode(rawUsers) as Map<String, dynamic>;
+        for (final entry in decoded.entries) {
+          final user = _LocalAuthUser.fromJson(entry.value);
+          final phone =
+              normalizeNepalMobile(user.profile.phone) ??
+              normalizeNepalMobile(entry.key);
+          if (phone != null) {
+            users[phone] = user.copyWith(
+              profile: user.profile.copyWith(phone: phone),
+            );
+          }
+        }
+      } on FormatException {
+        users.clear();
+      } on TypeError {
+        users.clear();
+      }
+    }
+
+    final legacyProfile = _storedOrDemoProfile(preferences);
+    final legacyPhone = normalizeNepalMobile(legacyProfile.phone);
+    if (legacyPhone != null && !users.containsKey(legacyPhone)) {
+      users[legacyPhone] = _LocalAuthUser(
+        profile: legacyProfile.copyWith(phone: legacyPhone),
+        mPin: preferences.getString(_mPinKey) ?? demoMpin,
+        biometricEnabled: preferences.getBool(_biometricEnabledKey) ?? true,
+      );
+    }
+    return users;
+  }
+
+  Future<void> _saveLocalUsers(
+    SharedPreferences preferences,
+    Map<String, _LocalAuthUser> users,
+  ) {
+    final payload = users.map((phone, user) => MapEntry(phone, user.toJson()));
+    return preferences.setString(_localUsersKey, jsonEncode(payload));
+  }
+
   UserProfile _storedOrDemoProfile(SharedPreferences preferences) {
     final rawProfile = preferences.getString(_activeUserProfileKey);
     if (rawProfile != null) {
@@ -297,6 +391,43 @@ class AuthController extends ChangeNotifier {
       createdAt:
           DateTime.tryParse(profile['createdAt']?.toString() ?? '') ??
           DateTime.now(),
+    );
+  }
+}
+
+class _LocalAuthUser {
+  const _LocalAuthUser({
+    required this.profile,
+    required this.mPin,
+    required this.biometricEnabled,
+  });
+
+  factory _LocalAuthUser.fromJson(Object? source) {
+    final json = source as Map<String, dynamic>;
+    return _LocalAuthUser(
+      profile: UserProfile.fromJson(json['profile'] as Map<String, Object?>),
+      mPin: json['mPin'] as String? ?? AuthController.demoMpin,
+      biometricEnabled: json['biometricEnabled'] as bool? ?? true,
+    );
+  }
+
+  final UserProfile profile;
+  final String mPin;
+  final bool biometricEnabled;
+
+  Map<String, Object?> toJson() {
+    return {
+      'profile': profile.toJson(),
+      'mPin': mPin,
+      'biometricEnabled': biometricEnabled,
+    };
+  }
+
+  _LocalAuthUser copyWith({UserProfile? profile}) {
+    return _LocalAuthUser(
+      profile: profile ?? this.profile,
+      mPin: mPin,
+      biometricEnabled: biometricEnabled,
     );
   }
 }

@@ -54,6 +54,76 @@ void main() {
     },
   );
 
+  test(
+    'local auth keeps previously registered phones after another registration',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'auth.hasSeenIntro': true,
+        'auth.isLoggedIn': false,
+        'auth.activeUserProfile': UserProfile.demo()
+            .copyWith(phone: '9800000001')
+            .toJsonString(),
+        'auth.mPin': '1111',
+        'auth.biometricEnabled': true,
+      });
+      final controller = AuthController();
+      await controller.initialize();
+
+      await controller.register(
+        mobileNumber: '9800000002',
+        dateOfBirth: DateTime(2001, 2, 3),
+        mPin: '2222',
+        otp: AuthController.demoOtp,
+        biometricEnabled: true,
+      );
+      await controller.logout();
+
+      await controller.loginWithMpin(phone: '9800000001', mPin: '1111');
+      expect(controller.state.isLoggedIn, isTrue);
+      expect(controller.state.activeUser?.phone, '9800000001');
+
+      await controller.logout();
+      await controller.loginWithMpin(phone: '9800000002', mPin: '2222');
+      expect(controller.state.isLoggedIn, isTrue);
+      expect(controller.state.activeUser?.phone, '9800000002');
+    },
+  );
+
+  test('local auth stores multiple newly registered users by phone', () async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = AuthController();
+
+    await controller.register(
+      mobileNumber: '9800000001',
+      dateOfBirth: DateTime(2000, 1, 2),
+      mPin: '1357',
+      otp: AuthController.demoOtp,
+      biometricEnabled: true,
+    );
+    await controller.logout();
+    await controller.register(
+      mobileNumber: '9800000002',
+      dateOfBirth: DateTime(2002, 3, 4),
+      mPin: '2468',
+      otp: AuthController.demoOtp,
+      biometricEnabled: false,
+    );
+    await controller.logout();
+
+    await controller.loginWithMpin(phone: '9800000001', mPin: '1357');
+    expect(controller.state.activeUser?.phone, '9800000001');
+
+    await controller.logout();
+    await controller.loginWithMpin(phone: '9800000002', mPin: '2468');
+    expect(controller.state.activeUser?.phone, '9800000002');
+
+    await controller.logout();
+    expect(
+      () => controller.loginWithMpin(phone: '9800000001', mPin: '2468'),
+      throwsA(isA<AuthValidationException>()),
+    );
+  });
+
   test('delete account clears saved profile and login state', () async {
     SharedPreferences.setMockInitialValues({
       'auth.hasSeenIntro': true,
@@ -302,6 +372,34 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Groups overview'), findsOneWidget);
+  });
+
+  testWidgets('locally created groups survive store recreation', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final profile = UserProfile.demo();
+    final firstStore = AppStore()
+      ..applyActiveUserProfile(profile, notify: false);
+
+    await firstStore.restoreLocalCacheForUser(profile.id);
+    final groupId = firstStore.createGroup(
+      name: 'Refresh Test Group',
+      category: GroupCategory.custom,
+      memberIds: const [],
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final secondStore = AppStore()
+      ..applyActiveUserProfile(profile, notify: false);
+    await secondStore.restoreLocalCacheForUser(profile.id);
+
+    expect(secondStore.visibleExpenseGroups.single.id, groupId);
+    expect(secondStore.visibleExpenseGroups.single.name, 'Refresh Test Group');
+    expect(
+      secondStore.membersForGroup(groupId, activeOnly: true).single.userId,
+      profile.id,
+    );
   });
 
   testWidgets('theme choice applies across main and auth routes', (

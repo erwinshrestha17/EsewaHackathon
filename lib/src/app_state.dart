@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/auth/models/user_profile.dart';
 import '../shared/api/backend_api.dart';
@@ -49,6 +51,10 @@ class AppStore extends ChangeNotifier {
   int _sequence = 1000;
   BackendApi? _backendApi;
   Future<String?> Function()? _backendAccessToken;
+  String? _localCacheUserId;
+  var _localCacheRestored = false;
+
+  static const _localCachePrefix = 'app.localStore';
 
   AppUser get currentUser => userById(currentUserId);
 
@@ -134,6 +140,79 @@ class AppStore extends ChangeNotifier {
     _backendAccessToken = accessTokenProvider;
   }
 
+  Future<void> restoreLocalCacheForUser(String userId) async {
+    if (_localCacheUserId == userId && _localCacheRestored) {
+      return;
+    }
+    _localCacheUserId = userId;
+    _localCacheRestored = true;
+    final preferences = await SharedPreferences.getInstance();
+    final raw = preferences.getString(_localCacheKey(userId));
+    if (raw == null || raw.isEmpty) {
+      return;
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        return;
+      }
+      final cachedGroups = _rows(decoded, 'groups');
+      final cachedMembers = _rows(decoded, 'groupMembers');
+      final cachedGroupIds = {
+        for (final group in cachedGroups) _string(group, 'id'),
+      }..remove('');
+      if (cachedGroupIds.isEmpty) {
+        return;
+      }
+
+      groups.removeWhere((group) => cachedGroupIds.contains(group.id));
+      groupMembers.removeWhere(
+        (member) => cachedGroupIds.contains(member.groupId),
+      );
+
+      for (final row in cachedGroups) {
+        final group = Group(
+          id: _string(row, 'id'),
+          name: _string(row, 'name'),
+          category: _enumValue(
+            GroupCategory.values,
+            row['category'],
+            GroupCategory.custom,
+          ),
+          template: _string(row, 'template', fallback: 'Custom'),
+          kind: _enumValue(GroupKind.values, row['kind'], GroupKind.expense),
+          createdBy: _string(row, 'createdBy', fallback: userId),
+          createdAt: _date(row['createdAt']),
+          latestSettlementLockAt: _optionalDate(row['latestSettlementLockAt']),
+          disbandedAt: _optionalDate(row['disbandedAt']),
+          disbandedBy: _nullableString(row['disbandedBy']),
+        );
+        groups.add(group);
+        _bumpSequenceFromId(group.id);
+      }
+
+      for (final row in cachedMembers) {
+        final member = GroupMember(
+          id: _string(row, 'id'),
+          groupId: _string(row, 'groupId'),
+          userId: _string(row, 'userId'),
+          role: _enumValue(MemberRole.values, row['role'], MemberRole.member),
+          status: _memberStatus(row['status']),
+          joinedAt: _date(row['joinedAt']),
+          removedAt: _optionalDate(row['removedAt']),
+        );
+        if (cachedGroupIds.contains(member.groupId)) {
+          groupMembers.add(member);
+          _bumpSequenceFromId(member.id);
+        }
+      }
+
+      notifyListeners();
+    } on FormatException catch (error) {
+      lastBackendSyncError = 'Could not read saved local groups: $error';
+    }
+  }
+
   void _persistBackendMutation(
     Future<void> Function(BackendApi api, String accessToken) mutation,
   ) {
@@ -158,6 +237,69 @@ class AppStore extends ChangeNotifier {
         debugPrintStack(stackTrace: stackTrace);
       }),
     );
+  }
+
+  void _persistLocalCache() {
+    final userId = _localCacheUserId;
+    if (userId == null || userId.isEmpty) {
+      return;
+    }
+    unawaited(_writeLocalCache(userId));
+  }
+
+  Future<void> _writeLocalCache(String userId) async {
+    final visibleGroupIds = {
+      for (final member in groupMembers)
+        if (member.userId == userId) member.groupId,
+      for (final group in groups)
+        if (group.createdBy == userId) group.id,
+    };
+    final payload = {
+      'version': 1,
+      'userId': userId,
+      'groups': [
+        for (final group in groups)
+          if (visibleGroupIds.contains(group.id))
+            {
+              'id': group.id,
+              'name': group.name,
+              'category': group.category.name,
+              'template': group.template,
+              'kind': group.kind.name,
+              'createdBy': group.createdBy,
+              'createdAt': group.createdAt.toIso8601String(),
+              'latestSettlementLockAt': group.latestSettlementLockAt
+                  ?.toIso8601String(),
+              'disbandedAt': group.disbandedAt?.toIso8601String(),
+              'disbandedBy': group.disbandedBy,
+            },
+      ],
+      'groupMembers': [
+        for (final member in groupMembers)
+          if (visibleGroupIds.contains(member.groupId))
+            {
+              'id': member.id,
+              'groupId': member.groupId,
+              'userId': member.userId,
+              'role': member.role.name,
+              'status': member.status.name,
+              'joinedAt': member.joinedAt.toIso8601String(),
+              'removedAt': member.removedAt?.toIso8601String(),
+            },
+      ],
+    };
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_localCacheKey(userId), jsonEncode(payload));
+  }
+
+  String _localCacheKey(String userId) => '$_localCachePrefix.$userId';
+
+  void _bumpSequenceFromId(String id) {
+    final match = RegExp(r'-(\d+)$').firstMatch(id);
+    final value = int.tryParse(match?.group(1) ?? '');
+    if (value != null && value >= _sequence) {
+      _sequence = value + 1;
+    }
   }
 
   void loadBackendSnapshot(Map<String, dynamic> snapshot) {
@@ -1166,6 +1308,7 @@ class AppStore extends ChangeNotifier {
         );
       }
     });
+    _persistLocalCache();
     notifyListeners();
     return group.id;
   }
@@ -1310,6 +1453,7 @@ class AppStore extends ChangeNotifier {
       title: 'Group renamed',
       body: '${nameOf(currentUserId)} renamed $previousName to ${group.name}.',
     );
+    _persistLocalCache();
     notifyListeners();
     return null;
   }
@@ -1354,6 +1498,7 @@ class AppStore extends ChangeNotifier {
       title: 'Member added',
       body: '${nameOf(userId)} joined ${groupById(groupId).name}.',
     );
+    _persistLocalCache();
     notifyListeners();
   }
 
@@ -1392,6 +1537,7 @@ class AppStore extends ChangeNotifier {
       body:
           '${nameOf(userId)} is inactive for new expenses in ${groupById(groupId).name}.',
     );
+    _persistLocalCache();
     notifyListeners();
   }
 
@@ -1404,6 +1550,7 @@ class AppStore extends ChangeNotifier {
     if (selectedGroupId == groupId) {
       selectedGroupId = null;
     }
+    _persistLocalCache();
     notifyListeners();
     return null;
   }
@@ -1529,6 +1676,7 @@ class AppStore extends ChangeNotifier {
       title: 'Role changed',
       body: '${nameOf(userId)} is now ${enumLabel(role)}.',
     );
+    _persistLocalCache();
     notifyListeners();
   }
 
