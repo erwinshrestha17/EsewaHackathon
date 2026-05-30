@@ -1,5 +1,9 @@
 import { db, assertDb } from '../common/db.js';
 
+function emptyResult() {
+  return Promise.resolve({ data: [], error: null });
+}
+
 function fallbackLegacyId(row, prefix) {
   return row?.legacy_user_id ?? row?.legacy_group_id ?? row?.legacy_pool_id ?? `${prefix}-${row.id}`;
 }
@@ -109,54 +113,246 @@ function mapPayment(row, profileIds) {
 }
 
 export async function appBootstrap(currentUserId) {
-  const tables = await Promise.all([
-    db().from('profiles').select('*').order('created_at', { ascending: true }),
-    db().from('connections').select('*').order('created_at', { ascending: true }),
-    db().from('groups').select('*').eq('is_active', true).order('created_at', { ascending: true }),
-    db().from('group_members').select('*').order('joined_at', { ascending: true }),
-    db().from('expenses').select('*').order('created_at', { ascending: true }),
-    db().from('expense_payers').select('*'),
-    db().from('expense_shares').select('*'),
-    db().from('expense_items').select('*').order('sort_order', { ascending: true }),
-    db().from('expense_item_assignments').select('*'),
-    db().from('payment_transactions').select('*').order('created_at', { ascending: true }),
-    db().from('settlements').select('*').order('created_at', { ascending: true }),
-    db().from('gifts').select('*').order('created_at', { ascending: true }),
-    db().from('gift_pools').select('*').order('created_at', { ascending: true }),
-    db().from('gift_pool_contributions').select('*').order('created_at', { ascending: true }),
-    db().from('community_savings_groups').select('*').eq('is_active', true).order('created_at', {
-      ascending: true,
-    }),
-    db().from('contribution_records').select('*').order('month', { ascending: true }),
-    db().from('community_expenses').select('*').order('expense_date', { ascending: true }),
-    db().from('activity_logs').select('*').order('created_at', { ascending: true }),
-    db().from('notifications').select('*').order('created_at', { ascending: true }),
-  ]);
-  for (const result of tables) {
-    assertDb(result.error);
-  }
+  const userMembershipsResult = await db()
+    .from('group_members')
+    .select('*')
+    .eq('user_id', currentUserId)
+    .eq('status', 'active');
+  assertDb(userMembershipsResult.error);
+  const userMemberships = userMembershipsResult.data ?? [];
+  const visibleGroupIds = [...new Set(userMemberships.map((row) => row.group_id))];
 
   const [
-    profiles,
-    connections,
-    groups,
-    groupMembers,
-    expenses,
-    expensePayers,
-    expenseShares,
-    expenseItems,
-    expenseItemAssignments,
-    payments,
-    settlements,
-    gifts,
-    giftPools,
-    giftPoolContributions,
-    communitySavingsGroups,
-    contributionRecords,
-    communityExpenses,
-    activityLogs,
-    notifications,
-  ] = tables.map((result) => result.data ?? []);
+    connectionsResult,
+    groupsResult,
+    groupMembersResult,
+    expensesResult,
+    settlementsResult,
+    giftsResult,
+    giftPoolsResult,
+    communitySavingsGroupsResult,
+    activityLogsResult,
+    notificationsResult,
+  ] = await Promise.all([
+    db()
+      .from('connections')
+      .select('*')
+      .or(`requester_id.eq.${currentUserId},recipient_id.eq.${currentUserId}`)
+      .order('created_at', { ascending: true }),
+    visibleGroupIds.length
+      ? db()
+          .from('groups')
+          .select('*')
+          .in('id', visibleGroupIds)
+          .eq('is_active', true)
+          .order('created_at', { ascending: true })
+      : emptyResult(),
+    visibleGroupIds.length
+      ? db()
+          .from('group_members')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .order('joined_at', { ascending: true })
+      : emptyResult(),
+    visibleGroupIds.length
+      ? db()
+          .from('expenses')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .order('created_at', { ascending: true })
+      : emptyResult(),
+    visibleGroupIds.length
+      ? db()
+          .from('settlements')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .order('created_at', { ascending: true })
+      : emptyResult(),
+    visibleGroupIds.length
+      ? db()
+          .from('gifts')
+          .select('*')
+          .or(
+            `sender_id.eq.${currentUserId},recipient_id.eq.${currentUserId},group_id.in.(${visibleGroupIds.join(',')})`,
+          )
+          .order('created_at', { ascending: true })
+      : db()
+          .from('gifts')
+          .select('*')
+          .or(`sender_id.eq.${currentUserId},recipient_id.eq.${currentUserId}`)
+          .order('created_at', { ascending: true }),
+    visibleGroupIds.length
+      ? db()
+          .from('gift_pools')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .order('created_at', { ascending: true })
+      : emptyResult(),
+    visibleGroupIds.length
+      ? db()
+          .from('community_savings_groups')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .eq('is_active', true)
+          .order('created_at', { ascending: true })
+      : emptyResult(),
+    visibleGroupIds.length
+      ? db()
+          .from('activity_logs')
+          .select('*')
+          .or(`actor_id.eq.${currentUserId},group_id.in.(${visibleGroupIds.join(',')})`)
+          .order('created_at', { ascending: false })
+          .limit(200)
+      : db()
+          .from('activity_logs')
+          .select('*')
+          .eq('actor_id', currentUserId)
+          .order('created_at', { ascending: false })
+          .limit(200),
+    db()
+      .from('notifications')
+      .select('*')
+      .eq('user_id', currentUserId)
+      .order('created_at', { ascending: true }),
+  ]);
+  [
+    connectionsResult,
+    groupsResult,
+    groupMembersResult,
+    expensesResult,
+    settlementsResult,
+    giftsResult,
+    giftPoolsResult,
+    communitySavingsGroupsResult,
+    activityLogsResult,
+    notificationsResult,
+  ].forEach((result) => assertDb(result.error));
+
+  const connections = connectionsResult.data ?? [];
+  const groups = groupsResult.data ?? [];
+  const groupMembers = groupMembersResult.data ?? [];
+  const expenses = expensesResult.data ?? [];
+  const settlements = settlementsResult.data ?? [];
+  const gifts = giftsResult.data ?? [];
+  const giftPools = giftPoolsResult.data ?? [];
+  const communitySavingsGroups = communitySavingsGroupsResult.data ?? [];
+  const activityLogs = (activityLogsResult.data ?? []).reverse();
+  const notifications = notificationsResult.data ?? [];
+
+  const expenseIds = expenses.map((row) => row.id);
+  const giftPoolIds = giftPools.map((row) => row.id);
+  const savingsGroupIds = communitySavingsGroups.map((row) => row.id);
+
+  const [
+    expensePayersResult,
+    expenseSharesResult,
+    expenseItemsResult,
+    giftPoolContributionsResult,
+    contributionRecordsResult,
+    communityExpensesResult,
+  ] = await Promise.all([
+    expenseIds.length ? db().from('expense_payers').select('*').in('expense_id', expenseIds) : emptyResult(),
+    expenseIds.length ? db().from('expense_shares').select('*').in('expense_id', expenseIds) : emptyResult(),
+    expenseIds.length
+      ? db()
+          .from('expense_items')
+          .select('*')
+          .in('expense_id', expenseIds)
+          .order('sort_order', { ascending: true })
+      : emptyResult(),
+    giftPoolIds.length
+      ? db()
+          .from('gift_pool_contributions')
+          .select('*')
+          .in('gift_pool_id', giftPoolIds)
+          .order('created_at', { ascending: true })
+      : emptyResult(),
+    savingsGroupIds.length
+      ? db()
+          .from('contribution_records')
+          .select('*')
+          .in('savings_group_id', savingsGroupIds)
+          .order('month', { ascending: true })
+      : emptyResult(),
+    savingsGroupIds.length
+      ? db()
+          .from('community_expenses')
+          .select('*')
+          .in('savings_group_id', savingsGroupIds)
+          .order('expense_date', { ascending: true })
+      : emptyResult(),
+  ]);
+  [
+    expensePayersResult,
+    expenseSharesResult,
+    expenseItemsResult,
+    giftPoolContributionsResult,
+    contributionRecordsResult,
+    communityExpensesResult,
+  ].forEach((result) => assertDb(result.error));
+
+  const expensePayers = expensePayersResult.data ?? [];
+  const expenseShares = expenseSharesResult.data ?? [];
+  const expenseItems = expenseItemsResult.data ?? [];
+  const giftPoolContributions = giftPoolContributionsResult.data ?? [];
+  const contributionRecords = contributionRecordsResult.data ?? [];
+  const communityExpenses = communityExpensesResult.data ?? [];
+  const expenseItemIds = expenseItems.map((row) => row.id);
+
+  const expenseItemAssignmentsResult = expenseItemIds.length
+    ? await db().from('expense_item_assignments').select('*').in('expense_item_id', expenseItemIds)
+    : await emptyResult();
+  assertDb(expenseItemAssignmentsResult.error);
+  const expenseItemAssignments = expenseItemAssignmentsResult.data ?? [];
+
+  const paymentIds = [
+    ...settlements.map((row) => row.payment_transaction_id),
+    ...gifts.map((row) => row.payment_transaction_id),
+    ...giftPoolContributions.map((row) => row.payment_transaction_id),
+  ].filter(Boolean);
+  const paymentsResult = paymentIds.length
+    ? await db()
+        .from('payment_transactions')
+        .select('*')
+        .in('id', [...new Set(paymentIds)])
+        .order('created_at', { ascending: true })
+    : await db()
+        .from('payment_transactions')
+        .select('*')
+        .eq('actor_id', currentUserId)
+        .order('created_at', { ascending: true });
+  assertDb(paymentsResult.error);
+  const payments = paymentsResult.data ?? [];
+
+  const visibleProfileIds = new Set([
+    currentUserId,
+    ...connections.flatMap((row) => [row.requester_id, row.recipient_id]),
+    ...groupMembers.map((row) => row.user_id),
+    ...groups.map((row) => row.created_by),
+    ...expenses.flatMap((row) => [row.payer_id, row.created_by, row.voided_by]),
+    ...expensePayers.map((row) => row.user_id),
+    ...expenseShares.map((row) => row.user_id),
+    ...expenseItemAssignments.map((row) => row.user_id),
+    ...settlements.flatMap((row) => [row.payer_id, row.payee_id]),
+    ...gifts.flatMap((row) => [row.sender_id, row.recipient_id]),
+    ...giftPools.flatMap((row) => [row.created_by, row.recipient_id]),
+    ...giftPoolContributions.map((row) => row.contributor_id),
+    ...communitySavingsGroups.map((row) => row.created_by),
+    ...contributionRecords.flatMap((row) => [row.user_id, row.confirmed_by]),
+    ...communityExpenses.map((row) => row.recorded_by),
+    ...activityLogs.map((row) => row.actor_id),
+    ...notifications.map((row) => row.user_id),
+  ].filter(Boolean));
+
+  const profilesResult = visibleProfileIds.size
+    ? await db()
+        .from('profiles')
+        .select('*')
+        .in('id', [...visibleProfileIds])
+        .order('created_at', { ascending: true })
+    : await emptyResult();
+  assertDb(profilesResult.error);
+  const profiles = profilesResult.data ?? [];
 
   const profileIds = new Map(profiles.map((row) => [row.id, fallbackLegacyId(row, 'user')]));
   const groupIds = new Map(groups.map((row) => [row.id, fallbackLegacyId(row, 'group')]));

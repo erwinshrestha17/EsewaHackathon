@@ -1,6 +1,6 @@
 import { parseMoneyMinor, requireFields } from '../../middleware/validate.middleware.js';
 import { logActivity } from '../common/audit.js';
-import { db, assertDb } from '../common/db.js';
+import { db, assertDb, isUuid, single } from '../common/db.js';
 
 function settlementDto(row) {
   return {
@@ -18,6 +18,16 @@ function settlementDto(row) {
   };
 }
 
+async function profileIdForLookup(value) {
+  const id = value?.toString();
+  const query = db().from('profiles').select('id');
+  const profile = await single(
+    isUuid(id) ? query.eq('id', id) : query.eq('legacy_user_id', id),
+    'User profile not found.',
+  );
+  return profile.id;
+}
+
 export async function listSettlements(userId, group) {
   let query = db()
     .from('settlements')
@@ -33,13 +43,15 @@ export async function listSettlements(userId, group) {
 export async function createSettlement(group, userId, body) {
   requireFields(body, ['payerId', 'payeeId', 'amountMinor']);
   const amountMinor = parseMoneyMinor(body.amountMinor, 'amountMinor');
+  const payerId = await profileIdForLookup(body.payerId);
+  const payeeId = await profileIdForLookup(body.payeeId);
   const { data, error } = await db()
     .from('settlements')
     .upsert(
       {
         group_id: group.id,
-        payer_id: body.payerId,
-        payee_id: body.payeeId,
+        payer_id: payerId,
+        payee_id: payeeId,
         amount_minor: amountMinor,
         status: body.status ?? 'pending',
         idempotency_key:

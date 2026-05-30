@@ -1,6 +1,6 @@
 import { parseMoneyMinor, requireFields } from '../../middleware/validate.middleware.js';
 import { logActivity } from '../common/audit.js';
-import { db, assertDb } from '../common/db.js';
+import { db, assertDb, findByIdOrLegacy, isUuid, single } from '../common/db.js';
 
 function giftDto(row) {
   return {
@@ -37,6 +37,22 @@ function poolDto(row) {
   };
 }
 
+async function profileIdForLookup(value) {
+  const id = value?.toString();
+  const query = db().from('profiles').select('id');
+  const profile = await single(
+    isUuid(id) ? query.eq('id', id) : query.eq('legacy_user_id', id),
+    'User profile not found.',
+  );
+  return profile.id;
+}
+
+async function groupIdForLookup(value) {
+  if (!value) return null;
+  const group = await findByIdOrLegacy('groups', value.toString(), 'legacy_group_id');
+  return group?.id ?? null;
+}
+
 export async function listGifts(userId) {
   const { data, error } = await db()
     .from('gifts')
@@ -50,17 +66,19 @@ export async function listGifts(userId) {
 export async function sendGift(userId, body) {
   requireFields(body, ['recipientId', 'template', 'amountMinor']);
   const amountMinor = parseMoneyMinor(body.amountMinor, 'amountMinor');
+  const recipientId = await profileIdForLookup(body.recipientId);
+  const groupId = await groupIdForLookup(body.groupId);
   const { data, error } = await db()
     .from('gifts')
     .insert({
       sender_id: userId,
-      recipient_id: body.recipientId,
-      group_id: body.groupId ?? null,
+      recipient_id: recipientId,
+      group_id: groupId,
       template: body.template,
       amount_minor: amountMinor,
       message: body.message ?? '',
       status: 'sent',
-      idempotency_key: body.idempotencyKey ?? `${userId}:${body.recipientId}:${amountMinor}:${body.template}`,
+      idempotency_key: body.idempotencyKey ?? `${userId}:${recipientId}:${amountMinor}:${body.template}`,
       idempotency_scope: userId,
       operation_type: 'gift',
     })
@@ -69,7 +87,7 @@ export async function sendGift(userId, body) {
   assertDb(error);
   await logActivity({
     actorId: userId,
-    groupId: body.groupId ?? null,
+    groupId,
     action: 'gift_sent',
     entityType: 'gift',
     entityId: data.id,
@@ -104,12 +122,13 @@ export async function listGiftPools(group) {
 
 export async function createGiftPool(group, userId, body) {
   requireFields(body, ['recipientId', 'title', 'template', 'targetAmountMinor']);
+  const recipientId = await profileIdForLookup(body.recipientId);
   const { data, error } = await db()
     .from('gift_pools')
     .insert({
       group_id: group.id,
       created_by: userId,
-      recipient_id: body.recipientId,
+      recipient_id: recipientId,
       title: body.title,
       template: body.template,
       target_amount_minor: parseMoneyMinor(body.targetAmountMinor, 'targetAmountMinor'),

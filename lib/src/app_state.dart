@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../features/auth/models/user_profile.dart';
+import '../shared/api/backend_api.dart';
 import 'finance.dart';
 import 'models.dart';
 
@@ -41,8 +44,11 @@ class AppStore extends ChangeNotifier {
   String? selectedDhukutiPoolId;
   var pushPreviewEnabled = true;
   var cacheWarm = true;
+  String? lastBackendSyncError;
 
   int _sequence = 1000;
+  BackendApi? _backendApi;
+  Future<String?> Function()? _backendAccessToken;
 
   AppUser get currentUser => userById(currentUserId);
 
@@ -120,10 +126,50 @@ class AppStore extends ChangeNotifier {
 
   DateTime get _now => DateTime.now();
 
+  void configureBackend({
+    required BackendApi backendApi,
+    required Future<String?> Function() accessTokenProvider,
+  }) {
+    _backendApi = backendApi;
+    _backendAccessToken = accessTokenProvider;
+  }
+
+  void _persistBackendMutation(
+    Future<void> Function(BackendApi api, String accessToken) mutation,
+  ) {
+    final api = _backendApi;
+    final accessTokenProvider = _backendAccessToken;
+    if (api == null || accessTokenProvider == null || !api.isConfigured) {
+      return;
+    }
+    unawaited(
+      (() async {
+        final token = await accessTokenProvider();
+        if (token == null || token.isEmpty) {
+          return;
+        }
+        await mutation(api, token);
+        final snapshot = await api.appBootstrap(accessToken: token);
+        lastBackendSyncError = null;
+        loadBackendSnapshot(snapshot);
+      })().catchError((Object error, StackTrace stackTrace) {
+        lastBackendSyncError = error.toString();
+        debugPrint('Backend mutation sync failed: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }),
+    );
+  }
+
   void loadBackendSnapshot(Map<String, dynamic> snapshot) {
+    final backendUsers = _rows(snapshot, 'users');
+    if (backendUsers.isEmpty) {
+      lastBackendSyncError = 'Backend snapshot did not include a user profile.';
+      notifyListeners();
+      return;
+    }
     _clearBackendBackedState();
 
-    for (final row in _rows(snapshot, 'users')) {
+    for (final row in backendUsers) {
       users.add(
         AppUser(
           id: _string(row, 'id'),
@@ -1101,6 +1147,25 @@ class AppStore extends ChangeNotifier {
       body:
           '${nameOf(currentUserId)} created $name with ${allMembers.length} members.',
     );
+    _persistBackendMutation((api, token) async {
+      await api.createGroup(
+        accessToken: token,
+        body: {
+          'legacyGroupId': group.id,
+          'name': name,
+          'category': category.name,
+          'template': template,
+          'kind': kind.name,
+        },
+      );
+      for (final memberId in allMembers.where((id) => id != currentUserId)) {
+        await api.addGroupMember(
+          accessToken: token,
+          groupId: group.id,
+          body: {'userId': memberId, 'role': 'member', 'status': 'active'},
+        );
+      }
+    });
     notifyListeners();
     return group.id;
   }
@@ -1679,6 +1744,56 @@ class AppStore extends ChangeNotifier {
       body:
           '$title was split ${enumLabel(splitMode).toLowerCase()} for ${money(finalTotal)}.',
     );
+    _persistBackendMutation((api, token) {
+      return api
+          .createExpense(
+            accessToken: token,
+            groupId: groupId,
+            body: {
+              'title': title,
+              'subtotalMinor': subtotal,
+              'totalMinor': finalTotal,
+              'payerId': payerId,
+              'category': category,
+              'splitMode': splitMode.name,
+              'participantIds': participants,
+              'customAmounts': shareAmounts,
+              'payers': [
+                for (final payer in payers)
+                  {'userId': payer.userId, 'amountMinor': payer.amountMinor},
+              ],
+              'expenseDate': _now.toIso8601String().substring(0, 10),
+              'note': note,
+              'billTaxMinor': taxMinor,
+              'billServiceChargeMinor': serviceChargeMinor,
+              'billDiscountMinor': discountMinor,
+              'billTipMinor': tipMinor,
+              'billRoundingAdjustmentMinor': roundingAdjustmentMinor,
+              'items': [
+                for (final item in items)
+                  {
+                    'label': item.label,
+                    'quantity': item.quantity,
+                    'unitAmountMinor': item.unitAmountMinor,
+                    'totalAmountMinor': item.totalAmountMinor,
+                    'taxMinor': item.taxMinor,
+                    'serviceChargeMinor': item.serviceChargeMinor,
+                    'discountMinor': item.discountMinor,
+                    'ocrConfidence': item.ocrConfidence,
+                    'assignments': [
+                      for (final assignment in item.assignments)
+                        {
+                          'userId': assignment.userId,
+                          'assignedAmountMinor': assignment.assignedAmountMinor,
+                          'splitUnits': assignment.splitUnits,
+                        },
+                    ],
+                  },
+              ],
+            },
+          )
+          .then((_) {});
+    });
     notifyListeners();
     return expenseId;
   }
@@ -2086,6 +2201,31 @@ class AppStore extends ChangeNotifier {
         body:
             '${nameOf(settlement.payerId)} paid ${nameOf(settlement.payeeId)} ${money(settlement.amountMinor)} via Sajha Kharcha Pay.',
       );
+      _persistBackendMutation((api, token) async {
+        final response = await api.createSettlement(
+          accessToken: token,
+          groupId: settlement.groupId,
+          body: {
+            'payerId': settlement.payerId,
+            'payeeId': settlement.payeeId,
+            'amountMinor': settlement.amountMinor,
+            'status': 'pending',
+            'idempotencyKey': settlement.idempotencyKey,
+            'operationType': settlement.operationType,
+            'expiresAt': settlement.expiresAt.toIso8601String(),
+            'balanceSnapshotHash': settlement.balanceSnapshotHash,
+          },
+        );
+        final backendSettlement =
+            response['settlement'] as Map<String, dynamic>?;
+        final backendSettlementId =
+            backendSettlement?['id']?.toString() ?? settlement.id;
+        await api.confirmSettlement(
+          accessToken: token,
+          groupId: settlement.groupId,
+          settlementId: backendSettlementId,
+        );
+      });
     }
     notifyListeners();
   }
@@ -2193,6 +2333,20 @@ class AppStore extends ChangeNotifier {
       '$template gift received',
       '${nameOf(currentUserId)} sent ${money(amountMinor)}.',
     );
+    _persistBackendMutation((api, token) {
+      return api
+          .sendGift(
+            accessToken: token,
+            body: {
+              'recipientId': recipientId,
+              'template': template,
+              'amountMinor': amountMinor,
+              'message': message,
+              'idempotencyKey': gift.idempotencyKey,
+            },
+          )
+          .then((_) {});
+    });
     notifyListeners();
     return 'Gift sent to ${nameOf(recipientId)}.';
   }

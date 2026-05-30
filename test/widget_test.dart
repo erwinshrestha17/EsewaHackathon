@@ -6,6 +6,7 @@ import 'package:sajha_kharcha/features/auth/screens/auth_screen.dart';
 import 'package:sajha_kharcha/features/auth/screens/login_form.dart';
 import 'package:sajha_kharcha/features/auth/screens/register_form.dart';
 import 'package:sajha_kharcha/features/home/home_controller.dart';
+import 'package:sajha_kharcha/features/settings/settings_controller.dart';
 import 'package:sajha_kharcha/features/settings/settings_screen.dart';
 import 'package:sajha_kharcha/shared/design_system/app_components.dart' as ds;
 import 'package:sajha_kharcha/shared/design_system/app_colors.dart';
@@ -269,6 +270,38 @@ void main() {
     expect(find.text('Create Group'), findsNothing);
     expect(find.text('Send Gift'), findsWidgets);
     expect(find.text('Activity'), findsNothing);
+  });
+
+  testWidgets('main shell hydrates auth before rendering protected screens', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'auth.hasSeenIntro': true,
+      'auth.isLoggedIn': true,
+      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
+    });
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(),
+        child: StoreScope(
+          notifier: AppStore(),
+          child: MaterialApp(
+            home: SajhaKharchaShell(settingsController: SettingsController()),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Home'), findsWidgets);
+
+    await tester.tap(find.text('Groups').last);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Groups overview'), findsOneWidget);
   });
 
   testWidgets('theme choice applies across main and auth routes', (

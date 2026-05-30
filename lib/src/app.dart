@@ -411,6 +411,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   final _backendApi = BackendApi();
   var _loadingBackendSnapshot = false;
   String? _loadedBackendSnapshotToken;
+  var _shellAuthInitializationStarted = false;
 
   SettingsController get _settingsController => widget.settingsController;
 
@@ -463,6 +464,21 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = AuthScope.of(context);
+    final authState = auth.state;
+    if (!authState.initialized) {
+      _initializeShellAuth(auth);
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (!authState.isLoggedIn || authState.activeUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
+        }
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     final store = StoreScope.of(context);
     final body = switch (_index) {
       0 => HomeScreen(
@@ -610,6 +626,14 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     );
   }
 
+  void _initializeShellAuth(AuthController auth) {
+    if (_shellAuthInitializationStarted) {
+      return;
+    }
+    _shellAuthInitializationStarted = true;
+    unawaited(auth.initialize());
+  }
+
   void _go(int index) {
     setState(() {
       _index = index;
@@ -662,6 +686,10 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     final activeUser = _authController?.state.activeUser;
     final store = _store;
     if (activeUser != null && store != null) {
+      store.configureBackend(
+        backendApi: _backendApi,
+        accessTokenProvider: _authController!.backendAccessToken,
+      );
       store.applyActiveUserProfile(activeUser, notify: false);
       unawaited(_loadBackendSnapshot());
     }

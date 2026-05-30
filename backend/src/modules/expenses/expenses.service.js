@@ -1,7 +1,7 @@
 import { assertChoice, parseMoneyMinor, requireFields } from '../../middleware/validate.middleware.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { logActivity } from '../common/audit.js';
-import { db, assertDb, single } from '../common/db.js';
+import { db, assertDb, isUuid, single } from '../common/db.js';
 
 const splitModes = ['equal', 'custom', 'item'];
 const expenseStatuses = ['draft', 'active', 'voided'];
@@ -59,16 +59,57 @@ function equalShares(total, participantIds) {
   );
 }
 
+async function profileIdForLookup(value) {
+  const id = value?.toString();
+  if (!id) {
+    throw new ApiError(400, 'User profile is required.');
+  }
+  const query = db().from('profiles').select('id');
+  const profile = await single(
+    isUuid(id) ? query.eq('id', id) : query.eq('legacy_user_id', id),
+    'User profile not found.',
+  );
+  return profile.id;
+}
+
+async function profileIdMap(values) {
+  const uniqueValues = [...new Set(values.filter(Boolean).map((value) => value.toString()))];
+  const entries = await Promise.all(
+    uniqueValues.map(async (value) => [value, await profileIdForLookup(value)]),
+  );
+  return new Map(entries);
+}
+
 export async function createExpense(group, userId, body) {
   requireFields(body, ['title', 'totalMinor', 'payerId']);
   assertChoice(body.splitMode ?? 'equal', splitModes, 'splitMode');
   const totalMinor = parseMoneyMinor(body.totalMinor, 'totalMinor');
   const splitMode = body.splitMode ?? 'equal';
   const participantIds = body.participantIds ?? [];
+  const customAmounts = body.customAmounts ?? {};
+  const payerRowsInput = body.payers ?? [{ userId: body.payerId, amountMinor: totalMinor }];
+  const lookupValues = [
+    body.payerId,
+    ...participantIds,
+    ...Object.keys(customAmounts),
+    ...payerRowsInput.map((payer) => payer.userId),
+    ...(body.items ?? []).flatMap((item) =>
+      (item.assignments ?? []).map((assignment) => assignment.userId),
+    ),
+  ];
+  const profileIds = await profileIdMap(lookupValues);
+  const resolveProfileId = (value) => profileIds.get(value?.toString()) ?? value;
+  const resolvedPayerId = resolveProfileId(body.payerId);
+  const resolvedParticipantIds = participantIds.map(resolveProfileId);
+  const resolvedCustomAmounts = Object.fromEntries(
+    Object.entries(customAmounts).map(([id, amount]) => [resolveProfileId(id), amount]),
+  );
   const shares =
     splitMode === 'equal'
-      ? equalShares(totalMinor, participantIds)
-      : Object.fromEntries(Object.entries(body.customAmounts ?? {}).map(([id, amount]) => [id, Number(amount)]));
+      ? equalShares(totalMinor, resolvedParticipantIds)
+      : Object.fromEntries(
+          Object.entries(resolvedCustomAmounts).map(([id, amount]) => [id, Number(amount)]),
+        );
   const shareTotal = Object.values(shares).reduce((sum, amount) => sum + amount, 0);
   if (shareTotal !== totalMinor) {
     throw new ApiError(400, 'Expense shares must add up to totalMinor.');
@@ -81,7 +122,7 @@ export async function createExpense(group, userId, body) {
       title: body.title.trim(),
       subtotal_minor: Number(body.subtotalMinor ?? totalMinor),
       total_minor: totalMinor,
-      payer_id: body.payerId,
+      payer_id: resolvedPayerId,
       category: body.category ?? 'custom',
       split_mode: splitMode,
       status: body.status ?? 'active',
@@ -97,13 +138,11 @@ export async function createExpense(group, userId, body) {
     .single();
   assertDb(error);
 
-  const payerRows = (body.payers ?? [{ userId: body.payerId, amountMinor: totalMinor }]).map(
-    (payer) => ({
-      expense_id: expense.id,
-      user_id: payer.userId,
-      amount_minor: Number(payer.amountMinor),
-    }),
-  );
+  const payerRows = payerRowsInput.map((payer) => ({
+    expense_id: expense.id,
+    user_id: resolveProfileId(payer.userId),
+    amount_minor: Number(payer.amountMinor),
+  }));
   const shareRows = Object.entries(shares).map(([shareUserId, amountMinor]) => ({
     expense_id: expense.id,
     user_id: shareUserId,
@@ -116,21 +155,36 @@ export async function createExpense(group, userId, body) {
   assertDb(shareError);
 
   if (Array.isArray(body.items) && body.items.length > 0) {
-    const { error: itemError } = await db().from('expense_items').insert(
-      body.items.map((item, index) => ({
-        expense_id: expense.id,
-        label: item.label,
-        quantity: Number(item.quantity ?? 1),
-        unit_amount_minor: Number(item.unitAmountMinor ?? item.totalAmountMinor),
-        total_amount_minor: Number(item.totalAmountMinor),
-        tax_minor: Number(item.taxMinor ?? 0),
-        service_charge_minor: Number(item.serviceChargeMinor ?? 0),
-        discount_minor: Number(item.discountMinor ?? 0),
-        ocr_confidence: Number(item.ocrConfidence ?? 1),
-        sort_order: index,
-      })),
-    );
-    assertDb(itemError);
+    for (const [index, item] of body.items.entries()) {
+      const { data: insertedItem, error: itemError } = await db()
+        .from('expense_items')
+        .insert({
+          expense_id: expense.id,
+          label: item.label,
+          quantity: Number(item.quantity ?? 1),
+          unit_amount_minor: Number(item.unitAmountMinor ?? item.totalAmountMinor),
+          total_amount_minor: Number(item.totalAmountMinor),
+          tax_minor: Number(item.taxMinor ?? 0),
+          service_charge_minor: Number(item.serviceChargeMinor ?? 0),
+          discount_minor: Number(item.discountMinor ?? 0),
+          ocr_confidence: Number(item.ocrConfidence ?? 1),
+          sort_order: index,
+        })
+        .select()
+        .single();
+      assertDb(itemError);
+      if (Array.isArray(item.assignments) && item.assignments.length > 0) {
+        const { error: assignmentError } = await db().from('expense_item_assignments').insert(
+          item.assignments.map((assignment) => ({
+            expense_item_id: insertedItem.id,
+            user_id: resolveProfileId(assignment.userId),
+            assigned_amount_minor: Number(assignment.assignedAmountMinor ?? 0),
+            split_units: Number(assignment.splitUnits ?? 1),
+          })),
+        );
+        assertDb(assignmentError);
+      }
+    }
   }
 
   await logActivity({

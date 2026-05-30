@@ -50,7 +50,7 @@ class BackendApi {
     required String phone,
     required String mPin,
   }) async {
-    final data = await _post('/api/auth/mpin/login', {
+    final data = await post('/api/auth/mpin/login', {
       'phone': phone,
       'mPin': mPin,
     });
@@ -63,7 +63,7 @@ class BackendApi {
     required String fullName,
     String? district,
   }) async {
-    final data = await _post('/api/auth/mpin/register', {
+    final data = await post('/api/auth/mpin/register', {
       'phone': phone,
       'mPin': mPin,
       'fullName': fullName,
@@ -93,6 +93,60 @@ class BackendApi {
 
   Future<Map<String, dynamic>> appBootstrap({required String accessToken}) {
     return get('/api/app/bootstrap', accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> createGroup({
+    required String accessToken,
+    required Map<String, Object?> body,
+  }) {
+    return post('/api/groups', body, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> addGroupMember({
+    required String accessToken,
+    required String groupId,
+    required Map<String, Object?> body,
+  }) {
+    return post('/api/groups/$groupId/members', body, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> createExpense({
+    required String accessToken,
+    required String groupId,
+    required Map<String, Object?> body,
+  }) {
+    return post('/api/expenses/group/$groupId', body, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> createSettlement({
+    required String accessToken,
+    required String groupId,
+    required Map<String, Object?> body,
+  }) {
+    return post(
+      '/api/settlements/group/$groupId',
+      body,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> confirmSettlement({
+    required String accessToken,
+    required String groupId,
+    required String settlementId,
+  }) {
+    return post(
+      '/api/settlements/group/$groupId/$settlementId/confirm',
+      const {},
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> sendGift({
+    required String accessToken,
+    required Map<String, Object?> body,
+  }) {
+    return post('/api/gifts', body, accessToken: accessToken);
   }
 
   Future<Map<String, dynamic>> communitySavingsDashboard({
@@ -125,7 +179,7 @@ class BackendApi {
     return _decode(response);
   }
 
-  Future<Map<String, dynamic>> _post(
+  Future<Map<String, dynamic>> post(
     String path,
     Map<String, Object?> body, {
     String? accessToken,
