@@ -79,13 +79,25 @@ class ReceiptScanResult {
 final _amountToken = RegExp(
   r'-?\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?|-?\d+(?:\.\d{1,2})?',
 );
-final _qtyPrefix = RegExp(r'^\s*(\d{1,3})\s*[x×*]\s*(.+)$', caseSensitive: false);
-final _qtySuffix = RegExp(r'^(.*?)\s*[x×*]\s*(\d{1,3})\s*$', caseSensitive: false);
+final _qtyPrefix = RegExp(
+  r'^\s*(\d{1,3})\s*[x×*]\s*(.+)$',
+  caseSensitive: false,
+);
+final _qtySuffix = RegExp(
+  r'^(.*?)\s*[x×*]\s*(\d{1,3})\s*$',
+  caseSensitive: false,
+);
 final _dateRe = RegExp(
   r'(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
 );
 
-const _serviceWords = ['service charge', 'service chrg', 's.charge', 'svc', 'service'];
+const _serviceWords = [
+  'service charge',
+  'service chrg',
+  's.charge',
+  'svc',
+  'service',
+];
 const _taxWords = ['vat', 'g.s.t', 'gst', 'tax'];
 const _discountWords = ['discount', 'disc.', 'less', 'promo', 'coupon', 'off'];
 const _totalWords = [
@@ -98,11 +110,24 @@ const _totalWords = [
   'total',
 ];
 const _subtotalWords = ['subtotal', 'sub total', 'sub-total', 'taxable'];
+const _baseAmountWords = [
+  'base amount',
+  'basic amount',
+  'basio amount',
+  'basiq amount',
+  'basis amount',
+  'gross amount',
+];
 
 // Lines that open the totals/footer block. The first such line after the item
 // table ends the item region in the columnar parser.
 const _totalsRegionWords = [
   'gross amount',
+  'base amount',
+  'basic amount',
+  'basio amount',
+  'basiq amount',
+  'basis amount',
   'grand total',
   'sub total',
   'subtotal',
@@ -140,6 +165,11 @@ const _noiseWords = [
   'remarks',
   'address',
   'gross amount',
+  'base amount',
+  'basic amount',
+  'basio amount',
+  'basiq amount',
+  'basis amount',
   'net amount',
   'total qty',
   'opening hours',
@@ -351,18 +381,30 @@ ReceiptScanResult _parseColumnar(List<List<OcrWord>> rows, _Header header) {
     }
   }
 
-  final itemsTotal = items.fold<int>(0, (sum, item) => sum + item.amountMinor);
+  final reconciledItems = declaredTotalMinor == null
+      ? items
+      : _itemsReconciledToPrintedTotal(
+          items,
+          declaredTotalMinor - serviceMinor - taxMinor - discountMinor,
+        );
+  final itemsTotal = reconciledItems.fold<int>(
+    0,
+    (sum, item) => sum + item.amountMinor,
+  );
   final totalMinor =
       declaredTotalMinor ??
       (itemsTotal + serviceMinor + taxMinor + discountMinor);
-  final confidence = confidences.isNotEmpty
-      ? confidences.reduce((a, b) => a + b) / confidences.length
+  final resultConfidences = [
+    for (final item in reconciledItems) item.confidence,
+  ];
+  final confidence = resultConfidences.isNotEmpty
+      ? resultConfidences.reduce((a, b) => a + b) / resultConfidences.length
       : 0.0;
 
   return ReceiptScanResult(
     merchant: merchant,
     date: date,
-    items: items,
+    items: reconciledItems,
     serviceChargeMinor: serviceMinor,
     taxMinor: taxMinor,
     discountMinor: discountMinor,
@@ -440,7 +482,7 @@ num? _pureNumber(String text) {
 /// OCR merged into the name box), leaving the first-line product name.
 String _cleanItemName(String name) {
   var value = name.trim();
-  value = value.replaceFirst(RegExp(r'^\d{1,3}\s+'), '');
+  value = value.replaceFirst(RegExp(r'^\d{1,3}\s*[.)-]?\s+'), '');
   value = value.replaceAll(RegExp(r'(?:\s+-?\d+(?:[.,]\d+)?)+$'), '');
   return _trimEdges(value).trim();
 }
@@ -453,6 +495,11 @@ ReceiptScanResult parseReceiptLines(List<OcrTextLine> lines) {
     for (final line in lines)
       if (line.text.trim().isNotEmpty) (line.text.trim(), line.confidence),
   ];
+
+  final tableResult = _parseRestaurantTableLines(rows);
+  if (tableResult != null) {
+    return tableResult;
+  }
 
   String? merchant;
   String? date;
@@ -491,7 +538,8 @@ ReceiptScanResult parseReceiptLines(List<OcrTextLine> lines) {
       declaredTotalMinor = amountMinor;
       continue;
     }
-    if (_hasWord(labelLower, _subtotalWords)) {
+    if (_hasWord(labelLower, _subtotalWords) ||
+        _hasWord(labelLower, _baseAmountWords)) {
       continue;
     }
     if (_hasWord(labelLower, _discountWords)) {
@@ -551,6 +599,245 @@ ReceiptScanResult parseReceiptLines(List<OcrTextLine> lines) {
     totalMinor: totalMinor,
     confidence: confidence,
   );
+}
+
+ReceiptScanResult? _parseRestaurantTableLines(List<(String, double)> rows) {
+  var headerIndex = -1;
+  for (var index = 0; index < rows.length; index++) {
+    if (_looksLikeRestaurantTableHeader(rows[index].$1)) {
+      headerIndex = index;
+      break;
+    }
+  }
+  if (headerIndex == -1) {
+    return null;
+  }
+
+  String? merchant;
+  String? date;
+  for (var index = 0; index < headerIndex; index++) {
+    final text = rows[index].$1;
+    final lowered = text.toLowerCase();
+    date ??= _dateRe.firstMatch(text)?.group(1);
+    if (merchant == null &&
+        _looksLikeMerchant(text) &&
+        !_hasWord(lowered, _noiseWords)) {
+      merchant = text;
+    }
+  }
+
+  final items = <ReceiptScanItem>[];
+  final confidences = <double>[];
+  var serviceMinor = 0;
+  var taxMinor = 0;
+  var discountMinor = 0;
+  int? declaredTotalMinor;
+  var sawSummary = false;
+
+  for (var index = headerIndex + 1; index < rows.length; index++) {
+    final (text, conf) = rows[index];
+    final lowered = text.toLowerCase();
+    date ??= _dateRe.firstMatch(text)?.group(1);
+
+    if (_isReceiptFooterLine(lowered)) {
+      break;
+    }
+
+    final (summaryAmount, summaryLabel) = _trailingAmount(text);
+    final summaryLower = summaryLabel.toLowerCase();
+    if (summaryAmount != null &&
+        (_hasWord(summaryLower, _baseAmountWords) ||
+            _hasWord(summaryLower, _subtotalWords))) {
+      sawSummary = true;
+      continue;
+    }
+    if (summaryAmount != null && _hasWord(summaryLower, _discountWords)) {
+      sawSummary = true;
+      discountMinor += -npr(summaryAmount).abs();
+      confidences.add(conf);
+      continue;
+    }
+    if (summaryAmount != null && _hasWord(summaryLower, _serviceWords)) {
+      sawSummary = true;
+      serviceMinor += npr(summaryAmount);
+      confidences.add(conf);
+      continue;
+    }
+    if (summaryAmount != null && _hasWord(summaryLower, _taxWords)) {
+      sawSummary = true;
+      taxMinor += npr(summaryAmount);
+      confidences.add(conf);
+      continue;
+    }
+    if (summaryAmount != null &&
+        _hasWord(summaryLower, _totalWords) &&
+        !_hasWord(summaryLower, _subtotalWords)) {
+      sawSummary = true;
+      declaredTotalMinor = npr(summaryAmount);
+      continue;
+    }
+
+    if (sawSummary) {
+      // Once totals/adjustments have started, random footer numbers are not
+      // bill items even if OCR leaves a trailing amount on the line.
+      continue;
+    }
+
+    final item = _restaurantItemFromLine(text, conf);
+    if (item != null) {
+      items.add(item);
+      confidences.add(item.confidence);
+    }
+  }
+
+  if (items.isEmpty) {
+    return null;
+  }
+
+  final reconciledItems = declaredTotalMinor == null
+      ? items
+      : _itemsReconciledToPrintedTotal(
+          items,
+          declaredTotalMinor - serviceMinor - taxMinor - discountMinor,
+        );
+  final itemsTotal = reconciledItems.fold<int>(
+    0,
+    (sum, item) => sum + item.amountMinor,
+  );
+  final totalMinor =
+      declaredTotalMinor ??
+      itemsTotal + serviceMinor + taxMinor + discountMinor;
+  final resultConfidences = [
+    for (final item in reconciledItems) item.confidence,
+  ];
+  final confidence = resultConfidences.isNotEmpty
+      ? resultConfidences.reduce((a, b) => a + b) / resultConfidences.length
+      : 0.0;
+
+  return ReceiptScanResult(
+    merchant: merchant,
+    date: date,
+    items: reconciledItems,
+    serviceChargeMinor: serviceMinor,
+    taxMinor: taxMinor,
+    discountMinor: discountMinor,
+    totalMinor: totalMinor,
+    confidence: confidence,
+  );
+}
+
+List<ReceiptScanItem> _itemsReconciledToPrintedTotal(
+  List<ReceiptScanItem> items,
+  int targetMinor,
+) {
+  if (items.isEmpty || targetMinor <= 0) {
+    return items;
+  }
+  final currentTotal = items.fold<int>(
+    0,
+    (sum, item) => sum + item.amountMinor,
+  );
+  if (currentTotal == targetMinor) {
+    return items;
+  }
+
+  List<ReceiptScanItem>? best;
+  for (var start = 0; start < items.length; start++) {
+    var runningTotal = 0;
+    for (var end = start; end < items.length; end++) {
+      runningTotal += items[end].amountMinor;
+      if (runningTotal == targetMinor) {
+        final candidate = items.sublist(start, end + 1);
+        if (best == null || candidate.length > best.length) {
+          best = candidate;
+        }
+        break;
+      }
+      if (runningTotal > targetMinor) {
+        break;
+      }
+    }
+  }
+  return best ?? items;
+}
+
+bool _looksLikeRestaurantTableHeader(String text) {
+  final lowered = text.toLowerCase();
+  return lowered.contains('particular') &&
+      lowered.contains('qty') &&
+      lowered.contains('rate') &&
+      lowered.contains('amount');
+}
+
+ReceiptScanItem? _restaurantItemFromLine(String text, double confidence) {
+  final matches = _amountToken.allMatches(text).toList();
+  if (matches.isEmpty) {
+    return null;
+  }
+  final numbers = <num>[];
+  for (final match in matches) {
+    if (_unitSuffix.hasMatch(text.substring(match.end))) {
+      continue;
+    }
+    final value = _toNum(match.group(0)!);
+    if (value != null) {
+      numbers.add(value);
+    }
+  }
+  if (numbers.isEmpty) {
+    return null;
+  }
+
+  final amount = numbers.last;
+  var quantity = 1;
+  if (numbers.length >= 3) {
+    final qty = numbers[numbers.length - 3];
+    if (qty == qty.roundToDouble() && qty >= 1 && qty <= 99) {
+      quantity = qty.toInt();
+    }
+  }
+
+  final amountMatch = matches.last;
+  var label = text.substring(0, amountMatch.start).trim();
+  if (numbers.length >= 3) {
+    final rateMatch = matches[matches.length - 2];
+    label = text.substring(0, rateMatch.start).trim();
+  }
+  label = _cleanItemName(label);
+  if (label.isEmpty || !label.contains(RegExp(r'[A-Za-z]'))) {
+    return null;
+  }
+  final lowered = label.toLowerCase();
+  if (_hasWord(lowered, _noiseWords) ||
+      _hasWord(lowered, _baseAmountWords) ||
+      _hasWord(lowered, _totalWords) ||
+      _hasWord(lowered, _discountWords) ||
+      _hasWord(lowered, _taxWords) ||
+      _hasWord(lowered, _serviceWords)) {
+    return null;
+  }
+
+  final amountMinor = npr(amount);
+  final unitMinor = quantity > 0
+      ? (amountMinor / quantity).round()
+      : amountMinor;
+  return ReceiptScanItem(
+    label: label,
+    quantity: quantity,
+    unitAmountMinor: unitMinor,
+    amountMinor: amountMinor,
+    confidence: confidence,
+  );
+}
+
+bool _isReceiptFooterLine(String lowered) {
+  return lowered.contains('in word') ||
+      lowered.contains('in words') ||
+      lowered.contains('cashier') ||
+      lowered.contains('thank') ||
+      lowered.contains('tax invoice') ||
+      lowered.contains('collect tax') ||
+      lowered.contains('please collect');
 }
 
 // A number glued to a unit (50GM, 1L, 250ML) is a weight/volume, not a price.

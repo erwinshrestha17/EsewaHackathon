@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_paddle_ocr/flutter_paddle_ocr.dart';
 
 import 'ocr_exception.dart';
@@ -8,6 +9,9 @@ import 'receipt_parser.dart';
 import 'model_bootstrap_stub.dart'
     if (dart.library.io) 'model_bootstrap_io.dart'
     as bootstrap;
+import 'web_ocr_runtime_stub.dart'
+    if (dart.library.html) 'web_ocr_runtime_web.dart'
+    as web_runtime;
 
 export 'ocr_exception.dart';
 export 'receipt_parser.dart' show ReceiptScanItem, ReceiptScanResult;
@@ -23,6 +27,9 @@ export 'receipt_parser.dart' show ReceiptScanItem, ReceiptScanResult;
 class ReceiptOcrService {
   /// Shared across screens so the model is only loaded once per process.
   static Future<PaddleOcr>? _engineFuture;
+  static const MethodChannel _macosVisionOcrChannel = MethodChannel(
+    'sajha_kharcha/macos_vision_ocr',
+  );
 
   /// Scans [bytes] (a JPEG/PNG bill photo) and returns the parsed bill.
   ///
@@ -33,6 +40,9 @@ class ReceiptOcrService {
     Uint8List bytes, {
     void Function(String message)? onStatus,
   }) async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
+      return _scanReceiptWithMacosVision(bytes, onStatus: onStatus);
+    }
     final engine = await _ensureEngine(onStatus);
     onStatus?.call('Reading the bill…');
     final List<OcrResult> regions;
@@ -44,6 +54,40 @@ class ReceiptOcrService {
     return parseReceipt([
       for (final region in regions)
         if (region.text.trim().isNotEmpty) _wordFromRegion(region),
+    ]);
+  }
+
+  Future<ReceiptScanResult> _scanReceiptWithMacosVision(
+    Uint8List bytes, {
+    void Function(String message)? onStatus,
+  }) async {
+    onStatus?.call('Reading the bill…');
+    final List<dynamic>? regions;
+    try {
+      regions = await _macosVisionOcrChannel.invokeListMethod<dynamic>(
+        'recognizeReceipt',
+        bytes,
+      );
+    } on MissingPluginException {
+      throw const ReceiptOcrException(
+        'Bill OCR is not available in this macOS build. Rebuild the macOS app '
+        'so the Vision OCR bridge is registered.',
+      );
+    } on PlatformException catch (error) {
+      throw ReceiptOcrException(
+        error.message ?? 'Could not read the bill with macOS Vision OCR.',
+      );
+    } catch (error) {
+      throw ReceiptOcrException('Could not read the bill: $error');
+    }
+
+    return parseReceiptLines([
+      for (final region in regions ?? const <dynamic>[])
+        if (region is Map)
+          OcrTextLine(
+            region['text']?.toString() ?? '',
+            (region['confidence'] as num?)?.toDouble() ?? 0,
+          ),
     ]);
   }
 
@@ -86,13 +130,14 @@ class ReceiptOcrService {
       _engineFuture = null;
       throw error is ReceiptOcrException
           ? error
-          : ReceiptOcrException('Could not start the bill scanner: $error');
+          : ReceiptOcrException(web_runtime.friendlyOcrStartupMessage(error));
     });
   }
 
   Future<PaddleOcr> _createEngine(void Function(String)? onStatus) async {
     final ModelSource source;
     if (kIsWeb) {
+      await web_runtime.ensureWebOcrRuntimeReady();
       // paddleocr-js fetches the bundled PP-OCRv5 models on the web backend.
       source = const ModelSource.bundled(lang: 'ch', version: 'PP-OCRv5');
     } else {

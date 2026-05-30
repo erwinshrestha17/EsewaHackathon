@@ -7,9 +7,9 @@ plugins {
 android {
     namespace = "com.cacheflow.sangai"
     compileSdk = flutter.compileSdkVersion
-    // flutter_paddle_ocr links Paddle Lite v2.10, which only builds cleanly with
-    // NDK r25c (newer ld.lld rejects the prebuilt .so symbols).
-    ndkVersion = "25.2.9519653"
+    // Use the highest NDK required by the plugin set so camera, JNI, and OCR
+    // native artifacts resolve consistently.
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

@@ -2,9 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sajha_kharcha/shared/ocr/receipt_parser.dart';
 
 ReceiptScanResult parse(List<(String, double)> lines) {
-  return parseReceiptLines(
-    [for (final (text, conf) in lines) OcrTextLine(text, conf)],
-  );
+  return parseReceiptLines([
+    for (final (text, conf) in lines) OcrTextLine(text, conf),
+  ]);
 }
 
 void main() {
@@ -72,6 +72,71 @@ void main() {
       ('Tea 50', 0.9),
     ]);
     expect(result.items.map((i) => i.label).toList(), ['Tea']);
+  });
+
+  test('parses Paradise restaurant table without summary rows as items', () {
+    final result = parse([
+      ('Paradise Bake & Brew Pvt. Ltd', 0.96),
+      ('KOT/BOT/COT ORDER LIST', 0.8),
+      ('Customer Name: CashParty', 0.88),
+      ('SN.Particulars Qty Rate Amount', 0.95),
+      ('1. CREAM DOUGHNUT 3 50.00 150.00', 0.93),
+      ('2. CHICKEN PATTY 2 120.00 240.00', 0.93),
+      ('3. SAUSAGE ROLL 1 120.00 120.00', 0.92),
+      ('4. LEMON TEA 3 75.00 225.00', 0.92),
+      ('5. CHOCOLATE ROLL 1 65.00 65.00', 0.92),
+      ('Basio Amount : 800.00', 0.86),
+      ('Total : 800.00', 0.91),
+      ('In word : Rs. Eight Hundred only', 0.9),
+      ('Cashier : Paradise Time : 09:22AM', 0.9),
+      ('Please Collect Tax Invoice From Counter', 0.9),
+    ]);
+
+    expect(result.merchant, 'Paradise Bake & Brew Pvt. Ltd');
+    expect(result.totalMinor, 80000);
+    expect(result.items.map((i) => i.label).toList(), [
+      'CREAM DOUGHNUT',
+      'CHICKEN PATTY',
+      'SAUSAGE ROLL',
+      'LEMON TEA',
+      'CHOCOLATE ROLL',
+    ]);
+    expect(result.items.map((i) => i.quantity).toList(), [3, 2, 1, 3, 1]);
+    expect(result.items.map((i) => i.amountMinor).toList(), [
+      15000,
+      24000,
+      12000,
+      22500,
+      6500,
+    ]);
+  });
+
+  test('uses Paradise total and ignores footer numbers after totals', () {
+    final result = parse([
+      ('Paradise Bake & Brew Pvt. Ltd', 0.96),
+      ('SN.Particulars Qty Rate Amount', 0.95),
+      ('1. CHICKEN PATTY 2 165.00 330.00', 0.93),
+      ('2. VEG PATTY 1 115.00 115.00', 0.93),
+      ('3. SAUSAGE ROLL 2 125.00 250.00', 0.92),
+      ('4. OLD BILL TEA 3 75.00 225.00', 0.55),
+      ('Basic Amount : 695.00', 0.86),
+      ('Discount : 0.00', 0.9),
+      ('Total : 695.00', 0.91),
+      ('In word : Rs. Six Hundred and Ninety Five only', 0.88),
+      ('Time : 09:56AM', 0.86),
+    ]);
+
+    expect(result.totalMinor, 69500);
+    expect(result.discountMinor, 0);
+    expect(result.items.map((i) => i.label).toList(), [
+      'CHICKEN PATTY',
+      'VEG PATTY',
+      'SAUSAGE ROLL',
+    ]);
+    expect(
+      result.items.fold<int>(0, (sum, item) => sum + item.amountMinor),
+      69500,
+    );
   });
 
   group('columnar supermarket bill (geometry)', () {

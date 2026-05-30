@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show PointerDeviceKind;
 
+import 'package:camera/camera.dart' as camera;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -4869,22 +4870,20 @@ class _AddExpenseOcrScreen extends StatefulWidget {
 }
 
 class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
-  static const _scannerMethodChannel = MethodChannel(
-    'dev.steenbakker.mobile_scanner/scanner/method',
-  );
-
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
-  late final MobileScannerController _cameraController =
-      MobileScannerController(detectionSpeed: DetectionSpeed.noDuplicates);
   final ReceiptOcrService _ocrService = ReceiptOcrService();
   final ImagePicker _imagePicker = ImagePicker();
 
+  camera.CameraController? _cameraController;
   var _cameraReady = false;
   var _runningOcr = false;
   var _scanFailed = false;
   var _flashOn = false;
   var _scanVersion = 0;
+  Timer? _liveScanTimer;
+  DateTime? _lastLiveScanAt;
+  var _liveScanFailedCount = 0;
   String? _cameraIssue;
   String? _scanMessage;
   String? _scannedTitle;
@@ -4898,7 +4897,8 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
 
   @override
   void dispose() {
-    unawaited(_cameraController.dispose());
+    _liveScanTimer?.cancel();
+    unawaited(_cameraController?.dispose());
     _sheetController.dispose();
     for (final item in _scannedItems) {
       item.dispose();
@@ -4907,6 +4907,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
   }
 
   Future<void> _prepareCamera() async {
+    _liveScanTimer?.cancel();
     if (kIsWeb && !_hasSecureWebCameraContext()) {
       if (!mounted) {
         return;
@@ -4919,30 +4920,60 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
       return;
     }
 
-    if (!kIsWeb) {
-      try {
-        await _scannerMethodChannel.invokeMethod<int>('state');
-      } on MissingPluginException {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _cameraReady = false;
-          _cameraIssue =
-              'Camera access is needed to scan bills. The scanner plugin is not ready in this app process.';
-        });
-        return;
-      } on PlatformException catch (error) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _cameraReady = false;
-          _cameraIssue =
-              error.message ?? 'Camera access is needed to scan bills.';
-        });
+    if (!_supportsLiveBillScanning) {
+      if (!mounted) {
         return;
       }
+      setState(() {
+        _cameraReady = false;
+        _cameraIssue =
+            'Live camera OCR is available on Android, iOS, and web. Upload a bill photo or use Manual Entry on this device.';
+        _scanMessage ??= 'Upload a bill photo to scan it.';
+      });
+      return;
+    }
+
+    try {
+      final cameras = await camera.availableCameras();
+      if (cameras.isEmpty) {
+        throw camera.CameraException(
+          'no_camera',
+          'No camera was found on this device.',
+        );
+      }
+      final selectedCamera = cameras.firstWhere(
+        (description) =>
+            description.lensDirection == camera.CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+      final controller = camera.CameraController(
+        selectedCamera,
+        camera.ResolutionPreset.medium,
+        enableAudio: false,
+      );
+      await controller.initialize();
+      final previousController = _cameraController;
+      _cameraController = controller;
+      unawaited(previousController?.dispose());
+    } on camera.CameraException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _cameraReady = false;
+        _cameraIssue =
+            error.description ?? 'Camera access is needed to scan bills.';
+      });
+      return;
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _cameraReady = false;
+        _cameraIssue = 'Camera access is needed to scan bills.';
+      });
+      return;
     }
 
     if (!mounted) {
@@ -4951,8 +4982,10 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
     setState(() {
       _cameraReady = true;
       _cameraIssue = null;
-      _scanMessage ??= 'Capture the bill or upload a photo to scan it.';
+      _scanMessage ??=
+          'Show a restaurant bill inside the frame to scan automatically.';
     });
+    _startLiveBillScan();
   }
 
   bool _hasSecureWebCameraContext() {
@@ -4964,15 +4997,40 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
         host.startsWith('127.');
   }
 
+  bool get _supportsLiveBillScanning {
+    if (kIsWeb) {
+      return true;
+    }
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android || TargetPlatform.iOS => true,
+      _ => false,
+    };
+  }
+
+  IconData get _primaryScanIcon =>
+      _supportsLiveBillScanning ? Icons.camera_alt_outlined : Icons.upload_file;
+
+  String get _primaryScanLabel =>
+      _supportsLiveBillScanning ? 'Capture bill' : 'Choose bill photo';
+
+  void _runPrimaryScanAction() {
+    if (_supportsLiveBillScanning) {
+      unawaited(_scanLiveBillFrame(manual: true));
+      return;
+    }
+    unawaited(_scanBill(ImageSource.gallery));
+  }
+
   void _handleCameraError(Object error, StackTrace stackTrace) {
     if (!mounted) {
       return;
     }
+    _liveScanTimer?.cancel();
     setState(() {
       _cameraReady = false;
       _cameraIssue = switch (error) {
-        MobileScannerException(:final errorDetails, :final errorCode) =>
-          errorDetails?.message ?? errorCode.message,
+        camera.CameraException(:final description) =>
+          description ?? 'Camera access is needed to scan bills.',
         PlatformException(:final message) =>
           message ?? 'Camera access is needed to scan bills.',
         _ => 'Camera access is needed to scan bills.',
@@ -4980,21 +5038,143 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
     });
   }
 
+  void _startLiveBillScan() {
+    _liveScanTimer?.cancel();
+    if (!_supportsLiveBillScanning) {
+      return;
+    }
+    _liveScanTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => unawaited(_scanLiveBillFrame()),
+    );
+    unawaited(
+      Future<void>.delayed(
+        const Duration(milliseconds: 900),
+        () => _scanLiveBillFrame(),
+      ),
+    );
+  }
+
+  Future<void> _scanLiveBillFrame({bool manual = false}) async {
+    if (!mounted ||
+        !_cameraReady ||
+        _runningOcr ||
+        _scannedItems.isNotEmpty ||
+        _liveScanFailedCount >= 2) {
+      return;
+    }
+    final now = DateTime.now();
+    final lastScan = _lastLiveScanAt;
+    if (!manual &&
+        lastScan != null &&
+        now.difference(lastScan).inMilliseconds < 2500) {
+      return;
+    }
+    _lastLiveScanAt = now;
+
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+
+    final XFile frame;
+    try {
+      frame = await controller.takePicture();
+    } on camera.CameraException catch (error, stackTrace) {
+      _handleCameraError(error, stackTrace);
+      return;
+    } catch (_) {
+      if (mounted && manual) {
+        setState(() {
+          _scanFailed = true;
+          _scanMessage =
+              'Couldn’t capture the camera frame. Try Upload or Manual Entry.';
+        });
+      }
+      return;
+    }
+
+    final bytes = await frame.readAsBytes();
+    if (!mounted || bytes.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _runningOcr = true;
+      _scanFailed = false;
+      _scanMessage = 'Reading the visible bill...';
+    });
+
+    try {
+      final result = await _ocrService.scanReceipt(
+        bytes,
+        onStatus: (message) {
+          if (mounted && _runningOcr) {
+            setState(() => _scanMessage = message);
+          }
+        },
+      );
+      if (!mounted) {
+        return;
+      }
+      if (result.items.isEmpty) {
+        setState(() {
+          _runningOcr = false;
+          _scanFailed = manual;
+          _scanMessage =
+              'Hold the restaurant bill steady inside the frame to scan it.';
+        });
+        return;
+      }
+      _liveScanTimer?.cancel();
+      _liveScanFailedCount = 0;
+      _applyScanResult(result);
+    } on ReceiptOcrException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _liveScanFailedCount += 1;
+      if (_liveScanFailedCount >= 2) {
+        _liveScanTimer?.cancel();
+      }
+      setState(() {
+        _runningOcr = false;
+        _scanFailed = true;
+        _scanMessage = error.message;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _runningOcr = false;
+        _scanMessage =
+            'Hold the restaurant bill steady inside the frame to scan it.';
+      });
+    }
+  }
+
   Future<void> _scanBill(ImageSource source) async {
     if (_runningOcr) {
       return;
     }
+    _liveScanTimer?.cancel();
+    _liveScanFailedCount = 0;
 
-    // Release the live viewfinder so the system camera/picker has the sensor.
+    // Release flash/preview while a system picker is in front.
     if (_flashOn) {
-      unawaited(_cameraController.toggleTorch().catchError((_) {}));
+      unawaited(
+        _cameraController
+            ?.setFlashMode(camera.FlashMode.off)
+            .catchError((_) {}),
+      );
       _flashOn = false;
     }
     if (_cameraReady) {
       try {
-        await _cameraController.stop();
+        await _cameraController?.pausePreview();
       } catch (_) {
-        // Already stopped while the picker opens.
+        // Already paused while the picker opens.
       }
     }
 
@@ -5045,7 +5225,11 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
       if (!mounted) {
         return;
       }
+      final detectedItems = result.items.isNotEmpty;
       _applyScanResult(result);
+      if (!detectedItems) {
+        await _restoreViewfinder();
+      }
     } on ReceiptOcrException catch (error) {
       if (mounted) {
         setState(() {
@@ -5053,11 +5237,16 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
           _scanFailed = true;
           _scanMessage = error.message;
         });
+        await _restoreViewfinder();
       }
     } catch (_) {
       if (mounted) {
         _showOcrFailure();
+        await _restoreViewfinder();
       }
+    }
+    if (mounted && source == ImageSource.gallery) {
+      await _restoreViewfinder();
     }
   }
 
@@ -5066,7 +5255,8 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
       return;
     }
     try {
-      await _cameraController.start();
+      await _cameraController?.resumePreview();
+      _startLiveBillScan();
     } catch (_) {
       // The viewfinder will recover on next prepare.
     }
@@ -5159,8 +5349,14 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
   }
 
   Future<void> _toggleFlash() async {
+    final controller = _cameraController;
+    if (controller == null) {
+      return;
+    }
     try {
-      await _cameraController.toggleTorch();
+      await controller.setFlashMode(
+        _flashOn ? camera.FlashMode.off : camera.FlashMode.torch,
+      );
       if (!mounted) {
         return;
       }
@@ -5228,30 +5424,6 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
     );
   }
 
-  Widget _buildScannerError(
-    BuildContext context,
-    MobileScannerException error,
-  ) {
-    final message =
-        error.errorDetails?.message ?? 'Camera access is needed to scan bills.';
-    return Container(
-      color: const Color(0xFF101814),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
@@ -5263,17 +5435,12 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
           children: [
             Positioned.fill(
               child: _cameraReady
-                  ? MobileScanner(
-                      controller: _cameraController,
-                      fit: BoxFit.cover,
-                      onDetect: (_) {},
-                      onDetectError: _handleCameraError,
-                      errorBuilder: _buildScannerError,
-                      placeholderBuilder: (context) => const ColoredBox(
-                        color: Color(0xFF101814),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                    )
+                  ? (_cameraController == null
+                        ? const ColoredBox(
+                            color: Color(0xFF101814),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        : camera.CameraPreview(_cameraController!))
                   : _cameraFallback(context),
             ),
             Positioned.fill(child: _BillScanOverlay(accent: accent)),
@@ -5326,7 +5493,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
                       message: _scanMessage!,
                       loading: _runningOcr,
                       failed: _scanFailed,
-                      onScanAgain: () => _scanBill(ImageSource.camera),
+                      onScanAgain: _runPrimaryScanAction,
                       onUseManual: () => _sheetController.animateTo(
                         _ManualEntrySheet.expandedExtent,
                         duration: const Duration(milliseconds: 320),
@@ -5339,11 +5506,9 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
                     children: [
                       Expanded(
                         child: FilledButton.icon(
-                          onPressed: _runningOcr
-                              ? null
-                              : () => _scanBill(ImageSource.camera),
-                          icon: const Icon(Icons.camera_alt_outlined),
-                          label: const Text('Capture bill'),
+                          onPressed: _runningOcr ? null : _runPrimaryScanAction,
+                          icon: Icon(_primaryScanIcon),
+                          label: Text(_primaryScanLabel),
                         ),
                       ),
                       const SizedBox(width: 12),
