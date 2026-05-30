@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -156,6 +157,26 @@ void main() {
       controller.debugSecureStorage.mOptions
           .toMap()['usesDataProtectionKeychain'],
       'false',
+    );
+  });
+
+  test('macOS auth storage avoids keychain prompts', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    final controller = AuthController(backendApi: _FakeBackendApi());
+
+    expect(controller.debugUsesKeychainStorage, isFalse);
+
+    await controller.loginWithMpin(phone: '9800000001', mPin: '1234');
+
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('auth.accessToken'), 'access-token');
+    expect(
+      await controller.debugSecureStorage.read(key: 'auth.accessToken'),
+      isNull,
     );
   });
 

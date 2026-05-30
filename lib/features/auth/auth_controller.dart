@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,13 +9,18 @@ import 'models/user_profile.dart';
 import 'nepal_mobile.dart';
 
 class AuthController extends ChangeNotifier {
-  AuthController({BackendApi? backendApi, FlutterSecureStorage? secureStorage})
-    : _backendApi = backendApi ?? BackendApi(),
-      _secureStorage =
-          secureStorage ??
-          const FlutterSecureStorage(
-            mOptions: MacOsOptions(usesDataProtectionKeychain: false),
-          );
+  AuthController({
+    BackendApi? backendApi,
+    FlutterSecureStorage? secureStorage,
+    bool? useKeychainStorage,
+  }) : _backendApi = backendApi ?? BackendApi(),
+       _secureStorage =
+           secureStorage ??
+           const FlutterSecureStorage(
+             mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+           ),
+       _useKeychainStorage =
+           useKeychainStorage ?? defaultTargetPlatform != TargetPlatform.macOS;
 
   static const _hasSeenIntroKey = 'auth.hasSeenIntro';
   static const _activeUserProfileKey = 'auth.activeUserProfile';
@@ -25,6 +31,7 @@ class AuthController extends ChangeNotifier {
 
   final BackendApi _backendApi;
   final FlutterSecureStorage _secureStorage;
+  final bool _useKeychainStorage;
   SharedPreferences? _preferences;
   AuthState _state = const AuthState.initial();
   _StoredBackendSession? _session;
@@ -34,6 +41,9 @@ class AuthController extends ChangeNotifier {
 
   @visibleForTesting
   FlutterSecureStorage get debugSecureStorage => _secureStorage;
+
+  @visibleForTesting
+  bool get debugUsesKeychainStorage => _useKeychainStorage;
 
   Future<String?> backendAccessToken() async {
     if (!_backendApi.isConfigured) {
@@ -56,7 +66,7 @@ class AuthController extends ChangeNotifier {
     await _clearLegacySharedPreferenceSecrets(preferences);
 
     UserProfile? activeUser;
-    final rawProfile = await _secureStorage.read(key: _activeUserProfileKey);
+    final rawProfile = await _readAuthValue(_activeUserProfileKey);
     if (rawProfile != null) {
       try {
         activeUser = UserProfile.fromJsonString(rawProfile);
@@ -161,10 +171,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> updateProfile(UserProfile profile) async {
-    await _secureStorage.write(
-      key: _activeUserProfileKey,
-      value: profile.toJsonString(),
-    );
+    await _writeAuthValue(_activeUserProfileKey, profile.toJsonString());
     _state = _state.copyWith(activeUser: profile);
     notifyListeners();
   }
@@ -209,26 +216,17 @@ class AuthController extends ChangeNotifier {
     );
     final preferences = await _prefs();
     await preferences.setBool(_hasSeenIntroKey, true);
-    await _secureStorage.write(
-      key: _accessTokenKey,
-      value: session.accessToken,
+    await _writeAuthValue(_accessTokenKey, session.accessToken);
+    await _writeAuthValue(_refreshTokenKey, session.refreshToken);
+    await _writeAuthValue(
+      _accessTokenExpiresAtKey,
+      session.accessTokenExpiresAt,
     );
-    await _secureStorage.write(
-      key: _refreshTokenKey,
-      value: session.refreshToken,
+    await _writeAuthValue(
+      _refreshTokenExpiresAtKey,
+      session.refreshTokenExpiresAt,
     );
-    await _secureStorage.write(
-      key: _accessTokenExpiresAtKey,
-      value: session.accessTokenExpiresAt,
-    );
-    await _secureStorage.write(
-      key: _refreshTokenExpiresAtKey,
-      value: session.refreshTokenExpiresAt,
-    );
-    await _secureStorage.write(
-      key: _activeUserProfileKey,
-      value: profile.toJsonString(),
-    );
+    await _writeAuthValue(_activeUserProfileKey, profile.toJsonString());
     _session = _StoredBackendSession.fromBackendSession(session);
     _state = AuthState(
       initialized: true,
@@ -259,11 +257,11 @@ class AuthController extends ChangeNotifier {
 
   Future<void> _clearSession({bool notify = true}) async {
     _session = null;
-    await _secureStorage.delete(key: _activeUserProfileKey);
-    await _secureStorage.delete(key: _accessTokenKey);
-    await _secureStorage.delete(key: _refreshTokenKey);
-    await _secureStorage.delete(key: _accessTokenExpiresAtKey);
-    await _secureStorage.delete(key: _refreshTokenExpiresAtKey);
+    await _deleteAuthValue(_activeUserProfileKey);
+    await _deleteAuthValue(_accessTokenKey);
+    await _deleteAuthValue(_refreshTokenKey);
+    await _deleteAuthValue(_accessTokenExpiresAtKey);
+    await _deleteAuthValue(_refreshTokenExpiresAtKey);
     if (notify) {
       _state = AuthState(
         initialized: true,
@@ -275,13 +273,13 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<_StoredBackendSession?> _readStoredSession() async {
-    final accessToken = await _secureStorage.read(key: _accessTokenKey);
-    final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    final accessToken = await _readAuthValue(_accessTokenKey);
+    final refreshToken = await _readAuthValue(_refreshTokenKey);
     final accessTokenExpiresAt = DateTime.tryParse(
-      await _secureStorage.read(key: _accessTokenExpiresAtKey) ?? '',
+      await _readAuthValue(_accessTokenExpiresAtKey) ?? '',
     );
     final refreshTokenExpiresAt = DateTime.tryParse(
-      await _secureStorage.read(key: _refreshTokenExpiresAtKey) ?? '',
+      await _readAuthValue(_refreshTokenExpiresAtKey) ?? '',
     );
     if (accessToken == null ||
         refreshToken == null ||
@@ -299,6 +297,29 @@ class AuthController extends ChangeNotifier {
 
   Future<SharedPreferences> _prefs() async {
     return _preferences ??= await SharedPreferences.getInstance();
+  }
+
+  Future<String?> _readAuthValue(String key) async {
+    if (_useKeychainStorage) {
+      return _secureStorage.read(key: key);
+    }
+    return (await _prefs()).getString(key);
+  }
+
+  Future<void> _writeAuthValue(String key, String value) async {
+    if (_useKeychainStorage) {
+      await _secureStorage.write(key: key, value: value);
+      return;
+    }
+    await (await _prefs()).setString(key, value);
+  }
+
+  Future<void> _deleteAuthValue(String key) async {
+    if (_useKeychainStorage) {
+      await _secureStorage.delete(key: key);
+      return;
+    }
+    await (await _prefs()).remove(key);
   }
 
   Future<void> _clearLegacySharedPreferenceSecrets(
