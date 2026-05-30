@@ -1,7 +1,14 @@
 import { supabaseAdmin } from '../../config/supabase.js';
+import { env } from '../../config/env.js';
 import { ApiError } from '../../utils/ApiError.js';
 
 export function db() {
+  if (!env.hasSupabaseConfig) {
+    throw new ApiError(
+      503,
+      'Backend database is not configured. Copy backend/.env.example to backend/.env and set SUPABASE_URL plus a real SUPABASE_SECRET_KEY.',
+    );
+  }
   return supabaseAdmin();
 }
 

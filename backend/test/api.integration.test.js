@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import { app, isAllowedCorsOrigin } from '../src/app.js';
 import { env } from '../src/config/env.js';
+import { db } from '../src/modules/common/db.js';
+import { ApiError } from '../src/utils/ApiError.js';
 
 const runRemoteTests = process.env.RUN_REMOTE_API_TESTS === 'true';
 const remoteAuthPhone = process.env.REMOTE_AUTH_PHONE;
@@ -56,9 +58,27 @@ test(
     assert.equal(isAllowedCorsOrigin('http://192.168.1.25:51234'), true);
     assert.equal(isAllowedCorsOrigin('http://10.0.2.15:51234'), true);
     assert.equal(isAllowedCorsOrigin('http://172.20.0.3:51234'), true);
-    assert.equal(isAllowedCorsOrigin('https://192.168.1.25:51234'), false);
+    assert.equal(isAllowedCorsOrigin('http://linux-devbox:51234'), true);
+    assert.equal(isAllowedCorsOrigin('https://linux-devbox:51234'), true);
+    assert.equal(isAllowedCorsOrigin('ftp://linux-devbox:51234'), false);
   },
 );
+
+test('database config failure is reported as a setup error', () => {
+  const previous = env.hasSupabaseConfig;
+  env.hasSupabaseConfig = false;
+  try {
+    assert.throws(
+      () => db(),
+      (error) =>
+        error instanceof ApiError &&
+        error.status === 503 &&
+        error.message.includes('Backend database is not configured'),
+    );
+  } finally {
+    env.hasSupabaseConfig = previous;
+  }
+});
 
 test(
   'remote API smoke: login, profile, groups, community savings balance',

@@ -93,6 +93,11 @@ HOST=0.0.0.0 npm run dev
 flutter run -d chrome --dart-define=BACKEND_API_BASE_URL=http://192.168.1.25:3000
 ```
 
+If login reaches the backend but returns a server error, open
+`http://<backend-host>:3000/health`. `supabaseConfigured` must be `true`; if it
+is `false`, copy `backend/.env.example` to `backend/.env` and fill
+`SUPABASE_URL` plus the server-only `SUPABASE_SECRET_KEY`.
+
 ## Main Endpoints
 
 - `GET /health`
