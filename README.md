@@ -88,6 +88,15 @@ flutter run -d ios
 flutter run -d android
 ```
 
+For Flutter web on Linux VMs, containers, or another machine on your network,
+`127.0.0.1` must be the backend as seen by the browser. If the backend runs on a
+different host, start it with `HOST=0.0.0.0` and use that host's reachable IP:
+
+```sh
+HOST=0.0.0.0 npm run dev
+flutter run -d chrome --dart-define=BACKEND_API_BASE_URL=http://192.168.1.25:3000
+```
+
 ## Implemented Scope
 
 - P0: production signup/login with OTP and M-PIN, profile data, connection requests and safety actions, groups, roles, manual expenses, equal and exact splits, balances, settlement suggestions, verified eSewa settlement confirmation, direct gifts, activity logs, and Saving Circle ledger.

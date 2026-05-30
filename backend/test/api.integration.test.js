@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { app } from '../src/app.js';
+import { app, isAllowedCorsOrigin } from '../src/app.js';
 import { env } from '../src/config/env.js';
 
 const runRemoteTests = process.env.RUN_REMOTE_API_TESTS === 'true';
@@ -45,6 +45,18 @@ test(
       assert.equal(response.status, 204);
       assert.equal(response.headers.get('access-control-allow-origin'), 'http://localhost:54732');
     });
+  },
+);
+
+test(
+  'development CORS accepts private network Flutter web origins',
+  { skip: env.isProduction },
+  () => {
+    assert.equal(isAllowedCorsOrigin('http://0.0.0.0:51234'), true);
+    assert.equal(isAllowedCorsOrigin('http://192.168.1.25:51234'), true);
+    assert.equal(isAllowedCorsOrigin('http://10.0.2.15:51234'), true);
+    assert.equal(isAllowedCorsOrigin('http://172.20.0.3:51234'), true);
+    assert.equal(isAllowedCorsOrigin('https://192.168.1.25:51234'), false);
   },
 );
 

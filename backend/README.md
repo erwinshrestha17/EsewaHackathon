@@ -84,6 +84,15 @@ flutter run -d macos --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
 flutter run -d chrome --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
 ```
 
+On Linux web, make sure `BACKEND_API_BASE_URL` is reachable from the browser,
+not just from the terminal. For VMs, containers, or another device on the LAN,
+bind the backend to the network and use the host IP:
+
+```bash
+HOST=0.0.0.0 npm run dev
+flutter run -d chrome --dart-define=BACKEND_API_BASE_URL=http://192.168.1.25:3000
+```
+
 ## Main Endpoints
 
 - `GET /health`

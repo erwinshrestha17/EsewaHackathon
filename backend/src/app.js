@@ -19,6 +19,26 @@ import { settlementsRouter } from './modules/settlements/settlements.routes.js';
 
 export const app = express();
 
+function isDevelopmentHost(hostname) {
+  const host = hostname.replace(/^\[|\]$/g, '');
+  if (
+    host === 'localhost' ||
+    host === '0.0.0.0' ||
+    host === '::1' ||
+    host.startsWith('127.')
+  ) {
+    return true;
+  }
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
+    return true;
+  }
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) {
+    return true;
+  }
+  const match = host.match(/^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+  return Boolean(match && Number(match[1]) >= 16 && Number(match[1]) <= 31);
+}
+
 export function isAllowedCorsOrigin(origin) {
   if (!origin || env.allowedOrigins.length === 0 || env.allowedOrigins.includes(origin)) {
     return true;
@@ -28,10 +48,7 @@ export function isAllowedCorsOrigin(origin) {
   }
   try {
     const { hostname, protocol } = new URL(origin);
-    return (
-      protocol === 'http:' &&
-      (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]')
-    );
+    return protocol === 'http:' && isDevelopmentHost(hostname);
   } catch (_error) {
     return false;
   }
