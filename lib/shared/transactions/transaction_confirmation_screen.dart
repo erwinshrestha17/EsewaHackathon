@@ -69,7 +69,9 @@ class _TransactionConfirmationScreenState
                       )
                     : const Icon(Icons.check_circle_outline),
                 label: Text(
-                  _processing ? 'Processing...' : data.confirmationButtonText,
+                  _processing
+                      ? 'Confirming payment...'
+                      : data.confirmationButtonText,
                 ),
               ),
             ),

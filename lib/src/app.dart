@@ -91,8 +91,9 @@ TransactionConfirmationData _settlementConfirmationData(
     id: 'settlement-${suggestion.groupId}-${suggestion.payerId}-${suggestion.payeeId}-${suggestion.amountMinor}',
     transactionType: TransactionType.settlement,
     title: 'Confirm Settlement',
-    subtitle:
-        '${store.nameOf(suggestion.payerId)} pays ${store.nameOf(suggestion.payeeId)}',
+    subtitle: suggestion.payerId == store.currentUserId
+        ? 'You owe ${store.nameOf(suggestion.payeeId)} ${friendlyMoney(suggestion.amountMinor)}'
+        : '${store.nameOf(suggestion.payerId)} owes ${store.nameOf(suggestion.payeeId)} ${friendlyMoney(suggestion.amountMinor)}',
     amount: suggestion.amountMinor,
     payerName: store.nameOf(suggestion.payerId),
     payerAvatarUrl: store.userById(suggestion.payerId).avatar,
@@ -105,7 +106,7 @@ TransactionConfirmationData _settlementConfirmationData(
         '${suggestion.groupId}-${suggestion.payerId}-${suggestion.payeeId}-${suggestion.amountMinor}',
     operationType: 'settlement',
     details: [
-      const TransactionDetail('Source', 'Greedy min-cash-flow suggestion'),
+      const TransactionDetail('Source', 'Suggested from group balances'),
       TransactionDetail(
         'Balance snapshot',
         balances.entries
@@ -160,11 +161,8 @@ List<TransactionParticipant> _transactionParticipantsFromShares(
   ];
 }
 
-class _PayableSettlementOption {
-  const _PayableSettlementOption({
-    required this.group,
-    required this.suggestion,
-  });
+class _SettlementOption {
+  const _SettlementOption({required this.group, required this.suggestion});
 
   final Group group;
   final SettlementSuggestion suggestion;
@@ -198,20 +196,20 @@ Future<void> _openRemainingSettlementPicker(
   AppStore store,
   ValueChanged<int> onNavigate,
 ) async {
-  final options = <_PayableSettlementOption>[
+  final options = <_SettlementOption>[
     for (final group in store.visibleExpenseGroups)
       for (final suggestion in store.suggestionsForGroup(group.id))
         if (suggestion.payerId == store.currentUserId)
-          _PayableSettlementOption(group: group, suggestion: suggestion),
+          _SettlementOption(group: group, suggestion: suggestion),
   ];
 
   if (options.isEmpty) {
     onNavigate(1);
-    showSnack(context, 'No payable settlement is open for this user.');
+    showSnack(context, 'Nothing to settle right now.');
     return;
   }
 
-  final selected = await showModalBottomSheet<_PayableSettlementOption>(
+  final selected = await showModalBottomSheet<_SettlementOption>(
     context: context,
     showDragHandle: true,
     builder: (context) {
@@ -224,14 +222,14 @@ Future<void> _openRemainingSettlementPicker(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Remaining settlements',
+                'Settle now',
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 8),
               Text(
-                'Choose a settlement to pay.',
+                'Choose who you want to pay.',
                 style: TextStyle(
                   color: scheme.onSurfaceVariant,
                   fontWeight: FontWeight.w700,
@@ -256,14 +254,14 @@ Future<void> _openRemainingSettlementPicker(
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
                       subtitle: Text(
-                        '${option.group.name} • ${suggestion.hasPending ? 'Pending settlement' : 'Ready to settle'}',
+                        '${option.group.name} • ${suggestion.hasPending ? 'Payment pending' : 'Ready to settle'}',
                       ),
                       trailing: Wrap(
                         spacing: 8,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
-                            money(suggestion.amountMinor),
+                            friendlyMoney(suggestion.amountMinor),
                             style: const TextStyle(fontWeight: FontWeight.w900),
                           ),
                           const Icon(Icons.chevron_right),
@@ -1032,8 +1030,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
               child: groups.isEmpty
                   ? const EmptyState(
                       icon: Icons.group_off_outlined,
-                      title: 'No groups',
-                      body: 'Create one with active connections.',
+                      title: 'No expense groups yet',
+                      body:
+                          'Create a group to split bills, track balances, and settle easily.',
                     )
                   : Column(
                       children: [
@@ -1215,13 +1214,13 @@ class _ExpenseGroupsOverview extends StatelessWidget {
                 ),
                 title: Text(
                   pendingSettlements == 0
-                      ? 'No pending settlements'
+                      ? 'You are all settled'
                       : '$pendingSettlements settlement request(s) pending',
                 ),
                 subtitle: Text(
                   pendingSettlements == 0
-                      ? 'Shared balances are ready when a group is opened.'
-                      : 'Open the related group to review the exact split before paying.',
+                      ? 'No pending payments across your expense groups.'
+                      : 'Open the group to see who needs to pay or receive money.',
                 ),
               ),
               const Divider(height: 1),
@@ -1230,11 +1229,11 @@ class _ExpenseGroupsOverview extends StatelessWidget {
                 leading: const CircleAvatar(
                   child: Icon(Icons.receipt_long_outlined),
                 ),
-                title: const Text('Expense records remain transparent'),
+                title: const Text('Expense records stay easy to follow'),
                 subtitle: Text(
                   groups.isEmpty
                       ? 'Create an expense group from accepted friends first.'
-                      : 'Each group keeps expenses, payments, members, former members, and activity together.',
+                      : 'Each group keeps expenses, payments, members, and activity in one place.',
                 ),
               ),
             ],
@@ -1245,8 +1244,9 @@ class _ExpenseGroupsOverview extends StatelessWidget {
           child: latestGroups.isEmpty
               ? const EmptyState(
                   icon: Icons.group_add_outlined,
-                  title: 'No expense groups',
-                  body: 'Create a group with connected friends to start.',
+                  title: 'No expense groups yet',
+                  body:
+                      'Create a group to split bills, track balances, and settle easily.',
                 )
               : Column(
                   children: [
@@ -1271,12 +1271,288 @@ class _ExpenseGroupsOverview extends StatelessWidget {
           child: recentActivity.isEmpty
               ? const EmptyState(
                   icon: Icons.history_toggle_off,
-                  title: 'No group activity',
-                  body: 'New expenses and settlements will appear here.',
+                  title: 'No recent activity yet',
+                  body:
+                      'New expenses, payments, and reminders will appear here.',
                 )
               : ActivityList(items: recentActivity),
         ),
       ],
+    );
+  }
+}
+
+class BalanceStatementCard extends StatelessWidget {
+  const BalanceStatementCard({
+    required this.youOweMinor,
+    required this.youAreOwedMinor,
+    required this.netMinor,
+    super.key,
+  });
+
+  final int youOweMinor;
+  final int youAreOwedMinor;
+  final int netMinor;
+
+  @override
+  Widget build(BuildContext context) {
+    final mixed = youOweMinor > 0 && youAreOwedMinor > 0;
+    final title = mixed
+        ? 'Group balance'
+        : netMinor > 0
+        ? 'You are owed'
+        : netMinor < 0
+        ? 'You owe'
+        : 'You are all settled';
+    final subtext = mixed
+        ? 'You have money moving both ways in this group.'
+        : netMinor > 0
+        ? 'Friends in this group need to pay you back.'
+        : netMinor < 0
+        ? 'Settle your balance to keep the group clear.'
+        : 'No pending payments in this group.';
+    final tone = mixed
+        ? Tone.info
+        : netMinor > 0
+        ? Tone.success
+        : netMinor < 0
+        ? Tone.warning
+        : Tone.neutral;
+    final color = toneColor(context, tone);
+
+    return ds.AppCard(
+      tone: _designTone(tone),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: color.withValues(alpha: 0.12),
+                foregroundColor: color,
+                child: Icon(
+                  netMinor == 0
+                      ? Icons.check_circle_outline
+                      : netMinor > 0
+                      ? Icons.call_received_outlined
+                      : Icons.call_made_outlined,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AppTextStyles.sectionTitle),
+                    Text(subtext, style: AppTextStyles.bodySecondary),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (mixed) ...[
+            _BalanceStatementLine(
+              label: 'You owe',
+              value: friendlyMoney(youOweMinor),
+              tone: Tone.warning,
+            ),
+            _BalanceStatementLine(
+              label: 'You are owed',
+              value: friendlyMoney(youAreOwedMinor),
+              tone: Tone.success,
+            ),
+            const Divider(),
+            _BalanceStatementLine(
+              label: 'Net',
+              value: netMinor >= 0
+                  ? 'You are owed ${friendlyMoney(netMinor)}'
+                  : 'You owe ${friendlyMoney(netMinor.abs())}',
+              tone: netMinor >= 0 ? Tone.success : Tone.warning,
+            ),
+          ] else
+            Text(
+              netMinor == 0
+                  ? 'No pending balances'
+                  : friendlyMoney(netMinor.abs()),
+              style: AppTextStyles.amount.copyWith(color: color),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BalanceStatementLine extends StatelessWidget {
+  const _BalanceStatementLine({
+    required this.label,
+    required this.value,
+    required this.tone,
+  });
+
+  final String label;
+  final String value;
+  final Tone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = toneColor(context, tone);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: AppTextStyles.body)),
+          Text(
+            value,
+            textAlign: TextAlign.right,
+            style: AppTextStyles.cardTitle.copyWith(color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class PersonBalanceTile extends StatelessWidget {
+  const PersonBalanceTile({
+    required this.user,
+    required this.statement,
+    required this.amountMinor,
+    required this.tone,
+    this.trailing,
+    super.key,
+  });
+
+  final AppUser user;
+  final String statement;
+  final int amountMinor;
+  final Tone tone;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = toneColor(context, tone);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: UserAvatar(user: user),
+      title: Text(statement, style: AppTextStyles.cardTitle),
+      subtitle: amountMinor == 0
+          ? const Text('No pending payment')
+          : Text('Amount: ${friendlyMoney(amountMinor)}'),
+      trailing:
+          trailing ??
+          StatusPill(
+            label: amountMinor == 0 ? 'Settled' : friendlyMoney(amountMinor),
+            tone: tone,
+          ),
+      textColor: tone == Tone.neutral ? null : color,
+    );
+  }
+}
+
+class SettlementStatementTile extends StatelessWidget {
+  const SettlementStatementTile({
+    required this.store,
+    required this.suggestion,
+    this.onSettle,
+    this.onReminder,
+    super.key,
+  });
+
+  final AppStore store;
+  final SettlementSuggestion suggestion;
+  final VoidCallback? onSettle;
+  final VoidCallback? onReminder;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentUserId = store.currentUserId;
+    final payerName = store.nameOf(suggestion.payerId);
+    final payeeName = store.nameOf(suggestion.payeeId);
+    final payerIsCurrent = suggestion.payerId == currentUserId;
+    final payeeIsCurrent = suggestion.payeeId == currentUserId;
+    final tone = suggestion.hasPending
+        ? Tone.warning
+        : payerIsCurrent
+        ? Tone.warning
+        : payeeIsCurrent
+        ? Tone.success
+        : Tone.info;
+    final title = payerIsCurrent
+        ? 'You need to pay'
+        : payeeIsCurrent
+        ? 'You should receive'
+        : 'Payment needed';
+    final statement = payerIsCurrent
+        ? 'You owe $payeeName ${friendlyMoney(suggestion.amountMinor)}'
+        : payeeIsCurrent
+        ? '$payerName owes you ${friendlyMoney(suggestion.amountMinor)}'
+        : '$payerName owes $payeeName ${friendlyMoney(suggestion.amountMinor)}';
+    final pendingText = payerIsCurrent
+        ? 'Payment pending with $payeeName'
+        : payeeIsCurrent
+        ? 'Payment pending from $payerName'
+        : 'Payment pending from $payerName';
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: toneColor(context, tone).withValues(alpha: 0.12),
+        foregroundColor: toneColor(context, tone),
+        child: Icon(payerIsCurrent ? Icons.call_made : Icons.call_received),
+      ),
+      title: Text(title, style: AppTextStyles.cardTitle),
+      subtitle: Text(suggestion.hasPending ? pendingText : statement),
+      trailing: Wrap(
+        spacing: AppSpacing.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          StatusPill(
+            label: suggestion.hasPending
+                ? 'Payment pending'
+                : friendlyMoney(suggestion.amountMinor),
+            tone: tone,
+          ),
+          if (onSettle != null)
+            FilledButton(onPressed: onSettle, child: const Text('Settle Now'))
+          else if (onReminder != null)
+            OutlinedButton(
+              onPressed: onReminder,
+              child: const Text('Send Reminder'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class ExpenseImpactBadge extends StatelessWidget {
+  const ExpenseImpactBadge({
+    required this.label,
+    required this.tone,
+    super.key,
+  });
+
+  final String label;
+  final Tone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = toneColor(context, tone);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.caption.copyWith(
+          color: color,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 }
@@ -1303,6 +1579,16 @@ class GroupDetail extends StatelessWidget {
     final isAdmin = store.isGroupAdmin(group.id, store.currentUserId);
     final balances = store.balancesForGroup(group.id);
     final suggestions = store.suggestionsForGroup(group.id);
+    final youOweMinor = suggestions
+        .where((item) => item.payerId == store.currentUserId)
+        .fold<int>(0, (sum, item) => sum + item.amountMinor);
+    final youAreOwedMinor = suggestions
+        .where((item) => item.payeeId == store.currentUserId)
+        .fold<int>(0, (sum, item) => sum + item.amountMinor);
+    final netBalance = store.balanceForUserInGroup(
+      group.id,
+      store.currentUserId,
+    );
     final canAddExpense = isCurrentMember && !group.isDisbanded;
     final groupExpenses =
         store.expenses.where((expense) => expense.groupId == group.id).toList()
@@ -1352,27 +1638,13 @@ class GroupDetail extends StatelessWidget {
           ],
         ),
       ),
+      BalanceStatementCard(
+        youOweMinor: youOweMinor,
+        youAreOwedMinor: youAreOwedMinor,
+        netMinor: netBalance,
+      ),
       ResponsiveWrap(
         children: [
-          StatTile(
-            label: 'Group balance',
-            value: money(
-              balances.values.fold<int>(0, (sum, value) => sum + value).abs(),
-            ),
-            icon: Icons.balance,
-            tone: Tone.neutral,
-          ),
-          StatTile(
-            label: 'Your position',
-            value: money(
-              store.balanceForUserInGroup(group.id, store.currentUserId),
-            ),
-            icon: Icons.account_balance,
-            tone:
-                store.balanceForUserInGroup(group.id, store.currentUserId) >= 0
-                ? Tone.success
-                : Tone.warning,
-          ),
           StatTile(
             label: 'Active members',
             value: '${activeMembers.length}',
@@ -1380,7 +1652,7 @@ class GroupDetail extends StatelessWidget {
             tone: Tone.neutral,
           ),
           StatTile(
-            label: 'Suggestions',
+            label: 'Who owes whom',
             value: '${suggestions.length}',
             icon: Icons.route_outlined,
             tone: Tone.info,
@@ -1432,86 +1704,83 @@ class GroupDetail extends StatelessWidget {
         ),
       ),
       SectionPanel(
-        title: 'Balances',
+        title: 'Member balances',
         child: balances.isEmpty
             ? const EmptyState(
                 icon: Icons.check_circle_outline,
-                title: 'All settled',
-                body:
-                    'Open balance is zero after paid settlements and adjustments.',
+                title: 'No pending balances',
+                body: 'Everyone is settled in this group.',
               )
             : Column(
                 children: [
                   for (final entry in balances.entries)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: UserAvatar(user: store.userById(entry.key)),
-                      title: Text(store.nameOf(entry.key)),
-                      subtitle: Text(entry.value >= 0 ? 'Is owed' : 'Owes'),
-                      trailing: BalancePill(amountMinor: entry.value),
+                    PersonBalanceTile(
+                      user: store.userById(entry.key),
+                      statement: memberBalanceStatement(
+                        store,
+                        entry.key,
+                        entry.value,
+                      ),
+                      amountMinor: entry.value.abs(),
+                      tone: memberBalanceTone(
+                        store.currentUserId,
+                        entry.key,
+                        entry.value,
+                      ),
                     ),
                 ],
               ),
       ),
       SectionPanel(
-        title: 'Settlement Suggestions',
+        title: 'Who owes whom',
         child: suggestions.isEmpty
-            ? const EmptyState(
+            ? EmptyState(
                 icon: Icons.done_all,
-                title: 'No settlement needed',
-                body: 'The greedy net-balance simplifier found no open debts.',
+                title: 'Nothing to settle',
+                body: 'Everyone is clear in this group.',
+                action: canAddExpense
+                    ? FilledButton.icon(
+                        onPressed: () =>
+                            showAddExpenseOcrFlow(context, group.id),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Expense'),
+                      )
+                    : null,
               )
             : Column(
                 children: [
                   for (final suggestion in suggestions)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const CircleAvatar(child: Icon(Icons.payments)),
-                      title: Text(
-                        '${store.nameOf(suggestion.payerId)} pays ${store.nameOf(suggestion.payeeId)}',
-                      ),
-                      subtitle: Text(
-                        suggestion.hasPending
-                            ? 'Pending payment already exists'
-                            : 'Greedy min-cash-flow suggestion',
-                      ),
-                      trailing: Wrap(
-                        spacing: 8,
-                        children: [
-                          BalancePill(amountMinor: -suggestion.amountMinor),
-                          if (!suggestion.hasPending)
-                            FilledButton.icon(
-                              onPressed:
-                                  suggestion.payerId == store.currentUserId
-                                  ? () => openTransactionConfirmation(
-                                      context,
-                                      _settlementConfirmationData(
-                                        store,
-                                        suggestion,
-                                      ),
-                                      () async {
-                                        final settlement = store
-                                            .createOrReuseSettlement(
-                                              suggestion,
-                                            );
-                                        store.confirmSettlement(settlement.id);
-                                        return _successResult(
-                                          title: 'Payment Successful',
-                                          message:
-                                              'Your settlement has been marked as paid.',
-                                          amount: suggestion.amountMinor,
-                                          reference: settlement.id,
-                                        );
-                                      },
-                                    )
-                                  : null,
-                              icon: const Icon(Icons.account_balance_wallet),
-                              label: const Text('Pay'),
+                    SettlementStatementTile(
+                      store: store,
+                      suggestion: suggestion,
+                      onSettle:
+                          suggestion.payerId == store.currentUserId &&
+                              !suggestion.hasPending
+                          ? () => openTransactionConfirmation(
+                              context,
+                              _settlementConfirmationData(store, suggestion),
+                              () async {
+                                final settlement = store
+                                    .createOrReuseSettlement(suggestion);
+                                store.confirmSettlement(settlement.id);
+                                return _successResult(
+                                  title: 'Payment Successful',
+                                  message:
+                                      'Payment completed. Your group balance is updated.',
+                                  amount: suggestion.amountMinor,
+                                  reference: settlement.id,
+                                );
+                              },
                             )
-                          else
-                            const StatusPill(label: 'Pending', tone: Tone.info),
-                        ],
-                      ),
+                          : null,
+                      onReminder:
+                          suggestion.payeeId == store.currentUserId &&
+                              !suggestion.hasPending
+                          ? () => showSnack(
+                              context,
+                              'Reminder sent to ${store.nameOf(suggestion.payerId)}.',
+                            )
+                          : null,
                     ),
                 ],
               ),
@@ -1522,7 +1791,7 @@ class GroupDetail extends StatelessWidget {
             ? const EmptyState(
                 icon: Icons.receipt_long_outlined,
                 title: 'No expenses yet',
-                body: 'Add a manual or receipt-assisted expense.',
+                body: 'Add the first expense to start tracking this group.',
               )
             : Column(
                 children: [
@@ -1535,8 +1804,26 @@ class GroupDetail extends StatelessWidget {
                             : Icons.receipt_long,
                       ),
                       title: Text(expense.title),
-                      subtitle: Text(
-                        '${money(expense.totalMinor)} • ${enumLabel(expense.splitMode)} • paid by ${payerSummary(store, expense)}',
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Paid by ${payerSummary(store, expense)} · ${friendlyMoney(expense.totalMinor)}',
+                          ),
+                          const SizedBox(height: 4),
+                          ExpenseImpactBadge(
+                            label: expenseImpactLabel(
+                              expense,
+                              store.currentUserId,
+                            ),
+                            tone: expenseImpactTone(
+                              expense,
+                              store.currentUserId,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(dateTimeLabel(expense.createdAt)),
+                        ],
                       ),
                       trailing: StatusPill(
                         label: expense.lockedAt == null
@@ -3311,16 +3598,18 @@ class EmptyState extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.body,
+    this.action,
     super.key,
   });
 
   final IconData icon;
   final String title;
   final String body;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
-    return ds.EmptyState(icon: icon, title: title, body: body);
+    return ds.EmptyState(icon: icon, title: title, body: body, action: action);
   }
 }
 
@@ -3368,8 +3657,8 @@ class GroupActivitySummary extends StatelessWidget {
     if (items.isEmpty) {
       return const EmptyState(
         icon: Icons.history_toggle_off,
-        title: 'No activity',
-        body: 'Recent group activity appears here.',
+        title: 'No recent activity yet',
+        body: 'New expenses, payments, and reminders will appear here.',
       );
     }
     return Column(
@@ -3541,22 +3830,78 @@ IconData activityIcon(ActivityLog item) {
 
 String activityDescription(AppStore store, ActivityLog item) {
   final amount = activityAmount(store, item);
+  final actor = item.actorId == null ? 'System' : store.nameOf(item.actorId!);
   if (item.eventType == 'settlement_paid' && amount != null) {
-    return '${item.body.replaceAll(' via Sangai Pay.', '')}.';
+    final settlement = settlementForActivity(store, item);
+    if (settlement != null) {
+      final payer = store.nameOf(settlement.payerId);
+      final payee = store.nameOf(settlement.payeeId);
+      if (settlement.payeeId == store.currentUserId) {
+        return '$payer paid you ${friendlyMoney(settlement.amountMinor)}';
+      }
+      if (settlement.payerId == store.currentUserId) {
+        return 'You paid $payee ${friendlyMoney(settlement.amountMinor)}';
+      }
+      return '$payer paid $payee ${friendlyMoney(settlement.amountMinor)}';
+    }
+    return 'Group balance settled';
+  }
+  if (item.eventType == 'settlement_pending') {
+    final settlement = settlementForActivity(store, item);
+    if (settlement != null) {
+      return 'Payment pending from ${store.nameOf(settlement.payerId)}';
+    }
+    return 'Payment pending';
+  }
+  if (item.eventType == 'settlement_failed') {
+    return 'Payment could not be completed. Please try again.';
   }
   if (item.eventType == 'expense_added') {
-    return item.body;
+    final expense = expenseForActivity(store, item);
+    return expense == null
+        ? '$actor added an expense'
+        : '$actor added ${expense.title}';
+  }
+  if (item.eventType == 'expense_edited') {
+    return 'Expense split updated';
+  }
+  if (item.eventType == 'expense_voided') {
+    return 'Expense removed from group balance';
   }
   if (item.eventType == 'adjustment_created' && amount != null) {
-    return 'System applied ${statementMoney(amount)} adjustment.';
+    return 'Group balance updated by ${friendlyMoney(amount)}';
   }
   if (item.eventType == 'member_added') {
-    return item.body.replaceAll(' joined ', ' was added to ');
+    return '${store.nameOf(item.entityId)} joined the group';
   }
   if (item.eventType == 'member_removed') {
-    return item.body;
+    return '${store.nameOf(item.entityId)} left the group';
   }
   return item.body;
+}
+
+Expense? expenseForActivity(AppStore store, ActivityLog item) {
+  if (item.entityType != 'expense') {
+    return null;
+  }
+  for (final expense in store.expenses) {
+    if (expense.id == item.entityId) {
+      return expense;
+    }
+  }
+  return null;
+}
+
+Settlement? settlementForActivity(AppStore store, ActivityLog item) {
+  if (item.entityType != 'settlement') {
+    return null;
+  }
+  for (final settlement in store.settlements) {
+    if (settlement.id == item.entityId) {
+      return settlement;
+    }
+  }
+  return null;
 }
 
 int? activityAmount(AppStore store, ActivityLog item) {
@@ -3666,6 +4011,79 @@ String payerSummary(AppStore store, Expense expense) {
         (payer) => '${store.nameOf(payer.userId)} ${money(payer.amountMinor)}',
       )
       .join(' + ');
+}
+
+String memberBalanceStatement(AppStore store, String userId, int amountMinor) {
+  final isCurrentUser = userId == store.currentUserId;
+  final name = store.nameOf(userId);
+  if (amountMinor == 0) {
+    return isCurrentUser ? 'You are all settled' : 'You and $name are settled';
+  }
+  if (amountMinor > 0) {
+    return isCurrentUser
+        ? 'You are owed ${friendlyMoney(amountMinor)}'
+        : '$name should receive ${friendlyMoney(amountMinor)}';
+  }
+  return isCurrentUser
+      ? 'You owe ${friendlyMoney(amountMinor.abs())}'
+      : '$name owes ${friendlyMoney(amountMinor.abs())}';
+}
+
+Tone memberBalanceTone(String currentUserId, String userId, int amountMinor) {
+  if (amountMinor == 0) {
+    return Tone.neutral;
+  }
+  if (userId == currentUserId) {
+    return amountMinor > 0 ? Tone.success : Tone.warning;
+  }
+  return amountMinor > 0 ? Tone.success : Tone.warning;
+}
+
+int expensePaidByUser(Expense expense, String userId) {
+  if (expense.payers.isEmpty) {
+    return expense.payerId == userId ? expense.totalMinor : 0;
+  }
+  return expense.payers
+      .where((payer) => payer.userId == userId)
+      .fold<int>(0, (sum, payer) => sum + payer.amountMinor);
+}
+
+int expenseShareForUser(Expense expense, String userId) {
+  return expense.shares
+      .where((share) => share.userId == userId)
+      .fold<int>(0, (sum, share) => sum + share.amountMinor);
+}
+
+String expenseImpactLabel(Expense expense, String userId) {
+  final paid = expensePaidByUser(expense, userId);
+  final share = expenseShareForUser(expense, userId);
+  if (paid == 0 && share == 0) {
+    return 'You are not included';
+  }
+  final impact = paid - share;
+  if (impact > 0) {
+    return 'You lent ${friendlyMoney(impact)}';
+  }
+  if (impact < 0) {
+    return 'You owe ${friendlyMoney(impact.abs())}';
+  }
+  return 'You are all settled';
+}
+
+Tone expenseImpactTone(Expense expense, String userId) {
+  final paid = expensePaidByUser(expense, userId);
+  final share = expenseShareForUser(expense, userId);
+  if (paid == 0 && share == 0) {
+    return Tone.neutral;
+  }
+  final impact = paid - share;
+  if (impact > 0) {
+    return Tone.success;
+  }
+  if (impact < 0) {
+    return Tone.warning;
+  }
+  return Tone.neutral;
 }
 
 void showSnack(BuildContext context, String message) {
@@ -4120,7 +4538,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
       return;
     }
     _autoOcrStarted = true;
-    setState(() => _scanMessage = 'Looking for a bill in the frame...');
+    setState(() => _scanMessage = 'Preparing split preview...');
     Timer(const Duration(milliseconds: 700), () {
       if (!mounted ||
           !_cameraReady ||
@@ -4163,7 +4581,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
     }
     setState(() {
       _runningOcr = true;
-      _scanMessage = 'Reading bill items...';
+      _scanMessage = 'Preparing split preview...';
     });
     try {
       await Future<void>.delayed(const Duration(milliseconds: 900));
@@ -5215,10 +5633,10 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
           )
         : null;
     final splitError = selectedParticipants.isEmpty
-        ? 'Please select participants.'
+        ? 'Select at least one participant.'
         : itemError ??
               (splitTotal != total
-                  ? 'Participant split amounts must add up to the total expense.'
+                  ? 'We could not calculate the split. Please check the amount and participants.'
                   : null);
     final readyToSave =
         total > 0 &&
@@ -6629,6 +7047,12 @@ Future<void> showCreateDhukutiGroupDialog(
                         spacing: 10,
                         runSpacing: 10,
                         children: [
+                          ParticipantSelectorCard(
+                            user: store.currentUser,
+                            selected: true,
+                            enabled: false,
+                            onTap: () {},
+                          ),
                           for (final user in connections)
                             ParticipantSelectorCard(
                               user: user,
@@ -7255,9 +7679,9 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
             hasZeroPayerAmount: hasZeroPayerAmount,
           );
           final splitError = selectedParticipants.isEmpty
-              ? 'Please select participants.'
+              ? 'Select at least one participant.'
               : splitTotal != total
-              ? 'Participant split amounts must add up to the total expense.'
+              ? 'We could not calculate the split. Please check the amount and participants.'
               : null;
           final readyToSave =
               total > 0 &&
@@ -7788,12 +8212,14 @@ class ParticipantSelectorCard extends StatelessWidget {
     required this.user,
     required this.selected,
     required this.onTap,
+    this.enabled = true,
     super.key,
   });
 
   final AppUser user;
   final bool selected;
   final VoidCallback onTap;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -7804,7 +8230,7 @@ class ParticipantSelectorCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.md),
         elevation: selected ? 2 : 0,
         child: InkWell(
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           borderRadius: BorderRadius.circular(AppRadius.md),
           child: AnimatedContainer(
             duration: AppAnimations.fast,
@@ -8023,10 +8449,11 @@ class NetResultRow extends StatelessWidget {
     final net = paidMinor - shareMinor;
     final scheme = Theme.of(context).colorScheme;
     final accent = toneColor(context, Tone.success);
-    final isPayer = paidMinor > 0;
-    final label = isPayer
-        ? 'Receivable ${statementMoney(math.max(net, 0))}'
-        : 'Payable ${statementMoney(net < 0 ? net.abs() : shareMinor)}';
+    final label = net > 0
+        ? 'Gets back ${friendlyMoney(net)}'
+        : net < 0
+        ? 'Owes ${friendlyMoney(net.abs())}'
+        : 'Settled';
     final color = net > 0 ? accent : scheme.onSurfaceVariant;
     final icon = net > 0
         ? Icons.call_received_rounded
@@ -8289,14 +8716,14 @@ String? _payerValidationMessage({
     return 'Please select who paid.';
   }
   if (hasZeroPayerAmount) {
-    return 'Enter the amount paid by each payer.';
+    return 'Enter a valid amount to continue.';
   }
   final delta = total - payerTotal;
   if (delta > 0) {
-    return 'Paid amount is ${statementMoney(delta)} less than the total expense.';
+    return 'We could not calculate the split. Please check the amount and participants.';
   }
   if (delta < 0) {
-    return 'Paid amount is ${statementMoney(delta.abs())} more than the total expense.';
+    return 'We could not calculate the split. Please check the amount and participants.';
   }
   return null;
 }
@@ -8666,13 +9093,16 @@ class GroupStatementData {
       rows.add(
         GroupStatementRow(
           date: settlement.paidAt ?? settlement.createdAt,
-          type: 'Settlement',
-          description:
-              '${store.nameOf(settlement.payerId)} paid ${store.nameOf(settlement.payeeId)}',
+          type: 'Payment',
+          description: settlement.payerId == userId
+              ? 'You paid ${store.nameOf(settlement.payeeId)}'
+              : settlement.payeeId == userId
+              ? '${store.nameOf(settlement.payerId)} paid you'
+              : '${store.nameOf(settlement.payerId)} paid ${store.nameOf(settlement.payeeId)}',
           paidBy: store.nameOf(settlement.payerId),
           participants: store.nameOf(settlement.payeeId),
           totalAmountMinor: settlement.amountMinor,
-          splitMode: 'Settlement',
+          splitMode: 'Payment',
           yourShareMinor: 0,
           status: enumLabel(settlement.status),
         ),
@@ -8953,11 +9383,33 @@ class _StatementTotals extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final totals = [
-      ('Total group expenses', statement.totalGroupExpenses),
-      ('Total paid by user', statement.totalPaidByUser),
-      ('Total user share', statement.totalUserShare),
-      ('Total settled', statement.totalSettled),
-      ('Remaining balance', statement.remainingBalance),
+      (
+        'Group total',
+        friendlyMoney(statement.totalGroupExpenses),
+        Tone.neutral,
+      ),
+      ('You paid', friendlyMoney(statement.totalPaidByUser), Tone.neutral),
+      ('Your share', friendlyMoney(statement.totalUserShare), Tone.neutral),
+      (
+        'Payments completed',
+        friendlyMoney(statement.totalSettled),
+        Tone.neutral,
+      ),
+      (
+        statement.remainingBalance > 0
+            ? 'You are owed'
+            : statement.remainingBalance < 0
+            ? 'You owe'
+            : 'You are all settled',
+        statement.remainingBalance == 0
+            ? 'No balance'
+            : friendlyMoney(statement.remainingBalance.abs()),
+        statement.remainingBalance > 0
+            ? Tone.success
+            : statement.remainingBalance < 0
+            ? Tone.warning
+            : Tone.neutral,
+      ),
     ];
     return SizedBox(
       height: 104,
@@ -8973,8 +9425,8 @@ class _StatementTotals extends StatelessWidget {
                   width: 210,
                   child: StatementTotalTile(
                     label: totals[index].$1,
-                    value: statementMoney(totals[index].$2),
-                    tone: totals[index].$2 < 0 ? Tone.warning : Tone.neutral,
+                    value: totals[index].$2,
+                    tone: totals[index].$3,
                   ),
                 ),
               ],
@@ -9056,6 +9508,21 @@ String statementMoney(int minor) {
     (_) => ',',
   );
   return '${sign}NPR $rupeeText.${paisa.toString().padLeft(2, '0')}';
+}
+
+String friendlyMoney(int minor) {
+  final sign = minor < 0 ? '-' : '';
+  final absolute = minor.abs();
+  final rupees = absolute ~/ 100;
+  final paisa = absolute % 100;
+  final rupeeText = rupees.toString().replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => ',',
+  );
+  if (paisa == 0) {
+    return '${sign}Rs. $rupeeText';
+  }
+  return '${sign}Rs. $rupeeText.${paisa.toString().padLeft(2, '0')}';
 }
 
 String _csvCell(String value) {
@@ -9517,29 +9984,37 @@ Future<void> showCreateDhukutiDialog(
                           setState(() => frequency = value ?? frequency),
                     ),
                     const SizedBox(height: 12),
-                    Text(
-                      'Invite members',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final user in store.activeConnectionUsers())
-                          FilterChip(
-                            selected: members.contains(user.id),
-                            avatar: UserAvatar(user: user, small: true),
-                            label: Text(user.displayName),
-                            onSelected: (checked) {
-                              setState(() {
-                                checked
-                                    ? members.add(user.id)
-                                    : members.remove(user.id);
-                              });
-                            },
+                    _ManualFormSection(
+                      title: 'Members',
+                      icon: Icons.group_outlined,
+                      subtitle: 'Choose who joins this Dhukuti schedule',
+                      trailing: _CountPill(
+                        label: '${members.length + 1} people',
+                      ),
+                      child: Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          ParticipantSelectorCard(
+                            user: store.currentUser,
+                            selected: true,
+                            enabled: false,
+                            onTap: () {},
                           ),
-                      ],
+                          for (final user in store.activeConnectionUsers())
+                            ParticipantSelectorCard(
+                              user: user,
+                              selected: members.contains(user.id),
+                              onTap: () {
+                                setState(() {
+                                  members.contains(user.id)
+                                      ? members.remove(user.id)
+                                      : members.add(user.id);
+                                });
+                              },
+                            ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

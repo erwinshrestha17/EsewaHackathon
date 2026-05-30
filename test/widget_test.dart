@@ -363,11 +363,16 @@ void main() {
     expect(find.text('Contribution amount'), findsOneWidget);
     expect(find.text('Gross pot per cycle'), findsOneWidget);
     expect(find.text('Default split: Equal'), findsNothing);
-    final memberCards = tester.widgetList<ParticipantSelectorCard>(
-      find.byType(ParticipantSelectorCard),
-    );
+    final memberCards = tester
+        .widgetList<ParticipantSelectorCard>(
+          find.byType(ParticipantSelectorCard),
+        )
+        .toList();
     expect(memberCards, isNotEmpty);
-    expect(memberCards.every((card) => !card.selected), isTrue);
+    expect(find.text(store.currentUser.displayName), findsOneWidget);
+    expect(memberCards.where((card) => card.selected), hasLength(1));
+    expect(memberCards.first.selected, isTrue);
+    expect(memberCards.first.enabled, isFalse);
   });
 
   testWidgets('Groups screen separates expense and Dhukuti groups', (
@@ -445,7 +450,7 @@ void main() {
     expect(find.text('Date'), findsOneWidget);
     expect(find.text('Paid By'), findsOneWidget);
     expect(find.text('Your Share'), findsOneWidget);
-    expect(find.text('Total group expenses'), findsOneWidget);
+    expect(find.text('Group total'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -536,7 +541,7 @@ void main() {
       find.widgetWithText(FilledButton, 'Save expense'),
     );
     expect(save.onPressed, isNull);
-    expect(find.text('Enter the amount paid by each payer.'), findsOneWidget);
+    expect(find.text('Enter a valid amount to continue.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -587,7 +592,7 @@ void main() {
     await openManualEntry(tester);
 
     // Initially, no participants are selected
-    expect(find.text('Please select participants.'), findsWidgets);
+    expect(find.text('Select at least one participant.'), findsWidgets);
 
     final participantCards = find.byType(ParticipantSelectorCard);
     final cardCount = participantCards.evaluate().length;
@@ -601,7 +606,7 @@ void main() {
     }
 
     // Now they are selected, error should disappear
-    expect(find.text('Please select participants.'), findsNothing);
+    expect(find.text('Select at least one participant.'), findsNothing);
 
     // Deselect all participants
     for (var index = 0; index < cardCount; index++) {
@@ -611,7 +616,7 @@ void main() {
     }
 
     // Error should show again
-    expect(find.text('Please select participants.'), findsWidgets);
+    expect(find.text('Select at least one participant.'), findsWidgets);
     final save = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Save expense'),
     );

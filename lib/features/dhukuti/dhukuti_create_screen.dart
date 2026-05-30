@@ -147,6 +147,12 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
+                    _DhukutiMemberSelectorCard(
+                      user: store.currentUser,
+                      selected: true,
+                      enabled: false,
+                      onTap: () {},
+                    ),
                     for (final user in connections)
                       _DhukutiMemberSelectorCard(
                         user: user,
@@ -286,11 +292,13 @@ class _DhukutiMemberSelectorCard extends StatelessWidget {
     required this.user,
     required this.selected,
     required this.onTap,
+    this.enabled = true,
   });
 
   final AppUser user;
   final bool selected;
   final VoidCallback onTap;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -301,7 +309,7 @@ class _DhukutiMemberSelectorCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.md),
         elevation: selected ? 2 : 0,
         child: InkWell(
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           borderRadius: BorderRadius.circular(AppRadius.md),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),

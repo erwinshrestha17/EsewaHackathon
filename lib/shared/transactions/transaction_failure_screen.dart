@@ -48,7 +48,11 @@ class TransactionFailureScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              result.reason ?? result.message,
+              result.reason?.trim().isNotEmpty == true
+                  ? result.reason!
+                  : result.message.trim().isNotEmpty
+                  ? result.message
+                  : 'Payment could not be completed. Please try again.',
               textAlign: TextAlign.center,
               style: AppTextStyles.bodySecondary,
             ),
