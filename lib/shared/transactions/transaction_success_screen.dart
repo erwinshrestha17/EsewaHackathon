@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../design_system/app_colors.dart';
+import '../design_system/app_components.dart' as ds;
+import '../design_system/app_spacing.dart';
+import '../design_system/app_text_styles.dart';
 import '../../src/finance.dart';
 import 'transaction_status.dart';
 
@@ -10,12 +14,11 @@ class TransactionSuccessScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Transaction Complete')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           children: [
             const SizedBox(height: 28),
             Container(
@@ -23,33 +26,35 @@ class TransactionSuccessScreen extends StatelessWidget {
               height: 86,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: scheme.primary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
+                color: AppColors.lightGreen,
+                borderRadius: BorderRadius.circular(AppRadius.xl),
               ),
-              child: Icon(Icons.check_circle, color: scheme.primary, size: 54),
+              child: const Icon(
+                Icons.check_circle,
+                color: AppColors.primaryGreen,
+                size: 54,
+              ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.xl),
             Text(
               result.title,
               textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+              style: AppTextStyles.screenTitle,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               result.message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: scheme.onSurfaceVariant),
+              style: AppTextStyles.bodySecondary,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xxl),
             _ResultCard(result: result),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xxl),
             FilledButton(
               onPressed: () => Navigator.pop(context, result),
               child: const Text('Done'),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpacing.sm),
             OutlinedButton(
               onPressed: () => Navigator.pop(context, result),
               child: const Text('View Details'),
@@ -68,14 +73,7 @@ class _ResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
+    return ds.AppCard(
       child: Column(
         children: [
           _Line(label: 'Amount', value: money(result.amount)),
@@ -100,7 +98,10 @@ class _Line extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: Text(label)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+          Text(
+            value,
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w900),
+          ),
         ],
       ),
     );

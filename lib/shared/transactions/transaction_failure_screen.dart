@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../design_system/app_colors.dart';
+import '../design_system/app_components.dart' as ds;
+import '../design_system/app_spacing.dart';
+import '../design_system/app_text_styles.dart';
 import '../../src/finance.dart';
 import 'transaction_status.dart';
 
@@ -15,12 +19,11 @@ class TransactionFailureScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Transaction Failed')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           children: [
             const SizedBox(height: 28),
             Container(
@@ -28,33 +31,29 @@ class TransactionFailureScreen extends StatelessWidget {
               height: 86,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: scheme.error.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
+                color: AppColors.error.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(AppRadius.xl),
               ),
-              child: Icon(Icons.error_outline, color: scheme.error, size: 54),
+              child: const Icon(
+                Icons.error_outline,
+                color: AppColors.error,
+                size: 54,
+              ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.xl),
             Text(
               'Transaction Failed',
               textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+              style: AppTextStyles.screenTitle,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               result.reason ?? result.message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: scheme.onSurfaceVariant),
+              style: AppTextStyles.bodySecondary,
             ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: scheme.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: scheme.outlineVariant),
-              ),
+            const SizedBox(height: AppSpacing.xxl),
+            ds.AppCard(
               child: Column(
                 children: [
                   _Line(label: 'Amount', value: money(result.amount)),
@@ -63,9 +62,9 @@ class TransactionFailureScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xxl),
             FilledButton(onPressed: onRetry, child: const Text('Retry')),
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpacing.sm),
             OutlinedButton(
               onPressed: () => Navigator.pop(context, result),
               child: const Text('Cancel'),
@@ -90,7 +89,10 @@ class _Line extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: Text(label)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+          Text(
+            value,
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w900),
+          ),
         ],
       ),
     );

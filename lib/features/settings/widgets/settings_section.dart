@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/design_system/app_colors.dart';
+import '../../../shared/design_system/app_components.dart' as ds;
+import '../../../shared/design_system/app_spacing.dart';
+import '../../../shared/design_system/app_text_styles.dart';
+
 class SettingsSection extends StatelessWidget {
   const SettingsSection({
     required this.title,
@@ -14,42 +19,26 @@ class SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: colorScheme.onSurface,
-            ),
-          ),
+          padding: const EdgeInsets.only(left: 4, bottom: AppSpacing.sm),
+          child: Text(title, style: AppTextStyles.sectionTitle),
         ),
-        Material(
-          color: colorScheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: colorScheme.outlineVariant),
-          ),
-          clipBehavior: Clip.antiAlias,
+        ds.AppCard(
+          padding: EdgeInsets.zero,
           child: Column(
             children: [
               for (var index = 0; index < children.length; index++) ...[
                 children[index],
                 if (index < children.length - 1)
-                  Divider(
-                    height: 1,
-                    indent: 64,
-                    color: colorScheme.outlineVariant,
-                  ),
+                  const Divider(height: 1, indent: 64, color: AppColors.border),
               ],
             ],
           ),
         ),
-        if (footer != null) ...[const SizedBox(height: 10), footer!],
+        if (footer != null) ...[const SizedBox(height: AppSpacing.sm), footer!],
       ],
     );
   }

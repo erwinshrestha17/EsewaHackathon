@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/design_system/app_components.dart' as ds;
+import '../../../shared/design_system/app_spacing.dart';
+import '../../../shared/design_system/app_text_styles.dart';
 import '../settings_models.dart';
 
 class DhukutiSafetyNoteCard extends StatelessWidget {
@@ -9,32 +12,22 @@ class DhukutiSafetyNoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: colorScheme.primary.withValues(alpha: 0.08),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.22)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline, color: colorScheme.primary),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  dhukutiSafetyNoteText,
-                  style: TextStyle(height: 1.35),
-                ),
-              ),
-            ],
+    return ds.AppCard(
+      tone: ds.AppStatusTone.info,
+      onTap: onTap,
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              dhukutiSafetyNoteText,
+              style: AppTextStyles.bodySecondary.copyWith(height: 1.35),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

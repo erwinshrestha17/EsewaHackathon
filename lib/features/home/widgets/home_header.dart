@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/design_system/app_colors.dart';
+import '../../../shared/design_system/app_spacing.dart';
+import '../../../shared/design_system/app_text_styles.dart';
+
 class HomeHeader extends StatelessWidget {
   const HomeHeader({
     required this.displayName,
@@ -14,7 +18,6 @@ class HomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final firstName = displayName.trim().split(' ').first;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -31,8 +34,8 @@ class HomeHeader extends StatelessWidget {
                     height: 28,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: scheme.primary,
-                      borderRadius: BorderRadius.circular(8),
+                      color: AppColors.primaryGreen,
+                      borderRadius: BorderRadius.circular(AppRadius.xs),
                     ),
                     child: const Text(
                       'S',
@@ -42,26 +45,17 @@ class HomeHeader extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Sajha Kharcha',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  const Text('Sajha Kharcha', style: AppTextStyles.cardTitle),
                 ],
               ),
-              const SizedBox(height: 14),
-              Text(
-                'Namaste, $firstName',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 2),
+              const SizedBox(height: AppSpacing.lg),
+              Text('Namaste, $firstName', style: AppTextStyles.screenTitle),
+              const SizedBox(height: AppSpacing.xs),
               Text(
                 'Here’s your shared balance summary',
-                style: TextStyle(
-                  color: scheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+                style: AppTextStyles.bodySecondary.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],

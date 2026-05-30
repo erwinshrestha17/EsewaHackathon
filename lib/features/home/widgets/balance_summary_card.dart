@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/design_system/app_colors.dart';
+import '../../../shared/design_system/app_shadows.dart';
+import '../../../shared/design_system/app_spacing.dart';
+import '../../../shared/design_system/app_text_styles.dart';
 import '../../../src/finance.dart';
 import '../home_models.dart';
 
@@ -17,7 +21,6 @@ class BalanceSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final net = summary.netBalance;
     final title = net > 0
         ? '${money(net)} to receive'
@@ -34,17 +37,15 @@ class BalanceSummaryCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
-        color: scheme.primary,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.primary.withValues(alpha: 0.20),
-            blurRadius: 24,
-            offset: const Offset(0, 14),
-          ),
-        ],
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primaryGreen, AppColors.darkGreen],
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        boxShadow: AppShadows.tinted(AppColors.primaryGreen),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,26 +53,26 @@ class BalanceSummaryCard extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.account_balance_wallet, color: Colors.white),
-              const SizedBox(width: 10),
+              const SizedBox(width: AppSpacing.sm),
               Text(
                 'Your shared balance',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                style: AppTextStyles.sectionTitle.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w900,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: AppSpacing.xl),
           Text(
             title,
             semanticsLabel: 'Net shared balance: $title',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            style: AppTextStyles.largeScreenTitle.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             insight,
             style: TextStyle(
@@ -79,7 +80,7 @@ class BalanceSummaryCard extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: AppSpacing.xl),
           Row(
             children: [
               Expanded(
@@ -88,14 +89,14 @@ class BalanceSummaryCard extends StatelessWidget {
                   value: money(summary.totalYouOwe),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: _MiniStat(
                   label: 'Owed to you',
                   value: money(summary.totalOwedToYou),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: _MiniStat(
                   label: 'Pending',
@@ -120,10 +121,10 @@ class _MiniStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(minHeight: 72),
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
       ),
       child: Column(
@@ -138,7 +139,7 @@ class _MiniStat extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/design_system/app_colors.dart';
+import '../../../shared/design_system/app_text_styles.dart';
+
 class SettingsSwitchTile extends StatelessWidget {
   const SettingsSwitchTile({
     required this.icon,
@@ -20,10 +23,7 @@ class SettingsSwitchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final iconColor = enabled
-        ? colorScheme.primary
-        : colorScheme.onSurfaceVariant.withValues(alpha: 0.56);
+    final iconColor = enabled ? AppColors.primaryGreen : AppColors.textMuted;
     return SwitchListTile(
       minTileHeight: 56,
       contentPadding: const EdgeInsetsDirectional.only(start: 16, end: 16),
@@ -35,7 +35,10 @@ class SettingsSwitchTile extends StatelessWidget {
         foregroundColor: iconColor,
         child: Icon(icon, size: 20),
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      title: Text(
+        title,
+        style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
+      ),
       subtitle: subtitle == null ? null : Text(subtitle!),
     );
   }

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/design_system/app_colors.dart';
+import '../../../shared/design_system/app_spacing.dart';
+import '../../../shared/design_system/app_text_styles.dart';
+
 class SettingsChoiceOption<T> {
   const SettingsChoiceOption({
     required this.value,
@@ -31,13 +35,8 @@ Future<T?> showSettingsChoiceBottomSheet<T>({
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 12),
+              Text(title, style: AppTextStyles.sectionTitle),
+              const SizedBox(height: AppSpacing.md),
               Flexible(
                 child: ListView.separated(
                   shrinkWrap: true,
@@ -60,7 +59,7 @@ Future<T?> showSettingsChoiceBottomSheet<T>({
                       trailing: selected
                           ? Icon(
                               Icons.check_circle,
-                              color: Theme.of(context).colorScheme.primary,
+                              color: AppColors.primaryGreen,
                             )
                           : null,
                       onTap: option.enabled

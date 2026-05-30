@@ -17,6 +17,11 @@ import '../features/home/home_screen.dart';
 import '../features/settings/settings_controller.dart';
 import '../features/settings/settings_models.dart';
 import '../features/settings/settings_screen.dart';
+import '../shared/design_system/app_colors.dart';
+import '../shared/design_system/app_components.dart' as ds;
+import '../shared/design_system/app_spacing.dart';
+import '../shared/design_system/app_text_styles.dart';
+import '../shared/design_system/app_theme.dart';
 import '../shared/transactions/transaction_confirmation_controller.dart';
 import '../shared/transactions/transaction_confirmation_data.dart';
 import '../shared/transactions/transaction_status.dart';
@@ -47,45 +52,7 @@ class SangaiApp extends StatelessWidget {
     return MaterialApp(
       title: 'Sajha Kharcha by eSewa',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF178C5B),
-          primary: const Color(0xFF178C5B),
-          secondary: const Color(0xFFB56A12),
-          tertiary: const Color(0xFF235789),
-          error: const Color(0xFFB3261E),
-          surface: const Color(0xFFFBFCF8),
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF5F7F2),
-        cardTheme: const CardThemeData(
-          elevation: 0,
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(8)),
-          ),
-        ),
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(8)),
-          ),
-          isDense: true,
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-      ),
+      theme: AppTheme.light,
       initialRoute: '/splash',
       routes: {
         '/splash': (_) => const SplashScreen(),
@@ -504,7 +471,7 @@ class _SangaiShellState extends State<SangaiShell> {
           ),
           bottomNavigationBar: wide
               ? null
-              : NavigationBar(
+              : ds.AppBottomNavigationBar(
                   selectedIndex: _index,
                   onDestinationSelected: _handleDestinationSelected,
                   destinations: [
@@ -3084,9 +3051,9 @@ class AppScrollView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       itemCount: children.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 16),
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.lg),
       itemBuilder: (context, index) => children[index],
     );
   }
@@ -3113,19 +3080,19 @@ class ScreenHeader extends StatelessWidget {
         final compact = constraints.maxWidth < 840;
         final titleBlock = Row(
           children: [
-            CircleAvatar(child: Icon(icon)),
-            const SizedBox(width: 12),
+            CircleAvatar(
+              backgroundColor: AppColors.lightGreen,
+              foregroundColor: AppColors.darkGreen,
+              child: Icon(icon),
+            ),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  Text(subtitle),
+                  Text(title, style: AppTextStyles.screenTitle),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(subtitle, style: AppTextStyles.bodySecondary),
                 ],
               ),
             ),
@@ -3137,14 +3104,18 @@ class ScreenHeader extends StatelessWidget {
         if (compact) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [titleBlock, const SizedBox(height: 12), action!],
+            children: [
+              titleBlock,
+              const SizedBox(height: AppSpacing.md),
+              action!,
+            ],
           );
         }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(child: titleBlock),
-            const SizedBox(width: 16),
+            const SizedBox(width: AppSpacing.lg),
             Flexible(
               child: Align(alignment: Alignment.topRight, child: action!),
             ),
@@ -3169,36 +3140,19 @@ class SectionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: colorScheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                ?action,
-              ],
-            ),
-            const SizedBox(height: 12),
-            child,
-          ],
-        ),
+    return ds.AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(title, style: AppTextStyles.sectionTitle)),
+              ?action,
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          child,
+        ],
       ),
     );
   }
@@ -3218,10 +3172,11 @@ class ResponsiveWrap extends StatelessWidget {
             : constraints.maxWidth >= 760
             ? 2
             : 1;
-        final width = (constraints.maxWidth - ((columns - 1) * 12)) / columns;
+        final width =
+            (constraints.maxWidth - ((columns - 1) * AppSpacing.md)) / columns;
         return Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: AppSpacing.md,
+          runSpacing: AppSpacing.md,
           children: [
             for (final child in children)
               SizedBox(
@@ -3254,13 +3209,8 @@ class StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = toneColor(context, tone);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        border: Border.all(color: color.withValues(alpha: 0.24)),
-        borderRadius: BorderRadius.circular(8),
-      ),
+    return ds.AppCard(
+      tone: _designTone(tone),
       child: Row(
         children: [
           CircleAvatar(
@@ -3268,18 +3218,13 @@ class StatTile extends StatelessWidget {
             foregroundColor: color,
             child: Icon(icon),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: Theme.of(context).textTheme.labelLarge),
-                Text(
-                  value,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                ),
+                Text(label, style: AppTextStyles.caption),
+                Text(value, style: AppTextStyles.amount.copyWith(fontSize: 20)),
               ],
             ),
           ),
@@ -3299,8 +3244,8 @@ class UserAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return CircleAvatar(
       radius: small ? 12 : null,
-      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-      foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+      backgroundColor: AppColors.lightGreen,
+      foregroundColor: AppColors.darkGreen,
       child: Text(
         user.avatar,
         style: TextStyle(
@@ -3320,19 +3265,7 @@ class StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = toneColor(context, tone);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.22)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(color: color, fontWeight: FontWeight.w700),
-      ),
-    );
+    return ds.StatusBadge(label: label, tone: _designTone(tone));
   }
 }
 
@@ -3387,29 +3320,7 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 36,
-              color: Theme.of(context).colorScheme.secondary,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            Text(body, textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    );
+    return ds.EmptyState(icon: icon, title: title, body: body);
   }
 }
 
@@ -3714,13 +3625,22 @@ class _CurrentUserBadge extends StatelessWidget {
 }
 
 Color toneColor(BuildContext context, Tone tone) {
-  final scheme = Theme.of(context).colorScheme;
   return switch (tone) {
-    Tone.success => const Color(0xFF178C5B),
-    Tone.warning => const Color(0xFFB56A12),
-    Tone.info => scheme.tertiary,
-    Tone.danger => scheme.error,
-    Tone.neutral => scheme.onSurfaceVariant,
+    Tone.success => AppColors.success,
+    Tone.warning => AppColors.warning,
+    Tone.info => AppColors.info,
+    Tone.danger => AppColors.error,
+    Tone.neutral => AppColors.textSecondary,
+  };
+}
+
+ds.AppStatusTone _designTone(Tone tone) {
+  return switch (tone) {
+    Tone.success => ds.AppStatusTone.success,
+    Tone.warning => ds.AppStatusTone.warning,
+    Tone.info => ds.AppStatusTone.info,
+    Tone.danger => ds.AppStatusTone.danger,
+    Tone.neutral => ds.AppStatusTone.neutral,
   };
 }
 
@@ -5885,28 +5805,20 @@ class _ManualFormSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: scheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _ManualSectionHeader(
-              icon: icon,
-              title: title,
-              subtitle: subtitle,
-              trailing: trailing,
-            ),
-            const SizedBox(height: 14),
-            child,
-          ],
-        ),
+    return ds.AppCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ManualSectionHeader(
+            icon: icon,
+            title: title,
+            subtitle: subtitle,
+            trailing: trailing,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          child,
+        ],
       ),
     );
   }
@@ -5927,7 +5839,6 @@ class _ManualSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -5935,31 +5846,23 @@ class _ManualSectionHeader extends StatelessWidget {
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: scheme.primary.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(11),
+            color: AppColors.lightGreen,
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
-          child: Icon(icon, color: scheme.primary, size: 20),
+          child: Icon(icon, color: AppColors.darkGreen, size: 20),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
-              ),
+              Text(title, style: AppTextStyles.cardTitle),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
                 Text(
                   subtitle!,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: scheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: AppTextStyles.bodySecondary,
                 ),
               ],
             ],
@@ -7899,43 +7802,45 @@ class ParticipantSelectorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 210, maxWidth: 260),
       child: Material(
-        color: selected ? scheme.primary : scheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: selected ? AppColors.primaryGreen : AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
         elevation: selected ? 2 : 0,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            duration: AppAnimations.fast,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: 10,
+            ),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.md),
               border: Border.all(
-                color: selected ? scheme.primary : scheme.outlineVariant,
+                color: selected ? AppColors.primaryGreen : AppColors.border,
                 width: selected ? 1.4 : 1,
               ),
             ),
             child: Row(
               children: [
                 UserAvatar(user: user, small: true),
-                const SizedBox(width: 10),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     user.displayName,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                      color: selected ? scheme.onPrimary : scheme.onSurface,
+                      color: selected ? Colors.white : AppColors.textPrimary,
                     ),
                   ),
                 ),
                 if (selected) ...[
-                  const SizedBox(width: 8),
-                  Icon(Icons.check_circle, size: 18, color: scheme.onPrimary),
+                  const SizedBox(width: AppSpacing.sm),
+                  const Icon(Icons.check_circle, size: 18, color: Colors.white),
                 ],
               ],
             ),
@@ -7983,12 +7888,11 @@ class SplitPreview extends StatelessWidget {
       children: [
         Text(
           subtitle,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
+          style: AppTextStyles.bodySecondary.copyWith(
+            fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         PreviewCard(
           icon: Icons.balance_outlined,
           title: 'Net result',
@@ -8005,7 +7909,7 @@ class SplitPreview extends StatelessWidget {
                         shareMinor: participantShares[id] ?? 0,
                       ),
                     if (showRoundingNote) ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: AppSpacing.sm),
                       _RoundingNote(
                         message:
                             'Rounded by ${statementMoney(1)} to match the total.',
@@ -8014,7 +7918,7 @@ class SplitPreview extends StatelessWidget {
                   ],
                 ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         ValidationSummaryCard(
           payerError: payerError,
           splitError: splitError,
@@ -8041,23 +7945,10 @@ class PreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final accent = toneColor(context, Tone.success);
-    return Container(
-      width: double.infinity,
+    return ds.AppCard(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent.withValues(alpha: 0.16)),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow.withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+      tone: ds.AppStatusTone.success,
       child: Column(
         children: [
           Row(
@@ -8067,25 +7958,18 @@ class PreviewCard extends StatelessWidget {
                 height: 34,
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: Icon(icon, color: accent, size: 20),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
-                ),
-              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(child: Text(title, style: AppTextStyles.cardTitle)),
               ?trailing,
             ],
           ),
-          const SizedBox(height: 12),
-          Divider(height: 1, color: scheme.outlineVariant),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
+          const Divider(height: 1),
+          const SizedBox(height: AppSpacing.md),
           child,
         ],
       ),
@@ -8192,14 +8076,9 @@ class ValidationSummaryCard extends StatelessWidget {
     final tone = ready ? Tone.success : Tone.warning;
     final color = toneColor(context, tone);
     final messages = [?payerError, ?splitError];
-    return Container(
-      width: double.infinity,
+    return ds.AppCard(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: ready ? 0.08 : 0.06),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: ready ? 0.42 : 0.32)),
-      ),
+      tone: _designTone(tone),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -8210,17 +8089,19 @@ class ValidationSummaryCard extends StatelessWidget {
                 color: color,
                 size: 18,
               ),
-              const SizedBox(width: 8),
-              Text(
-                ready
-                    ? 'Status: Ready to save'
-                    : 'Status: Fix totals before saving',
-                style: TextStyle(color: color, fontWeight: FontWeight.w900),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  ready
+                      ? 'Status: Ready to save'
+                      : 'Status: Fix totals before saving',
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                ),
               ),
             ],
           ),
           if (messages.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             for (final message in messages)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -8247,9 +8128,7 @@ class MoneyText extends StatelessWidget {
       value,
       textAlign: TextAlign.right,
       overflow: TextOverflow.ellipsis,
-      style: Theme.of(
-        context,
-      ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w900),
+      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w900),
     );
   }
 }
@@ -8262,27 +8141,29 @@ class _PersonAmountRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: 10,
+      ),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant),
+        color: AppColors.surfaceSoft,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
           UserAvatar(user: user, small: true),
-          const SizedBox(width: 10),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               user.displayName,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: AppSpacing.sm),
           Flexible(child: trailing),
         ],
       ),
@@ -8297,19 +8178,7 @@ class _CountPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = toneColor(context, Tone.success);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: accent.withValues(alpha: 0.20)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(color: accent, fontWeight: FontWeight.w800),
-      ),
-    );
+    return ds.StatusBadge(label: label, tone: ds.AppStatusTone.success);
   }
 }
 

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/design_system/app_colors.dart';
+import '../../shared/design_system/app_spacing.dart';
 import '../auth/auth_controller.dart';
 import '../auth/models/user_profile.dart';
 import 'edit_profile_screen.dart';
@@ -32,13 +34,13 @@ class SettingsScreen extends StatelessWidget {
         final profile = authController.state.activeUser ?? UserProfile.demo();
         return Scaffold(
           body: ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(AppSpacing.xl),
             children: [
               SettingsProfileCard(
                 profile: profile,
                 onEdit: () => _openEditProfile(context),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               SettingsSection(
                 title: 'Account',
                 children: [
@@ -56,7 +58,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               SettingsSection(
                 title: 'Privacy & Connections',
                 children: [
@@ -77,7 +79,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               SettingsSection(
                 title: 'Groups & Expenses',
                 children: [
@@ -110,7 +112,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               SettingsSection(
                 title: 'Payments',
                 children: [
@@ -142,7 +144,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               SettingsSection(
                 title: 'Digital Dhukuti',
                 footer: DhukutiSafetyNoteCard(
@@ -169,7 +171,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               SettingsSection(
                 title: 'Notifications',
                 children: [
@@ -185,7 +187,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               SettingsSection(
                 title: 'Appearance',
                 children: [
@@ -215,7 +217,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               SettingsSection(
                 title: 'Help & About',
                 children: [
@@ -299,8 +301,8 @@ class SettingsScreen extends StatelessWidget {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(dialogContext).colorScheme.error,
-                foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
               ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('Log Out'),

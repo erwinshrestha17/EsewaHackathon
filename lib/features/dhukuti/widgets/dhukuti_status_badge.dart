@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/design_system/app_components.dart' as ds;
 import 'dhukuti_tokens.dart';
 
 class DhukutiStatusBadge extends StatelessWidget {
@@ -16,31 +17,16 @@ class DhukutiStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = dhukutiToneColor(context, tone);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.24)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 5),
-          ],
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
+    return ds.StatusBadge(
+      label: label,
+      icon: icon,
+      tone: switch (tone) {
+        DhukutiTone.success => ds.AppStatusTone.success,
+        DhukutiTone.warning => ds.AppStatusTone.warning,
+        DhukutiTone.info => ds.AppStatusTone.info,
+        DhukutiTone.danger => ds.AppStatusTone.danger,
+        DhukutiTone.neutral => ds.AppStatusTone.neutral,
+      },
     );
   }
 }

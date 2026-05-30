@@ -2,6 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../design_system/app_colors.dart';
+import '../design_system/app_components.dart' as ds;
+import '../design_system/app_spacing.dart';
+import '../design_system/app_text_styles.dart';
 import '../../src/finance.dart';
 import 'transaction_confirmation_controller.dart';
 import 'transaction_confirmation_data.dart';
@@ -52,7 +56,7 @@ class _TransactionConfirmationScreenState
                 message: validationError,
                 color: scheme.error,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: AppSpacing.sm),
             ],
             SizedBox(
               width: double.infinity,
@@ -69,7 +73,7 @@ class _TransactionConfirmationScreenState
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
@@ -85,10 +89,10 @@ class _TransactionConfirmationScreenState
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
             _HeroSummary(data: data),
-            const SizedBox(height: 14),
+            const SizedBox(height: AppSpacing.lg),
             TransactionReceiptCard(data: data),
             if (data.warningMessage != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _InlineNotice(
                 icon: Icons.warning_amber_outlined,
                 message: data.warningMessage!,
@@ -96,7 +100,7 @@ class _TransactionConfirmationScreenState
               ),
             ],
             if (data.complianceNote != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _InlineNotice(
                 icon: Icons.verified_user_outlined,
                 message: data.complianceNote!,
@@ -104,13 +108,13 @@ class _TransactionConfirmationScreenState
               ),
             ],
             if (data.participants.isNotEmpty) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               _SectionTitle(
                 title: data.transactionType == TransactionType.adjustment
                     ? 'Adjustment entries'
                     : 'Participants',
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               for (final participant in data.participants)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -118,7 +122,7 @@ class _TransactionConfirmationScreenState
                 ),
             ],
             if ((data.items ?? const <TransactionItem>[]).isNotEmpty) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               TransactionItemSummary(items: data.items!),
             ],
             const SizedBox(height: 118),
@@ -177,11 +181,13 @@ class _HeroSummary extends StatelessWidget {
     final icon = _iconFor(data.transactionType);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.20)),
+        color: AppColors.lightGreen,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(
+          color: AppColors.primaryGreen.withValues(alpha: 0.22),
+        ),
       ),
       child: Column(
         children: [
@@ -193,11 +199,11 @@ class _HeroSummary extends StatelessWidget {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: scheme.primary,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
                 ),
                 child: Icon(icon, color: Colors.white, size: 28),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,28 +212,22 @@ class _HeroSummary extends StatelessWidget {
                       data.title.isEmpty
                           ? data.transactionType.confirmationTitle
                           : data.title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
-                      ),
+                      style: AppTextStyles.sectionTitle,
                     ),
-                    Text(
-                      data.subtitle,
-                      style: TextStyle(color: scheme.onSurfaceVariant),
-                    ),
+                    Text(data.subtitle, style: AppTextStyles.bodySecondary),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: AppSpacing.xl),
           Text(
             money(data.amount),
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w900,
-              color: scheme.primary,
+            style: AppTextStyles.largeScreenTitle.copyWith(
+              color: AppColors.darkGreen,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Wrap(
             alignment: WrapAlignment.center,
             spacing: 8,
@@ -257,22 +257,10 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: scheme.primary),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
-        ],
-      ),
+    return ds.StatusBadge(
+      label: label,
+      icon: icon,
+      tone: ds.AppStatusTone.info,
     );
   }
 }
@@ -292,17 +280,17 @@ class _InlineNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: color.withValues(alpha: 0.24)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, color: color),
-          const SizedBox(width: 10),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               message,
@@ -322,12 +310,7 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: Theme.of(
-        context,
-      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-    );
+    return Text(title, style: AppTextStyles.sectionTitle);
   }
 }
 

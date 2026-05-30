@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../design_system/app_colors.dart';
+import '../design_system/app_components.dart' as ds;
+import '../design_system/app_spacing.dart';
+import '../design_system/app_text_styles.dart';
 import '../../src/finance.dart';
 import 'transaction_confirmation_data.dart';
 
@@ -10,7 +14,6 @@ class TransactionReceiptCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final details = <TransactionDetail>[
       TransactionDetail('Amount', money(data.amount)),
       TransactionDetail('Payment method', data.paymentMethod),
@@ -32,24 +35,12 @@ class TransactionReceiptCard extends StatelessWidget {
         TransactionDetail('Note', data.note!),
     ];
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
+    return ds.AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Transaction details',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 12),
+          Text('Transaction details', style: AppTextStyles.sectionTitle),
+          const SizedBox(height: AppSpacing.md),
           for (final detail in details) _ReceiptLine(detail: detail),
         ],
       ),
@@ -64,7 +55,6 @@ class _ReceiptLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
@@ -74,9 +64,8 @@ class _ReceiptLine extends StatelessWidget {
             width: 132,
             child: Text(
               detail.label,
-              style: TextStyle(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
               ),
             ),
           ),
@@ -84,7 +73,7 @@ class _ReceiptLine extends StatelessWidget {
             child: Text(
               detail.value,
               textAlign: TextAlign.end,
-              style: const TextStyle(fontWeight: FontWeight.w800),
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w800),
             ),
           ),
         ],

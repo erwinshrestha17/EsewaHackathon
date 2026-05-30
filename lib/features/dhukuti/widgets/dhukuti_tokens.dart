@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/design_system/app_colors.dart';
+import '../../../shared/design_system/app_components.dart' as ds;
+import '../../../shared/design_system/app_spacing.dart';
+import '../../../shared/design_system/app_text_styles.dart';
 import '../../../src/models.dart';
 
 enum DhukutiTone { neutral, success, warning, info, danger }
 
-const dhukutiPrimary = Color(0xFF178C5B);
-const dhukutiFestival = Color(0xFFB56A12);
-const dhukutiInk = Color(0xFF19352B);
+const dhukutiPrimary = AppColors.primaryGreen;
+const dhukutiFestival = AppColors.warning;
+const dhukutiInk = AppColors.textPrimary;
 
 Color dhukutiToneColor(BuildContext context, DhukutiTone tone) {
-  final scheme = Theme.of(context).colorScheme;
   return switch (tone) {
-    DhukutiTone.success => dhukutiPrimary,
-    DhukutiTone.warning => dhukutiFestival,
-    DhukutiTone.info => scheme.tertiary,
-    DhukutiTone.danger => scheme.error,
-    DhukutiTone.neutral => scheme.onSurfaceVariant,
+    DhukutiTone.success => AppColors.success,
+    DhukutiTone.warning => AppColors.warning,
+    DhukutiTone.info => AppColors.info,
+    DhukutiTone.danger => AppColors.error,
+    DhukutiTone.neutral => AppColors.textSecondary,
   };
 }
 
@@ -81,37 +84,20 @@ class DhukutiSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surface,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: scheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                ?action,
-              ],
-            ),
-            const SizedBox(height: 12),
-            child,
-          ],
-        ),
+    return ds.AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: Text(title, style: AppTextStyles.sectionTitle)),
+              ?action,
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          child,
+        ],
       ),
     );
   }
@@ -125,9 +111,9 @@ class DhukutiScrollView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       itemCount: children.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 16),
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.lg),
       itemBuilder: (context, index) => children[index],
     );
   }
@@ -154,23 +140,18 @@ class DhukutiHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             CircleAvatar(
-              backgroundColor: dhukutiPrimary.withValues(alpha: 0.12),
-              foregroundColor: dhukutiPrimary,
+              backgroundColor: AppColors.lightGreen,
+              foregroundColor: AppColors.darkGreen,
               child: const Icon(Icons.account_balance_wallet_outlined),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(subtitle),
+                  Text(title, style: AppTextStyles.screenTitle),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(subtitle, style: AppTextStyles.bodySecondary),
                 ],
               ),
             ),
@@ -182,14 +163,18 @@ class DhukutiHeader extends StatelessWidget {
         if (compact) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [titleBlock, const SizedBox(height: 12), action!],
+            children: [
+              titleBlock,
+              const SizedBox(height: AppSpacing.md),
+              action!,
+            ],
           );
         }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(child: titleBlock),
-            const SizedBox(width: 16),
+            const SizedBox(width: AppSpacing.lg),
             action!,
           ],
         );
@@ -217,7 +202,7 @@ class DhukutiEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
@@ -228,23 +213,25 @@ class DhukutiEmptyState extends StatelessWidget {
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: dhukutiPrimary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppColors.lightGreen,
+                  borderRadius: BorderRadius.circular(AppRadius.xl),
                 ),
-                child: Icon(icon, size: 34, color: dhukutiPrimary),
+                child: Icon(icon, size: 34, color: AppColors.darkGreen),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpacing.lg),
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                style: AppTextStyles.sectionTitle,
               ),
-              const SizedBox(height: 6),
-              Text(message, textAlign: TextAlign.center),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodySecondary,
+              ),
               if (action != null || secondaryAction != null) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 Wrap(
                   alignment: WrapAlignment.center,
                   spacing: 8,
@@ -270,8 +257,8 @@ class DhukutiAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return CircleAvatar(
       radius: small ? 14 : null,
-      backgroundColor: dhukutiPrimary.withValues(alpha: 0.12),
-      foregroundColor: dhukutiInk,
+      backgroundColor: AppColors.lightGreen,
+      foregroundColor: AppColors.darkGreen,
       child: Text(
         label,
         style: TextStyle(
@@ -302,13 +289,9 @@ class DhukutiMetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = dhukutiToneColor(context, tone);
-    return Container(
+    return ds.AppCard(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        border: Border.all(color: color.withValues(alpha: 0.22)),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      tone: _toDesignTone(tone),
       child: Row(
         children: [
           CircleAvatar(
@@ -316,19 +299,15 @@ class DhukutiMetricCard extends StatelessWidget {
             foregroundColor: color,
             child: Icon(icon),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: Theme.of(context).textTheme.labelLarge),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                if (helper != null) Text(helper!),
+                Text(label, style: AppTextStyles.caption),
+                Text(value, style: AppTextStyles.sectionTitle),
+                if (helper != null)
+                  Text(helper!, style: AppTextStyles.bodySecondary),
               ],
             ),
           ),
@@ -352,10 +331,11 @@ class DhukutiResponsiveGrid extends StatelessWidget {
             : constraints.maxWidth >= 680
             ? 2
             : 1;
-        final width = (constraints.maxWidth - ((columns - 1) * 12)) / columns;
+        final width =
+            (constraints.maxWidth - ((columns - 1) * AppSpacing.md)) / columns;
         return Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: AppSpacing.md,
+          runSpacing: AppSpacing.md,
           children: [
             for (final child in children)
               SizedBox(
@@ -367,4 +347,14 @@ class DhukutiResponsiveGrid extends StatelessWidget {
       },
     );
   }
+}
+
+ds.AppStatusTone _toDesignTone(DhukutiTone tone) {
+  return switch (tone) {
+    DhukutiTone.success => ds.AppStatusTone.success,
+    DhukutiTone.warning => ds.AppStatusTone.warning,
+    DhukutiTone.info => ds.AppStatusTone.info,
+    DhukutiTone.danger => ds.AppStatusTone.danger,
+    DhukutiTone.neutral => ds.AppStatusTone.neutral,
+  };
 }

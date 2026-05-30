@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/design_system/app_colors.dart';
+import '../../../shared/design_system/app_components.dart' as ds;
+import '../../../shared/design_system/app_spacing.dart';
+import '../../../shared/design_system/app_text_styles.dart';
 import '../../../src/app_state.dart';
 import '../../../src/finance.dart';
 import '../../../src/models.dart';
@@ -43,107 +47,89 @@ class DhukutiPoolCard extends StatelessWidget {
         : paidCount / contributions.length;
     final color = dhukutiToneColor(context, toneForPoolStatus(statusLabel));
 
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(
-          color: selected
-              ? dhukutiPrimary
-              : Theme.of(context).colorScheme.outlineVariant,
-          width: selected ? 1.4 : 1,
-        ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+    return ds.AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      tone: selected ? ds.AppStatusTone.success : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    backgroundColor: color.withValues(alpha: 0.12),
-                    foregroundColor: color,
-                    child: const Icon(Icons.account_balance_wallet_outlined),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          pool.name,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                        Text(group.name),
-                      ],
-                    ),
-                  ),
-                  DhukutiStatusBadge(
-                    label: statusLabel,
-                    tone: toneForPoolStatus(statusLabel),
-                  ),
-                ],
+              CircleAvatar(
+                backgroundColor: color.withValues(alpha: 0.12),
+                foregroundColor: color,
+                child: const Icon(Icons.account_balance_wallet_outlined),
               ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _Fact(
-                    icon: Icons.savings_outlined,
-                    label:
-                        '${money(pool.contributionAmountMinor)} ${pool.frequency}',
-                  ),
-                  _Fact(
-                    icon: Icons.event_repeat,
-                    label: currentCycle == null
-                        ? 'No cycle'
-                        : 'Cycle ${currentCycle.cycleNumber} of ${members.length}',
-                  ),
-                  _Fact(
-                    icon: Icons.person_outline,
-                    label: 'Payout: $recipientName',
-                  ),
-                  _Fact(
-                    icon: Icons.calendar_today_outlined,
-                    label: currentCycle == null
-                        ? 'Due date pending'
-                        : 'Next due ${dateLabel(currentCycle.dueDate)}',
-                  ),
-                ],
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(pool.name, style: AppTextStyles.sectionTitle),
+                    Text(group.name, style: AppTextStyles.bodySecondary),
+                  ],
+                ),
               ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        minHeight: 9,
-                        value: progress,
-                        backgroundColor: color.withValues(alpha: 0.13),
-                        valueColor: AlwaysStoppedAnimation<Color>(color),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '$paidCount/${contributions.length} paid',
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
+              DhukutiStatusBadge(
+                label: statusLabel,
+                tone: toneForPoolStatus(statusLabel),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: AppSpacing.lg),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              _Fact(
+                icon: Icons.savings_outlined,
+                label:
+                    '${money(pool.contributionAmountMinor)} ${pool.frequency}',
+              ),
+              _Fact(
+                icon: Icons.event_repeat,
+                label: currentCycle == null
+                    ? 'No cycle'
+                    : 'Cycle ${currentCycle.cycleNumber} of ${members.length}',
+              ),
+              _Fact(
+                icon: Icons.person_outline,
+                label: 'Payout: $recipientName',
+              ),
+              _Fact(
+                icon: Icons.calendar_today_outlined,
+                label: currentCycle == null
+                    ? 'Due date pending'
+                    : 'Next due ${dateLabel(currentCycle.dueDate)}',
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    minHeight: 9,
+                    value: progress,
+                    backgroundColor: color.withValues(alpha: 0.13),
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                '$paidCount/${contributions.length} paid',
+                style: AppTextStyles.caption.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -161,14 +147,14 @@ class _Fact extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 260),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
+        color: AppColors.surfaceSoft,
+        borderRadius: BorderRadius.circular(AppRadius.xs),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 15),
-          const SizedBox(width: 6),
+          const SizedBox(width: AppSpacing.xs),
           Flexible(
             child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),

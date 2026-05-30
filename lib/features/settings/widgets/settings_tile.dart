@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/design_system/app_colors.dart';
+import '../../../shared/design_system/app_spacing.dart';
+import '../../../shared/design_system/app_text_styles.dart';
+
 class SettingsTile extends StatelessWidget {
   const SettingsTile({
     required this.icon,
@@ -24,16 +28,13 @@ class SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final activeColor = danger ? colorScheme.error : colorScheme.primary;
+    final activeColor = danger ? AppColors.error : AppColors.primaryGreen;
     final foreground = enabled
         ? danger
-              ? colorScheme.error
-              : colorScheme.onSurface
-        : colorScheme.onSurface.withValues(alpha: 0.44);
-    final iconColor = enabled
-        ? activeColor
-        : colorScheme.onSurfaceVariant.withValues(alpha: 0.56);
+              ? AppColors.error
+              : AppColors.textPrimary
+        : AppColors.textMuted;
+    final iconColor = enabled ? activeColor : AppColors.textMuted;
     return ListTile(
       minTileHeight: 56,
       enabled: enabled,
@@ -46,7 +47,10 @@ class SettingsTile extends StatelessWidget {
       ),
       title: Text(
         title,
-        style: TextStyle(fontWeight: FontWeight.w700, color: foreground),
+        style: AppTextStyles.body.copyWith(
+          fontWeight: FontWeight.w700,
+          color: foreground,
+        ),
       ),
       subtitle: subtitle == null ? null : Text(subtitle!),
       trailing: _SettingsTileTrailing(
@@ -71,9 +75,7 @@ class _SettingsTileTrailing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = enabled
-        ? Theme.of(context).colorScheme.onSurfaceVariant
-        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.42);
+    final color = enabled ? AppColors.textSecondary : AppColors.textMuted;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -88,7 +90,7 @@ class _SettingsTileTrailing extends StatelessWidget {
             ),
           ),
         if (showChevron) ...[
-          const SizedBox(width: 6),
+          const SizedBox(width: AppSpacing.xs),
           Icon(Icons.chevron_right, color: color),
         ],
       ],
