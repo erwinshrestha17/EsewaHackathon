@@ -7,7 +7,9 @@ plugins {
 android {
     namespace = "com.cacheflow.sangai"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // flutter_paddle_ocr links Paddle Lite v2.10, which only builds cleanly with
+    // NDK r25c (newer ld.lld rejects the prebuilt .so symbols).
+    ndkVersion = "25.2.9519653"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -19,10 +21,15 @@ android {
         applicationId = "com.cacheflow.sangai"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = maxOf(23, flutter.minSdkVersion)
+        // flutter_paddle_ocr requires SDK 24+ and ships native libs for
+        // arm64-v8a only (Paddle Lite v2.10 has no 32-bit/x86 build).
+        minSdk = maxOf(24, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        ndk {
+            abiFilters.add("arm64-v8a")
+        }
     }
 
     buildTypes {

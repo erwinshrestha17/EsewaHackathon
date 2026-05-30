@@ -37,6 +37,10 @@ migrate_working_dir/
 !.env.example
 node_modules/
 
+# Generated paddleocr-js bundle for web OCR (~11 MB). Regenerate via the
+# bundling steps in README "Bill Scanning".
+/web/paddleocr_bundle.js
+
 # Symbolication related
 app.*.symbols
 
