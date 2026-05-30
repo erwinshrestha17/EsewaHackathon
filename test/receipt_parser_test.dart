@@ -270,5 +270,27 @@ void main() {
       expect(result.totalMinor, 64500); // Net Amount
       expect(result.merchant, 'SAURAHA VENTURES PVT.LTD.');
     });
+
+    test('keeps a short, left-aligned item name (regression for 1L)', () {
+      // "1L" box center (66) sits LEFT of the Sn/Particulars midpoint, which the
+      // earlier center-band logic would have excluded -> dropped the item.
+      final result = parseReceipt([
+        b('Sn', 20, 60, 0),
+        b('Particulars', 80, 200, 0),
+        b('Qty', 280, 320, 0),
+        b('Rate', 350, 390, 0),
+        b('Amount', 410, 470, 0),
+        b('5', 25, 45, 25), // Sn cell (pure number -> excluded from name)
+        b('1L', 58, 74, 25), // short name, center 66
+        b('1', 290, 310, 25),
+        b('140', 350, 388, 25),
+        b('140', 415, 458, 25),
+        b('Net Amount : 140.00', 150, 460, 50),
+      ]);
+
+      expect(result.items.length, 1);
+      expect(result.items.single.label, '1L');
+      expect(result.items.single.amountMinor, 14000);
+    });
   });
 }

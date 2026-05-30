@@ -227,14 +227,9 @@ ReceiptScanResult parseReceipt(List<OcrWord> words) {
 
 /// Column anchors read from a detected table header row.
 class _Header {
-  const _Header({
-    required this.rowIndex,
-    required this.nameLeft,
-    required this.numbersLeft,
-  });
+  const _Header({required this.rowIndex, required this.numbersLeft});
 
   final int rowIndex;
-  final double nameLeft; // left edge of the Particulars (name) column
   final double numbersLeft; // left edge of the Qty/Rate/Amount number zone
 }
 
@@ -304,7 +299,8 @@ _Header? _detectHeader(List<List<OcrWord>> rows) {
     if (part == null || amount == null) {
       continue;
     }
-    final sn = find('sn') ?? find('s.n') ?? find('sl');
+    // Left edge of the number columns: the left-most of Qty/Rate/Amount. Used
+    // only to keep the Sn column out of the Qty/amount calculation.
     final numberHeaders = [
       find('qty'),
       find('rate'),
@@ -313,10 +309,7 @@ _Header? _detectHeader(List<List<OcrWord>> rows) {
     final numbersLeft = numberHeaders
         .map((w) => w.left)
         .reduce((a, b) => a < b ? a : b);
-    final nameLeft = sn != null
-        ? (sn.right + part.left) / 2
-        : part.left - part.height;
-    return _Header(rowIndex: i, nameLeft: nameLeft, numbersLeft: numbersLeft);
+    return _Header(rowIndex: i, numbersLeft: numbersLeft);
   }
   return null;
 }
@@ -433,6 +426,7 @@ ReceiptScanItem? _itemFromRow(List<OcrWord> row, _Header header) {
 
   // Amount is the right-most number; Qty (when a full Qty/Rate/Amount triple is
   // present) is the left-most small integer.
+  final amountBox = numbers.last.$1;
   final amount = numbers.last.$2;
   var quantity = 1;
   if (numbers.length >= 3) {
@@ -442,10 +436,12 @@ ReceiptScanItem? _itemFromRow(List<OcrWord> row, _Header header) {
     }
   }
 
+  // The name is every non-numeric box left of the amount. Pure-number boxes
+  // (the Sn, Qty and Rate columns) are excluded by value, so a short name like
+  // "1L" is kept regardless of where its center lands between the columns.
   final nameBoxes = [
     for (final word in row)
-      if (word.centerX >= header.nameLeft && word.centerX < header.numbersLeft)
-        word,
+      if (word.left < amountBox.left && _pureNumber(word.text) == null) word,
   ]..sort((a, b) => a.left.compareTo(b.left));
   final name = _cleanItemName(nameBoxes.map((w) => w.text).join(' '));
   if (name.isEmpty || !name.contains(RegExp(r'[A-Za-z]'))) {
@@ -482,7 +478,7 @@ num? _pureNumber(String text) {
 /// OCR merged into the name box), leaving the first-line product name.
 String _cleanItemName(String name) {
   var value = name.trim();
-  value = value.replaceFirst(RegExp(r'^\d{1,3}\s*[.)-]?\s+'), '');
+  value = value.replaceFirst(RegExp(r'^\d{1,3}\s*[.):-]?\s+'), '');
   value = value.replaceAll(RegExp(r'(?:\s+-?\d+(?:[.,]\d+)?)+$'), '');
   return _trimEdges(value).trim();
 }
