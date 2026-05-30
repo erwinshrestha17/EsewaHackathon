@@ -14,16 +14,18 @@ class RegisterForm extends StatefulWidget {
 
 class _RegisterFormState extends State<RegisterForm> {
   final _formKey = GlobalKey<FormState>();
+  final _fullName = TextEditingController();
   final _mobileNumber = TextEditingController();
   final _dateOfBirth = TextEditingController();
   final _mPin = TextEditingController();
-  final _otp = TextEditingController(text: AuthController.demoOtp);
+  final _otp = TextEditingController();
   var _submitting = false;
   var _otpRequested = false;
-  var _biometricEnabled = true;
+  String? _otpStatus;
 
   @override
   void dispose() {
+    _fullName.dispose();
     _mobileNumber.dispose();
     _dateOfBirth.dispose();
     _mPin.dispose();
@@ -38,6 +40,14 @@ class _RegisterFormState extends State<RegisterForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          AuthTextField(
+            controller: _fullName,
+            label: 'Full name',
+            icon: Icons.person_outline,
+            textInputAction: TextInputAction.next,
+            validator: _fullNameValidator,
+          ),
+          const SizedBox(height: 12),
           AuthTextField(
             controller: _mobileNumber,
             label: 'Nepal mobile number',
@@ -85,18 +95,11 @@ class _RegisterFormState extends State<RegisterForm> {
               validator: _otpValidator,
             ),
             const SizedBox(height: 8),
-            const Text(
-              'OTP sent for verification. Use 123456 for this build.',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _biometricEnabled,
-              title: const Text('Enable biometric login'),
-              subtitle: const Text('Use device unlock after M-PIN setup.'),
-              onChanged: (value) => setState(() => _biometricEnabled = value),
-            ),
+            if (_otpStatus != null)
+              Text(
+                _otpStatus!,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
           ],
           const SizedBox(height: 18),
           FilledButton(
@@ -116,6 +119,14 @@ class _RegisterFormState extends State<RegisterForm> {
 
   String? _required(String? value) {
     return value == null || value.trim().isEmpty ? 'Required' : null;
+  }
+
+  String? _fullNameValidator(String? value) {
+    final required = _required(value);
+    if (required != null) {
+      return required;
+    }
+    return value!.trim().length >= 2 ? null : 'Enter your full name';
   }
 
   String? _nepalMobileValidator(String? value) {
@@ -174,17 +185,40 @@ class _RegisterFormState extends State<RegisterForm> {
       return;
     }
     if (!_otpRequested) {
-      setState(() => _otpRequested = true);
+      setState(() => _submitting = true);
+      try {
+        final challenge = await AuthScope.of(
+          context,
+        ).requestSignupOtp(phone: _mobileNumber.text);
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _otpRequested = true;
+          _otpStatus =
+              '${challenge.message} It expires in ${challenge.expiresInSeconds ~/ 60} minutes.';
+        });
+      } on AuthValidationException catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(error.message)));
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _submitting = false);
+        }
+      }
       return;
     }
     setState(() => _submitting = true);
     try {
       await AuthScope.of(context).register(
+        fullName: _fullName.text,
         mobileNumber: _mobileNumber.text,
         dateOfBirth: DateTime.parse(_dateOfBirth.text.trim()),
         mPin: _mPin.text,
         otp: _otp.text,
-        biometricEnabled: _biometricEnabled,
       );
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil('/main', (_) => false);

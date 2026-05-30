@@ -1,5 +1,6 @@
 import cors from 'cors';
 import express from 'express';
+import helmet from 'helmet';
 
 import { env } from './config/env.js';
 import { errorMiddleware } from './middleware/error.middleware.js';
@@ -18,6 +19,8 @@ import { settlementsRouter } from './modules/settlements/settlements.routes.js';
 
 export const app = express();
 
+app.disable('x-powered-by');
+app.use(helmet());
 app.use(
   cors({
     origin(origin, callback) {

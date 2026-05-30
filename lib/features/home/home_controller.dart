@@ -4,7 +4,6 @@ import '../../src/app_state.dart';
 import '../../src/finance.dart';
 import '../../src/models.dart';
 import 'home_models.dart';
-import 'seeded_home_data.dart';
 
 class HomeController {
   const HomeController({required this.store});
@@ -12,23 +11,19 @@ class HomeController {
   final AppStore store;
 
   HomeDashboardData loadDashboard() {
-    try {
-      return HomeDashboardData(
-        userProfile: store.currentUser,
-        balanceSummary: HomeBalanceSummary(
-          totalYouOwe: store.totalOwedByCurrentUser,
-          totalOwedToYou: store.totalOwedToCurrentUser,
-          pendingAmount: _pendingAmount(),
-        ),
-        pendingSettlements: _pendingSettlements(),
-        upcomingDhukutiDues: _dhukutiDues(),
-        activeGroups: _activeGroups(),
-        recentActivities: _recentActivities(),
-        suggestedActions: seededHomeDashboardData().suggestedActions,
-      );
-    } catch (_) {
-      return seededHomeDashboardData();
-    }
+    return HomeDashboardData(
+      userProfile: store.currentUser,
+      balanceSummary: HomeBalanceSummary(
+        totalYouOwe: store.totalOwedByCurrentUser,
+        totalOwedToYou: store.totalOwedToCurrentUser,
+        pendingAmount: _pendingAmount(),
+      ),
+      pendingSettlements: _pendingSettlements(),
+      upcomingDhukutiDues: _dhukutiDues(),
+      activeGroups: _activeGroups(),
+      recentActivities: _recentActivities(),
+      suggestedActions: _suggestedActions,
+    );
   }
 
   int _pendingAmount() {
@@ -227,6 +222,33 @@ class HomeController {
     return null;
   }
 }
+
+const _suggestedActions = <HomeQuickAction>[
+  HomeQuickAction(
+    id: 'create_group',
+    label: 'Create Group',
+    helper: 'Start a shared expense group',
+    icon: Icons.group_add_outlined,
+  ),
+  HomeQuickAction(
+    id: 'dhukuti',
+    label: 'Savings Tracker',
+    helper: 'Open community contribution tracking',
+    icon: Icons.account_balance_wallet_outlined,
+  ),
+  HomeQuickAction(
+    id: 'add_expense',
+    label: 'Add Expense',
+    helper: 'Record a bill after creating a group',
+    icon: Icons.receipt_long_outlined,
+  ),
+  HomeQuickAction(
+    id: 'send_gift',
+    label: 'Send Gift',
+    helper: 'Send a wallet gift to a connection',
+    icon: Icons.card_giftcard_outlined,
+  ),
+];
 
 String _balanceStatus(int amount) {
   if (amount > 0) {

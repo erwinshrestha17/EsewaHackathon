@@ -88,7 +88,7 @@ class AuthScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 18),
                             const SizedBox(
-                              height: 520,
+                              height: 620,
                               child: TabBarView(
                                 children: [
                                   SingleChildScrollView(child: LoginForm()),
@@ -102,7 +102,7 @@ class AuthScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Sign in with your mobile number, M-PIN, or biometric unlock.',
+                      'Sign in with your verified mobile number and M-PIN.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,

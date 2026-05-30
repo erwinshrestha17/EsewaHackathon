@@ -1,6 +1,6 @@
 # Sajha Kharcha API
 
-Node.js/Express API for the Flutter prototype. It uses Supabase PostgreSQL as the data store and keeps the current Flutter UI flow intact by preserving the legacy Community Savings Tracker endpoints.
+Node.js/Express API for Sajha Kharcha. It uses Supabase PostgreSQL as the system of record, Redis for OTP/session cache and invalidation, and Twilio for signup OTP delivery.
 
 ## Setup
 
@@ -16,63 +16,70 @@ Node.js/Express API for the Flutter prototype. It uses Supabase PostgreSQL as th
    - `SUPABASE_SECRET_KEY` as a server-only `sb_secret_...` key
    - `SUPABASE_PUBLISHABLE_KEY` for token verification
 
-3. Apply database structure and seed data:
+3. Fill auth/session infrastructure values:
+
+   - `REDIS_URL`
+   - `AUTH_ACCESS_TOKEN_SECRET`
+   - `TWILIO_ACCOUNT_SID`
+   - `TWILIO_AUTH_TOKEN`
+   - `TWILIO_FROM_PHONE_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID`
+
+4. Apply database structure:
 
    ```bash
    supabase link --project-ref vrhajoztnsadxbumfdzy
    supabase db push
-   supabase db query --linked --file supabase/seed.sql
    ```
 
    If the Supabase CLI is unavailable, run these files in the Supabase SQL editor in order:
 
    - `supabase/migrations/20260530081500_create_community_savings.sql`
    - `supabase/migrations/20260530120000_create_full_app_backend.sql`
-   - `supabase/seed.sql`
+   - `supabase/migrations/20260530085341_add_mpin_auth_sessions.sql`
+   - `supabase/migrations/20260530150000_production_auth.sql`
 
-4. Run the API:
+   `supabase/seed.sql` is intentionally empty and does not recreate demo users.
+
+5. Start Redis locally, then run the API:
 
    ```bash
+   redis-server
    cd backend
    npm install
    npm run dev
    ```
 
-5. Run Flutter against the local community savings API:
+6. Run Flutter against the local backend on macOS:
 
    ```bash
-   flutter run --dart-define=COMMUNITY_SAVINGS_API_BASE_URL=http://127.0.0.1:3000/api/community-savings
+   flutter run -d macos --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
    ```
 
 ## Authentication
 
-The app login UX remains Nepal mobile number + M-PIN.
+The app signup UX is Nepal mobile number + Twilio OTP + M-PIN. Login is verified Nepal mobile number + M-PIN.
 
-Backend login endpoints:
+Backend auth endpoints:
 
-- `POST /api/auth/mpin/login`
-- `POST /api/auth/mpin/register`
+- `POST /api/auth/signup/otp`
+- `POST /api/auth/signup`
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
 - `POST /api/auth/logout`
+- `POST /api/auth/logout-all`
 
-M-PIN values are never stored directly. They are stored in `app_user_credentials.mpin_hash` as PBKDF2-SHA256 hashes. Login returns a backend session token with the `sajha_` prefix; API clients should send it as:
+M-PIN values are never stored directly. They are stored in `app_user_credentials.mpin_hash` as PBKDF2-SHA256 hashes. Login returns a short-lived JWT access token and an opaque refresh token. API clients send the access token as:
 
 ```http
-Authorization: Bearer sajha_...
+Authorization: Bearer eyJ...
 ```
 
-The backend can also verify Supabase Auth JWTs, but the Flutter phone + M-PIN path uses backend sessions so the UI does not need to change.
-
-For the seeded prototype:
-
-- Phone: `9800000001`
-- M-PIN: `1234`
-
-`ALLOW_DEMO_AUTH=true` lets requests without a bearer token act as `DEMO_USER_ID` (`u-sita` by default). Keep `ALLOW_DEMO_AUTH=false` outside local-only testing.
+Refresh tokens are stored only as hashes in `app_sessions` and rotated by `POST /api/auth/refresh`. Redis caches active session state and OTP challenges; Postgres remains the source of truth.
 
 Run Flutter against the backend auth/API layer with:
 
 ```bash
-flutter run --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
+flutter run -d macos --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
 ```
 
 ## Main Endpoints
@@ -80,9 +87,12 @@ flutter run --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
 - `GET /health`
 - `GET /api/me`
 - `PATCH /api/me`
-- `POST /api/auth/mpin/login`
-- `POST /api/auth/mpin/register`
+- `POST /api/auth/signup/otp`
+- `POST /api/auth/signup`
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
 - `POST /api/auth/logout`
+- `POST /api/auth/logout-all`
 - `POST /api/groups`
 - `GET /api/groups`
 - `GET /api/groups/:groupId`

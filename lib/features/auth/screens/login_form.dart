@@ -57,7 +57,7 @@ class _LoginFormState extends State<LoginForm> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Use your phone number with M-PIN, or verify by biometric unlock.',
+            'Use the mobile number and M-PIN you created during signup.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w700,
@@ -67,12 +67,6 @@ class _LoginFormState extends State<LoginForm> {
           FilledButton(
             onPressed: _submitting ? null : _loginWithMpin,
             child: Text(_submitting ? 'Verifying...' : 'Login with M-PIN'),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: _submitting ? null : _loginWithBiometric,
-            icon: const Icon(Icons.fingerprint),
-            label: const Text('Login with biometric'),
           ),
         ],
       ),
@@ -108,17 +102,6 @@ class _LoginFormState extends State<LoginForm> {
       () => AuthScope.of(
         context,
       ).loginWithMpin(phone: _phone.text, mPin: _mPin.text),
-    );
-  }
-
-  Future<void> _loginWithBiometric() async {
-    final phoneError = _nepalMobileValidator(_phone.text);
-    if (phoneError != null) {
-      _showError(phoneError);
-      return;
-    }
-    await _submit(
-      () => AuthScope.of(context).loginWithBiometric(phone: _phone.text),
     );
   }
 

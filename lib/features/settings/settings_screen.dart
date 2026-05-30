@@ -33,7 +33,12 @@ class SettingsScreen extends StatelessWidget {
       listenable: Listenable.merge([controller, authController]),
       builder: (context, _) {
         final state = controller.state;
-        final profile = authController.state.activeUser ?? UserProfile.demo();
+        final profile = authController.state.activeUser;
+        if (profile == null) {
+          return const Scaffold(
+            body: Center(child: Text('Sign in again to view settings.')),
+          );
+        }
         return Scaffold(
           body: ListView(
             padding: const EdgeInsets.all(AppSpacing.xl),
@@ -255,7 +260,13 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Future<void> _openEditProfile(BuildContext context) async {
-    final profile = authController.state.activeUser ?? UserProfile.demo();
+    final profile = authController.state.activeUser;
+    if (profile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in again to edit your profile.')),
+      );
+      return;
+    }
     final updated = await showModalBottomSheet<UserProfile>(
       context: context,
       isScrollControlled: true,
@@ -270,7 +281,7 @@ class SettingsScreen extends StatelessWidget {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile updated for this demo session.')),
+      const SnackBar(content: Text('Profile updated on this device.')),
     );
   }
 

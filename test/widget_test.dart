@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sajha_kharcha/features/auth/auth_controller.dart';
 import 'package:sajha_kharcha/features/auth/models/user_profile.dart';
 import 'package:sajha_kharcha/features/auth/screens/auth_screen.dart';
 import 'package:sajha_kharcha/features/auth/screens/login_form.dart';
 import 'package:sajha_kharcha/features/auth/screens/register_form.dart';
+import 'package:sajha_kharcha/shared/api/backend_api.dart';
 import 'package:sajha_kharcha/features/home/home_controller.dart';
 import 'package:sajha_kharcha/features/settings/settings_screen.dart';
 import 'package:sajha_kharcha/shared/design_system/app_components.dart' as ds;
@@ -16,52 +18,151 @@ import 'package:sajha_kharcha/src/finance.dart';
 import 'package:sajha_kharcha/src/models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+final _testUserProfile = UserProfile(
+  id: 'u-sita',
+  displayName: 'Sita Shrestha',
+  phone: '9800000001',
+  esewaId: '9800000001@esewa',
+  district: 'Kathmandu',
+  createdAt: DateTime(2026, 5, 30),
+  dateOfBirth: DateTime(2000, 1, 2),
+);
+
+class _FakeBackendApi extends BackendApi {
+  _FakeBackendApi() : super(baseUrl: 'http://127.0.0.1:3000');
+
+  @override
+  Future<BackendOtpChallenge> requestSignupOtp({required String phone}) async {
+    return const BackendOtpChallenge(
+      message: 'OTP sent for verification.',
+      expiresInSeconds: 300,
+      resendAfterSeconds: 60,
+    );
+  }
+
+  @override
+  Future<BackendAuthSession> login({
+    required String phone,
+    required String mPin,
+  }) async {
+    if (mPin == '9999') {
+      throw const BackendApiException('Phone number or M-PIN is incorrect.');
+    }
+    return _session(phone: phone);
+  }
+
+  @override
+  Future<BackendAuthSession> signup({
+    required String phone,
+    required String otp,
+    required String mPin,
+    required String fullName,
+    required String dateOfBirth,
+    String? district,
+  }) async {
+    return _session(
+      phone: phone,
+      displayName: fullName,
+      dateOfBirth: dateOfBirth,
+    );
+  }
+
+  @override
+  Future<BackendAuthSession> refresh({required String refreshToken}) async {
+    return _session(phone: _testUserProfile.phone);
+  }
+
+  @override
+  Future<void> logout({String? accessToken, String? refreshToken}) async {}
+
+  BackendAuthSession _session({
+    required String phone,
+    String displayName = 'Sita Shrestha',
+    String dateOfBirth = '2000-01-02',
+  }) {
+    return BackendAuthSession(
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      accessTokenExpiresAt: DateTime.now()
+          .add(const Duration(minutes: 15))
+          .toIso8601String(),
+      refreshTokenExpiresAt: DateTime.now()
+          .add(const Duration(days: 30))
+          .toIso8601String(),
+      profile: {
+        'id': _testUserProfile.id,
+        'displayName': displayName,
+        'phone': phone,
+        'esewaId': '$phone@esewa',
+        'district': 'Kathmandu',
+        'dateOfBirth': dateOfBirth,
+        'createdAt': _testUserProfile.createdAt.toIso8601String(),
+      },
+    );
+  }
+}
+
+void _mockLoggedInStorage() {
+  SharedPreferences.setMockInitialValues({'auth.hasSeenIntro': true});
+  FlutterSecureStorage.setMockInitialValues({
+    'auth.activeUserProfile': _testUserProfile.toJsonString(),
+    'auth.accessToken': 'access-token',
+    'auth.refreshToken': 'refresh-token',
+    'auth.accessTokenExpiresAt': DateTime.now()
+        .add(const Duration(hours: 1))
+        .toIso8601String(),
+    'auth.refreshTokenExpiresAt': DateTime.now()
+        .add(const Duration(days: 30))
+        .toIso8601String(),
+  });
+}
+
 void main() {
-  test(
-    'login accepts phone plus saved M-PIN and rejects invalid values',
-    () async {
-      SharedPreferences.setMockInitialValues({});
-      final controller = AuthController();
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+  });
 
-      expect(
-        () => controller.loginWithMpin(phone: 'demo', mPin: '1234'),
-        throwsA(isA<AuthValidationException>()),
-      );
-      expect(
-        () => controller.loginWithMpin(phone: '9800000001', mPin: '12'),
-        throwsA(isA<AuthValidationException>()),
-      );
-      expect(
-        () => controller.loginWithMpin(phone: '9800000001', mPin: '9999'),
-        throwsA(isA<AuthValidationException>()),
-      );
+  test('login accepts phone plus M-PIN and rejects invalid values', () async {
+    final controller = AuthController(backendApi: _FakeBackendApi());
 
-      await controller.loginWithMpin(
-        phone: '9800000001',
-        mPin: AuthController.demoMpin,
-      );
+    expect(
+      () => controller.loginWithMpin(phone: 'demo', mPin: '1234'),
+      throwsA(isA<AuthValidationException>()),
+    );
+    expect(
+      () => controller.loginWithMpin(phone: '9800000001', mPin: '12'),
+      throwsA(isA<AuthValidationException>()),
+    );
+    expect(
+      () => controller.loginWithMpin(phone: '9800000001', mPin: '9999'),
+      throwsA(isA<AuthValidationException>()),
+    );
 
-      expect(controller.state.isLoggedIn, isTrue);
-      expect(controller.state.activeUser?.displayName, 'Erwin Shrestha');
-      expect(controller.state.activeUser?.phone, '9800000001');
+    await controller.loginWithMpin(phone: '9800000001', mPin: '1234');
 
-      await controller.loginWithMpin(
-        phone: '+977 9800000001',
-        mPin: AuthController.demoMpin,
-      );
-      expect(controller.state.activeUser?.phone, '9800000001');
-    },
-  );
+    expect(controller.state.isLoggedIn, isTrue);
+    expect(controller.state.activeUser?.displayName, 'Sita Shrestha');
+    expect(controller.state.activeUser?.phone, '9800000001');
+
+    await controller.loginWithMpin(phone: '+977 9800000001', mPin: '1234');
+    expect(controller.state.activeUser?.phone, '9800000001');
+  });
 
   test('delete account clears saved profile and login state', () async {
-    SharedPreferences.setMockInitialValues({
-      'auth.hasSeenIntro': true,
-      'auth.isLoggedIn': true,
-      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
-      'auth.mPin': '1234',
-      'auth.biometricEnabled': true,
+    SharedPreferences.setMockInitialValues({'auth.hasSeenIntro': true});
+    FlutterSecureStorage.setMockInitialValues({
+      'auth.activeUserProfile': _testUserProfile.toJsonString(),
+      'auth.accessToken': 'access',
+      'auth.refreshToken': 'refresh',
+      'auth.accessTokenExpiresAt': DateTime.now()
+          .add(const Duration(hours: 1))
+          .toIso8601String(),
+      'auth.refreshTokenExpiresAt': DateTime.now()
+          .add(const Duration(days: 30))
+          .toIso8601String(),
     });
-    final controller = AuthController();
+    final controller = AuthController(backendApi: _FakeBackendApi());
 
     await controller.initialize();
     expect(controller.state.isLoggedIn, isTrue);
@@ -85,7 +186,7 @@ void main() {
     expect(find.text('Nepal mobile number'), findsOneWidget);
     expect(find.text('M-PIN'), findsOneWidget);
     expect(find.text('Login with M-PIN'), findsOneWidget);
-    expect(find.text('Login with biometric'), findsOneWidget);
+    expect(find.text('Login with biometric'), findsNothing);
 
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Nepal mobile number'),
@@ -121,7 +222,7 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
-    final controller = AuthController();
+    final controller = AuthController(backendApi: _FakeBackendApi());
 
     await tester.pumpWidget(
       AuthScope(
@@ -133,12 +234,17 @@ void main() {
       ),
     );
 
+    expect(find.text('Full name'), findsOneWidget);
     expect(find.text('Nepal mobile number'), findsOneWidget);
     expect(find.text('Date of birth'), findsOneWidget);
     expect(find.text('Create M-PIN'), findsOneWidget);
     expect(find.text('User name'), findsNothing);
     expect(find.text('Password'), findsNothing);
 
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Full name'),
+      'Sita Shrestha',
+    );
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Nepal mobile number'),
       '9800000001',
@@ -157,13 +263,17 @@ void main() {
     expect(find.text('6-digit OTP'), findsOneWidget);
     expect(find.text('Verify OTP & Create Account'), findsOneWidget);
 
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '6-digit OTP'),
+      '123456',
+    );
     await tester.tap(
       find.widgetWithText(FilledButton, 'Verify OTP & Create Account'),
     );
     await tester.pumpAndSettle();
 
     expect(controller.state.isLoggedIn, isTrue);
-    expect(controller.state.activeUser?.displayName, 'Sajha Member');
+    expect(controller.state.activeUser?.displayName, 'Sita Shrestha');
     expect(controller.state.activeUser?.phone, '9800000001');
     expect(controller.state.activeUser?.dateOfBirth, DateTime(2000, 1, 2));
   });
@@ -253,15 +363,11 @@ void main() {
   }
 
   testWidgets('Sajha Kharcha shell renders seeded dashboard', (tester) async {
-    SharedPreferences.setMockInitialValues({
-      'auth.hasSeenIntro': true,
-      'auth.isLoggedIn': true,
-      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
-    });
+    _mockLoggedInStorage();
 
     await tester.pumpWidget(
       AuthScope(
-        notifier: AuthController(),
+        notifier: AuthController(backendApi: _FakeBackendApi()),
         child: StoreScope(
           notifier: AppStore.seeded(),
           child: const SajhaKharchaApp(),
@@ -272,14 +378,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sajha Kharcha'), findsOneWidget);
-    expect(find.text('Namaste, Erwin'), findsOneWidget);
+    expect(find.text('Namaste, Sita'), findsOneWidget);
     expect(find.text('Quick actions'), findsOneWidget);
     expect(find.text('Festival Mode'), findsNothing);
     expect(find.text('Scan Receipt'), findsNothing);
     expect(find.text('Settle Now'), findsNothing);
     expect(find.text('View Groups'), findsNothing);
-    expect(find.text('Add Expense'), findsNothing);
-    expect(find.text('Create Group'), findsNothing);
+    expect(find.text('Add Expense'), findsOneWidget);
+    expect(find.text('Create Group'), findsOneWidget);
     expect(find.text('Send Gift'), findsWidgets);
     expect(find.text('Activity'), findsNothing);
   });
@@ -296,15 +402,11 @@ void main() {
       tester.view.resetDevicePixelRatio();
       tester.binding.platformDispatcher.clearPlatformBrightnessTestValue();
     });
-    SharedPreferences.setMockInitialValues({
-      'auth.hasSeenIntro': true,
-      'auth.isLoggedIn': true,
-      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
-    });
+    _mockLoggedInStorage();
 
     await tester.pumpWidget(
       AuthScope(
-        notifier: AuthController(),
+        notifier: AuthController(backendApi: _FakeBackendApi()),
         child: StoreScope(
           notifier: AppStore.seeded(),
           child: const SajhaKharchaApp(),
@@ -488,15 +590,11 @@ void main() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
     });
-    SharedPreferences.setMockInitialValues({
-      'auth.hasSeenIntro': true,
-      'auth.isLoggedIn': true,
-      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
-    });
+    _mockLoggedInStorage();
 
     await tester.pumpWidget(
       AuthScope(
-        notifier: AuthController(),
+        notifier: AuthController(backendApi: _FakeBackendApi()),
         child: StoreScope(
           notifier: AppStore.seeded(),
           child: const SajhaKharchaApp(),
@@ -673,15 +771,11 @@ void main() {
         tester.view.resetPhysicalSize();
         tester.view.resetDevicePixelRatio();
       });
-      SharedPreferences.setMockInitialValues({
-        'auth.hasSeenIntro': true,
-        'auth.isLoggedIn': true,
-        'auth.activeUserProfile': UserProfile.demo().toJsonString(),
-      });
+      _mockLoggedInStorage();
 
       await tester.pumpWidget(
         AuthScope(
-          notifier: AuthController(),
+          notifier: AuthController(backendApi: _FakeBackendApi()),
           child: StoreScope(
             notifier: AppStore.seeded(),
             child: const SajhaKharchaApp(),

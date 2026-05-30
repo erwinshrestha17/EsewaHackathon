@@ -1,6 +1,2 @@
--- Canonical seed data for the Node/Express API.
--- Apply this through:
--- supabase/seed.sql
---
--- The Supabase seed file includes app-wide seeded profiles, groups, expenses,
--- gifts, community savings records, notifications, and activity logs.
+-- Production auth does not ship demo users or fake login credentials.
+-- Canonical seed data is intentionally empty in ../../supabase/seed.sql.

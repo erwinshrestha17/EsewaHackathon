@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/api/backend_api.dart';
@@ -7,28 +8,45 @@ import 'models/user_profile.dart';
 import 'nepal_mobile.dart';
 
 class AuthController extends ChangeNotifier {
-  AuthController({BackendApi? backendApi})
-    : _backendApi = backendApi ?? BackendApi();
+  AuthController({BackendApi? backendApi, FlutterSecureStorage? secureStorage})
+    : _backendApi = backendApi ?? BackendApi(),
+      _secureStorage =
+          secureStorage ??
+          const FlutterSecureStorage(
+            mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+          );
 
   static const _hasSeenIntroKey = 'auth.hasSeenIntro';
-  static const _isLoggedInKey = 'auth.isLoggedIn';
   static const _activeUserProfileKey = 'auth.activeUserProfile';
-  static const _mPinKey = 'auth.mPin';
-  static const _biometricEnabledKey = 'auth.biometricEnabled';
-  static const _backendAccessTokenKey = 'auth.backendAccessToken';
-  static const _backendSessionExpiresAtKey = 'auth.backendSessionExpiresAt';
-  static const demoOtp = '123456';
-  static const demoMpin = '1234';
+  static const _accessTokenKey = 'auth.accessToken';
+  static const _refreshTokenKey = 'auth.refreshToken';
+  static const _accessTokenExpiresAtKey = 'auth.accessTokenExpiresAt';
+  static const _refreshTokenExpiresAtKey = 'auth.refreshTokenExpiresAt';
 
   final BackendApi _backendApi;
+  final FlutterSecureStorage _secureStorage;
   SharedPreferences? _preferences;
   AuthState _state = const AuthState.initial();
+  Future<String?>? _refreshInFlight;
 
   AuthState get state => _state;
 
   Future<String?> backendAccessToken() async {
-    final preferences = await _prefs();
-    return preferences.getString(_backendAccessTokenKey);
+    if (!_backendApi.isConfigured) {
+      return null;
+    }
+    final accessToken = await _secureStorage.read(key: _accessTokenKey);
+    final expiresAt = DateTime.tryParse(
+      await _secureStorage.read(key: _accessTokenExpiresAtKey) ?? '',
+    );
+    if (accessToken != null &&
+        expiresAt != null &&
+        expiresAt.isAfter(DateTime.now().add(const Duration(seconds: 45)))) {
+      return accessToken;
+    }
+    return _refreshInFlight ??= _refreshSession().whenComplete(() {
+      _refreshInFlight = null;
+    });
   }
 
   Future<void> initialize() async {
@@ -36,8 +54,10 @@ class AuthController extends ChangeNotifier {
       return;
     }
     final preferences = _preferences ??= await SharedPreferences.getInstance();
+    await _clearLegacySharedPreferenceSecrets(preferences);
+
     UserProfile? activeUser;
-    final rawProfile = preferences.getString(_activeUserProfileKey);
+    final rawProfile = await _secureStorage.read(key: _activeUserProfileKey);
     if (rawProfile != null) {
       try {
         activeUser = UserProfile.fromJsonString(rawProfile);
@@ -46,11 +66,16 @@ class AuthController extends ChangeNotifier {
       }
     }
 
-    final isLoggedIn = preferences.getBool(_isLoggedInKey) ?? false;
+    final token = activeUser == null ? null : await backendAccessToken();
+    if (activeUser != null && token == null) {
+      await _clearSession(notify: false);
+      activeUser = null;
+    }
+
     _state = AuthState(
       initialized: true,
       hasSeenIntro: preferences.getBool(_hasSeenIntroKey) ?? false,
-      isLoggedIn: isLoggedIn && activeUser != null,
+      isLoggedIn: activeUser != null && token != null,
       activeUser: activeUser,
     );
     notifyListeners();
@@ -63,20 +88,17 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> login({
-    required String identifier,
-    required String password,
-  }) async {
-    final mobile = normalizeNepalMobile(identifier);
-    if (mobile == null || password.isEmpty) {
+  Future<BackendOtpChallenge> requestSignupOtp({required String phone}) async {
+    final mobile = normalizeNepalMobile(phone);
+    if (mobile == null) {
       throw const AuthValidationException('Enter a valid Nepal mobile number.');
     }
-
-    final existing = _state.activeUser;
-    final profile =
-        existing ??
-        UserProfile.demo().copyWith(phone: mobile, esewaId: 'demo@esewa');
-    await _saveLoggedInProfile(profile);
+    _assertBackendConfigured();
+    try {
+      return await _backendApi.requestSignupOtp(phone: mobile);
+    } on BackendApiException catch (error) {
+      throw AuthValidationException(error.message);
+    }
   }
 
   Future<void> loginWithMpin({
@@ -90,154 +112,84 @@ class AuthController extends ChangeNotifier {
     if (!_isValidMpin(mPin)) {
       throw const AuthValidationException('Enter your 4-digit M-PIN.');
     }
-    if (_backendApi.isConfigured) {
-      try {
-        final session = await _backendApi.loginWithMpin(
-          phone: mobile,
-          mPin: mPin.trim(),
-        );
-        final profile = _profileFromBackendSession(
-          session,
-          fallbackPhone: mobile,
-        );
-        final preferences = await _prefs();
-        await preferences.setString(
-          _backendAccessTokenKey,
-          session.accessToken,
-        );
-        await preferences.setString(
-          _backendSessionExpiresAtKey,
-          session.expiresAt,
-        );
-        await _saveLoggedInProfile(profile);
-        return;
-      } on BackendApiException catch (error) {
-        throw AuthValidationException(error.message);
-      }
+    _assertBackendConfigured();
+    try {
+      final session = await _backendApi.login(phone: mobile, mPin: mPin.trim());
+      await _saveSession(session, fallbackPhone: mobile);
+    } on BackendApiException catch (error) {
+      throw AuthValidationException(error.message);
     }
-    final preferences = await _prefs();
-    final savedMpin = preferences.getString(_mPinKey) ?? demoMpin;
-    if (mPin.trim() != savedMpin) {
-      throw const AuthValidationException('M-PIN does not match.');
-    }
-    final profile = _storedOrDemoProfile(preferences);
-    final savedMobile = normalizeNepalMobile(profile.phone);
-    if (savedMobile != null && savedMobile != mobile) {
-      throw const AuthValidationException('Phone number does not match.');
-    }
-    await _saveLoggedInProfile(profile.copyWith(phone: mobile));
-  }
-
-  Future<void> loginWithBiometric({required String phone}) async {
-    final mobile = normalizeNepalMobile(phone);
-    if (mobile == null) {
-      throw const AuthValidationException('Enter a valid Nepal mobile number.');
-    }
-    final preferences = await _prefs();
-    final biometricEnabled = preferences.getBool(_biometricEnabledKey) ?? true;
-    if (!biometricEnabled) {
-      throw const AuthValidationException('Biometric login is not enabled.');
-    }
-    final profile = _storedOrDemoProfile(preferences);
-    final savedMobile = normalizeNepalMobile(profile.phone);
-    if (savedMobile != null && savedMobile != mobile) {
-      throw const AuthValidationException('Phone number does not match.');
-    }
-    await _saveLoggedInProfile(profile.copyWith(phone: mobile));
   }
 
   Future<void> register({
+    required String fullName,
     required String mobileNumber,
     required DateTime dateOfBirth,
     required String mPin,
     required String otp,
-    required bool biometricEnabled,
+    String? district,
   }) async {
     final mobile = normalizeNepalMobile(mobileNumber);
     if (mobile == null || !_isValidMpin(mPin) || otp.trim().isEmpty) {
       throw const AuthValidationException('Complete all required fields.');
     }
-    if (otp.trim() != demoOtp) {
-      throw const AuthValidationException('Enter the 6-digit OTP.');
+    if (fullName.trim().length < 2) {
+      throw const AuthValidationException('Enter your full name.');
     }
     final now = DateTime.now();
     if (dateOfBirth.isAfter(DateTime(now.year, now.month, now.day))) {
       throw const AuthValidationException('Date of birth cannot be in future.');
     }
+    _assertBackendConfigured();
 
-    if (_backendApi.isConfigured) {
-      try {
-        final session = await _backendApi.registerWithMpin(
-          phone: mobile,
-          mPin: mPin.trim(),
-          fullName: 'Sajha Member',
-        );
-        final profile = _profileFromBackendSession(
-          session,
-          fallbackPhone: mobile,
-        );
-        final preferences = await _prefs();
-        await preferences.setString(_mPinKey, mPin.trim());
-        await preferences.setBool(_biometricEnabledKey, biometricEnabled);
-        await preferences.setString(
-          _backendAccessTokenKey,
-          session.accessToken,
-        );
-        await preferences.setString(
-          _backendSessionExpiresAtKey,
-          session.expiresAt,
-        );
-        await _saveLoggedInProfile(profile);
-        return;
-      } on BackendApiException catch (error) {
-        throw AuthValidationException(error.message);
-      }
+    try {
+      final normalizedDistrict = district?.trim();
+      final session = await _backendApi.signup(
+        phone: mobile,
+        otp: otp.trim(),
+        mPin: mPin.trim(),
+        fullName: fullName.trim(),
+        dateOfBirth: _dateInput(dateOfBirth),
+        district: normalizedDistrict == null || normalizedDistrict.isEmpty
+            ? null
+            : normalizedDistrict,
+      );
+      await _saveSession(session, fallbackPhone: mobile);
+    } on BackendApiException catch (error) {
+      throw AuthValidationException(error.message);
     }
-
-    final profile = UserProfile(
-      id: UserProfile.activeUserId,
-      displayName: 'Sajha Member',
-      phone: mobile,
-      esewaId: '$mobile@esewa',
-      district: '',
-      dateOfBirth: dateOfBirth,
-      createdAt: now,
-    );
-    final preferences = await _prefs();
-    await preferences.setString(_mPinKey, mPin.trim());
-    await preferences.setBool(_biometricEnabledKey, biometricEnabled);
-    await _saveLoggedInProfile(profile);
-  }
-
-  Future<void> continueAsDemoUser() async {
-    await _saveLoggedInProfile(UserProfile.demo());
   }
 
   Future<void> updateProfile(UserProfile profile) async {
-    final preferences = await _prefs();
-    await preferences.setString(_activeUserProfileKey, profile.toJsonString());
+    await _secureStorage.write(
+      key: _activeUserProfileKey,
+      value: profile.toJsonString(),
+    );
     _state = _state.copyWith(activeUser: profile);
     notifyListeners();
   }
 
   Future<void> logout() async {
-    final preferences = await _prefs();
-    await preferences.setBool(_isLoggedInKey, false);
-    await preferences.remove(_backendAccessTokenKey);
-    await preferences.remove(_backendSessionExpiresAtKey);
-    _state = _state.copyWith(isLoggedIn: false);
-    notifyListeners();
+    final accessToken = await _secureStorage.read(key: _accessTokenKey);
+    final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    if (_backendApi.isConfigured &&
+        (accessToken != null || refreshToken != null)) {
+      try {
+        await _backendApi.logout(
+          accessToken: accessToken,
+          refreshToken: refreshToken,
+        );
+      } on BackendApiException {
+        // Local cleanup still wins; logout is idempotent server-side.
+      }
+    }
+    await _clearSession();
   }
 
   Future<void> deleteAccount() async {
     final preferences = await _prefs();
     await preferences.setBool(_hasSeenIntroKey, true);
-    await preferences.setBool(_isLoggedInKey, false);
-    await preferences.remove(_activeUserProfileKey);
-    await preferences.remove(_mPinKey);
-    await preferences.remove(_biometricEnabledKey);
-    await preferences.remove(_backendAccessTokenKey);
-    await preferences.remove(_backendSessionExpiresAtKey);
+    await _clearSession(notify: false);
     _state = const AuthState(
       initialized: true,
       hasSeenIntro: true,
@@ -246,11 +198,36 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _saveLoggedInProfile(UserProfile profile) async {
+  Future<void> _saveSession(
+    BackendAuthSession session, {
+    required String fallbackPhone,
+  }) async {
+    final profile = _profileFromBackendSession(
+      session,
+      fallbackPhone: fallbackPhone,
+    );
     final preferences = await _prefs();
     await preferences.setBool(_hasSeenIntroKey, true);
-    await preferences.setBool(_isLoggedInKey, true);
-    await preferences.setString(_activeUserProfileKey, profile.toJsonString());
+    await _secureStorage.write(
+      key: _accessTokenKey,
+      value: session.accessToken,
+    );
+    await _secureStorage.write(
+      key: _refreshTokenKey,
+      value: session.refreshToken,
+    );
+    await _secureStorage.write(
+      key: _accessTokenExpiresAtKey,
+      value: session.accessTokenExpiresAt,
+    );
+    await _secureStorage.write(
+      key: _refreshTokenExpiresAtKey,
+      value: session.refreshTokenExpiresAt,
+    );
+    await _secureStorage.write(
+      key: _activeUserProfileKey,
+      value: profile.toJsonString(),
+    );
     _state = AuthState(
       initialized: true,
       hasSeenIntro: true,
@@ -260,24 +237,72 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<String?> _refreshSession() async {
+    final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    if (refreshToken == null) {
+      return null;
+    }
+    try {
+      final session = await _backendApi.refresh(refreshToken: refreshToken);
+      await _saveSession(
+        session,
+        fallbackPhone: _state.activeUser?.phone ?? '',
+      );
+      return session.accessToken;
+    } on BackendApiException {
+      await _clearSession();
+      return null;
+    }
+  }
+
+  Future<void> _clearSession({bool notify = true}) async {
+    await _secureStorage.delete(key: _activeUserProfileKey);
+    await _secureStorage.delete(key: _accessTokenKey);
+    await _secureStorage.delete(key: _refreshTokenKey);
+    await _secureStorage.delete(key: _accessTokenExpiresAtKey);
+    await _secureStorage.delete(key: _refreshTokenExpiresAtKey);
+    if (notify) {
+      _state = AuthState(
+        initialized: true,
+        hasSeenIntro: _state.hasSeenIntro,
+        isLoggedIn: false,
+      );
+      notifyListeners();
+    }
+  }
+
   Future<SharedPreferences> _prefs() async {
     return _preferences ??= await SharedPreferences.getInstance();
+  }
+
+  Future<void> _clearLegacySharedPreferenceSecrets(
+    SharedPreferences preferences,
+  ) async {
+    await preferences.remove('auth.isLoggedIn');
+    await preferences.remove('auth.activeUserProfile');
+    await preferences.remove('auth.mPin');
+    await preferences.remove('auth.biometricEnabled');
+    await preferences.remove('auth.backendAccessToken');
+    await preferences.remove('auth.backendSessionExpiresAt');
+  }
+
+  void _assertBackendConfigured() {
+    if (!_backendApi.isConfigured) {
+      throw const AuthValidationException(
+        'Start the app with BACKEND_API_BASE_URL to sign in.',
+      );
+    }
   }
 
   bool _isValidMpin(String value) {
     return RegExp(r'^\d{4}$').hasMatch(value.trim());
   }
 
-  UserProfile _storedOrDemoProfile(SharedPreferences preferences) {
-    final rawProfile = preferences.getString(_activeUserProfileKey);
-    if (rawProfile != null) {
-      try {
-        return UserProfile.fromJsonString(rawProfile);
-      } on FormatException {
-        return UserProfile.demo();
-      }
-    }
-    return UserProfile.demo();
+  String _dateInput(DateTime value) {
+    final year = value.year.toString().padLeft(4, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
   }
 
   UserProfile _profileFromBackendSession(
@@ -286,7 +311,7 @@ class AuthController extends ChangeNotifier {
   }) {
     final profile = session.profile;
     return UserProfile(
-      id: profile['id']?.toString() ?? UserProfile.activeUserId,
+      id: profile['id']?.toString() ?? profile['profileId']?.toString() ?? '',
       displayName: profile['displayName']?.toString() ?? 'Sajha Member',
       phone: profile['phone']?.toString() ?? fallbackPhone,
       esewaId:
@@ -294,6 +319,7 @@ class AuthController extends ChangeNotifier {
           '${profile['phone'] ?? fallbackPhone}@esewa',
       district: profile['district']?.toString() ?? '',
       avatarUrl: profile['avatarUrl']?.toString(),
+      dateOfBirth: DateTime.tryParse(profile['dateOfBirth']?.toString() ?? ''),
       createdAt:
           DateTime.tryParse(profile['createdAt']?.toString() ?? '') ??
           DateTime.now(),

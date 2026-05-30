@@ -1,7 +1,7 @@
 import { db, assertDb } from '../common/db.js';
 
 function fallbackLegacyId(row, prefix) {
-  return row?.legacy_user_id ?? row?.legacy_group_id ?? row?.legacy_pool_id ?? `${prefix}-${row.id}`;
+  return row?.id ?? `${prefix}-${row.id}`;
 }
 
 function mapProfile(row) {
