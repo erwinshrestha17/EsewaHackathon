@@ -23,6 +23,24 @@ function assertMpin(value) {
   return pin;
 }
 
+function parseDateOfBirth(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  const text = value.toString().trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    throw new ApiError(400, 'Date of birth must be in YYYY-MM-DD format.');
+  }
+  const parsed = new Date(`${text}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new ApiError(400, 'Enter a valid date of birth.');
+  }
+  if (parsed.getTime() > Date.now()) {
+    throw new ApiError(400, 'Date of birth cannot be in the future.');
+  }
+  return text;
+}
+
 export function hashMpin(mpin, salt = crypto.randomBytes(16).toString('base64url')) {
   const hash = crypto
     .pbkdf2Sync(mpin, salt, mpinIterations, 32, 'sha256')
@@ -61,6 +79,7 @@ function authProfileDto(row) {
     esewaId: row.email ?? `${row.phone ?? row.id}@esewa`,
     district: row.district ?? '',
     avatarUrl: row.avatar_url,
+    dateOfBirth: row.date_of_birth ?? null,
     createdAt: row.created_at,
   };
 }
@@ -159,7 +178,11 @@ export async function registerWithMpin(body, req) {
     throw new ApiError(400, 'Enter a valid Nepal mobile number.');
   }
   const mpin = assertMpin(body.mPin);
-  const fullName = body.fullName?.trim() || 'Sajha Member';
+  const fullName = body.fullName?.trim();
+  if (!fullName) {
+    throw new ApiError(400, 'Enter your full name.');
+  }
+  const dateOfBirth = parseDateOfBirth(body.dateOfBirth);
   const { data: profile, error } = await db()
     .from('profiles')
     .upsert(
@@ -173,6 +196,7 @@ export async function registerWithMpin(body, req) {
           .map((part) => part[0]?.toUpperCase())
           .join(''),
         district: body.district?.trim() || null,
+        date_of_birth: dateOfBirth,
       },
       { onConflict: 'phone' },
     )

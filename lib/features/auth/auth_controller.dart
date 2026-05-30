@@ -147,6 +147,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> register({
+    required String fullName,
     required String mobileNumber,
     required DateTime dateOfBirth,
     required String mPin,
@@ -154,7 +155,11 @@ class AuthController extends ChangeNotifier {
     required bool biometricEnabled,
   }) async {
     final mobile = normalizeNepalMobile(mobileNumber);
-    if (mobile == null || !_isValidMpin(mPin) || otp.trim().isEmpty) {
+    final name = fullName.trim();
+    if (mobile == null ||
+        name.isEmpty ||
+        !_isValidMpin(mPin) ||
+        otp.trim().isEmpty) {
       throw const AuthValidationException('Complete all required fields.');
     }
     if (otp.trim() != demoOtp) {
@@ -170,12 +175,13 @@ class AuthController extends ChangeNotifier {
         final session = await _backendApi.registerWithMpin(
           phone: mobile,
           mPin: mPin.trim(),
-          fullName: 'Sajha Member',
+          fullName: name,
+          dateOfBirth: dateOfBirth,
         );
         final profile = _profileFromBackendSession(
           session,
           fallbackPhone: mobile,
-        );
+        ).copyWith(displayName: name, dateOfBirth: dateOfBirth);
         final preferences = await _prefs();
         await preferences.setString(_mPinKey, mPin.trim());
         await preferences.setBool(_biometricEnabledKey, biometricEnabled);
@@ -196,7 +202,7 @@ class AuthController extends ChangeNotifier {
 
     final profile = UserProfile(
       id: UserProfile.activeUserId,
-      displayName: 'Sajha Member',
+      displayName: name,
       phone: mobile,
       esewaId: '$mobile@esewa',
       district: '',
@@ -294,6 +300,7 @@ class AuthController extends ChangeNotifier {
           '${profile['phone'] ?? fallbackPhone}@esewa',
       district: profile['district']?.toString() ?? '',
       avatarUrl: profile['avatarUrl']?.toString(),
+      dateOfBirth: DateTime.tryParse(profile['dateOfBirth']?.toString() ?? ''),
       createdAt:
           DateTime.tryParse(profile['createdAt']?.toString() ?? '') ??
           DateTime.now(),

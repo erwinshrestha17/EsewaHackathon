@@ -61,12 +61,14 @@ class BackendApi {
     required String phone,
     required String mPin,
     required String fullName,
+    DateTime? dateOfBirth,
     String? district,
   }) async {
     final data = await _post('/api/auth/mpin/register', {
       'phone': phone,
       'mPin': mPin,
       'fullName': fullName,
+      'dateOfBirth': dateOfBirth?.toIso8601String().split('T').first,
       'district': district,
     });
     return BackendAuthSession.fromJson(data);

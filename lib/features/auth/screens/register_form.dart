@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../auth_controller.dart';
+import '../date_input_formatter.dart';
 import '../nepal_mobile.dart';
 import '../widgets/auth_text_field.dart';
 
@@ -14,6 +15,7 @@ class RegisterForm extends StatefulWidget {
 
 class _RegisterFormState extends State<RegisterForm> {
   final _formKey = GlobalKey<FormState>();
+  final _fullName = TextEditingController();
   final _mobileNumber = TextEditingController();
   final _dateOfBirth = TextEditingController();
   final _mPin = TextEditingController();
@@ -24,6 +26,7 @@ class _RegisterFormState extends State<RegisterForm> {
 
   @override
   void dispose() {
+    _fullName.dispose();
     _mobileNumber.dispose();
     _dateOfBirth.dispose();
     _mPin.dispose();
@@ -38,6 +41,17 @@ class _RegisterFormState extends State<RegisterForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          AuthTextField(
+            controller: _fullName,
+            label: 'Full name',
+            hintText: 'e.g. Erwin Shrestha',
+            icon: Icons.person_outline,
+            keyboardType: TextInputType.name,
+            textInputAction: TextInputAction.next,
+            textCapitalization: TextCapitalization.words,
+            validator: _fullNameValidator,
+          ),
+          const SizedBox(height: 12),
           AuthTextField(
             controller: _mobileNumber,
             label: 'Nepal mobile number',
@@ -54,8 +68,9 @@ class _RegisterFormState extends State<RegisterForm> {
             label: 'Date of birth',
             hintText: 'YYYY-MM-DD',
             icon: Icons.cake_outlined,
-            keyboardType: TextInputType.datetime,
+            keyboardType: TextInputType.number,
             textInputAction: TextInputAction.next,
+            inputFormatters: const [DateOfBirthInputFormatter()],
             validator: _dateOfBirthValidator,
           ),
           const SizedBox(height: 12),
@@ -116,6 +131,14 @@ class _RegisterFormState extends State<RegisterForm> {
 
   String? _required(String? value) {
     return value == null || value.trim().isEmpty ? 'Required' : null;
+  }
+
+  String? _fullNameValidator(String? value) {
+    final required = _required(value);
+    if (required != null) {
+      return required;
+    }
+    return value!.trim().length < 2 ? 'Enter your full name' : null;
   }
 
   String? _nepalMobileValidator(String? value) {
@@ -180,6 +203,7 @@ class _RegisterFormState extends State<RegisterForm> {
     setState(() => _submitting = true);
     try {
       await AuthScope.of(context).register(
+        fullName: _fullName.text.trim(),
         mobileNumber: _mobileNumber.text,
         dateOfBirth: DateTime.parse(_dateOfBirth.text.trim()),
         mPin: _mPin.text,
