@@ -2,6 +2,7 @@ import { assertChoice, parseMoneyMinor, requireFields } from '../../middleware/v
 import { ApiError } from '../../utils/ApiError.js';
 import { logActivity } from '../common/audit.js';
 import { db, assertDb, single } from '../common/db.js';
+import { publishGroupEvent } from '../realtime/realtime.service.js';
 
 const splitModes = ['equal', 'custom', 'item'];
 const expenseStatuses = ['draft', 'active', 'voided'];
@@ -66,12 +67,21 @@ export async function createExpense(group, userId, body) {
   const splitMode = body.splitMode ?? 'equal';
   const participantIds = body.participantIds ?? [];
   const shares =
-    splitMode === 'equal'
-      ? equalShares(totalMinor, participantIds)
-      : Object.fromEntries(Object.entries(body.customAmounts ?? {}).map(([id, amount]) => [id, Number(amount)]));
+    splitMode === 'equal' && body.equalAmounts
+      ? Object.fromEntries(participantIds.map((id) => [id, Number(body.equalAmounts[id] ?? 0)]))
+      : splitMode === 'equal'
+        ? equalShares(totalMinor, participantIds)
+        : Object.fromEntries(Object.entries(body.customAmounts ?? {}).map(([id, amount]) => [id, Number(amount)]));
   const shareTotal = Object.values(shares).reduce((sum, amount) => sum + amount, 0);
   if (shareTotal !== totalMinor) {
     throw new ApiError(400, 'Expense shares must add up to totalMinor.');
+  }
+  const payerTotal = (body.payers ?? [{ userId: body.payerId, amountMinor: totalMinor }]).reduce(
+    (sum, payer) => sum + Number(payer.amountMinor ?? 0),
+    0,
+  );
+  if (payerTotal !== totalMinor) {
+    throw new ApiError(400, 'Expense payer amounts must add up to totalMinor.');
   }
 
   const { data: expense, error } = await db()
@@ -91,6 +101,8 @@ export async function createExpense(group, userId, body) {
       bill_tax_minor: Number(body.billTaxMinor ?? 0),
       bill_service_charge_minor: Number(body.billServiceChargeMinor ?? 0),
       bill_discount_minor: Number(body.billDiscountMinor ?? 0),
+      bill_tip_minor: Number(body.billTipMinor ?? 0),
+      bill_rounding_adjustment_minor: Number(body.billRoundingAdjustmentMinor ?? 0),
       created_by: userId,
     })
     .select()
@@ -116,7 +128,7 @@ export async function createExpense(group, userId, body) {
   assertDb(shareError);
 
   if (Array.isArray(body.items) && body.items.length > 0) {
-    const { error: itemError } = await db().from('expense_items').insert(
+    const { data: insertedItems, error: itemError } = await db().from('expense_items').insert(
       body.items.map((item, index) => ({
         expense_id: expense.id,
         label: item.label,
@@ -129,8 +141,26 @@ export async function createExpense(group, userId, body) {
         ocr_confidence: Number(item.ocrConfidence ?? 1),
         sort_order: index,
       })),
-    );
+    ).select();
     assertDb(itemError);
+    const assignmentRows = [];
+    for (let index = 0; index < (insertedItems ?? []).length; index += 1) {
+      const sourceItem = body.items[index];
+      for (const assignment of sourceItem.assignments ?? []) {
+        assignmentRows.push({
+          expense_item_id: insertedItems[index].id,
+          user_id: assignment.userId,
+          assigned_amount_minor: Number(assignment.assignedAmountMinor),
+          split_units: Number(assignment.splitUnits ?? 1),
+        });
+      }
+    }
+    if (assignmentRows.length > 0) {
+      const { error: assignmentError } = await db()
+        .from('expense_item_assignments')
+        .insert(assignmentRows);
+      assertDb(assignmentError);
+    }
   }
 
   await logActivity({
@@ -142,6 +172,10 @@ export async function createExpense(group, userId, body) {
     title: 'Expense added',
     body: `${expense.title} was added to the group.`,
     metadata: { totalMinor },
+  });
+  await publishGroupEvent(group.id, {
+    type: 'expense_changed',
+    payload: { operation: 'created', expenseId: expense.id, actorId: userId },
   });
   return getExpense(expense.id);
 }
@@ -180,5 +214,41 @@ export async function voidExpense(group, userId, expenseId, reason) {
     title: 'Expense voided',
     body: `${data.title} was voided.`,
   });
+  await publishGroupEvent(group.id, {
+    type: 'expense_changed',
+    payload: { operation: 'voided', expenseId: data.id, actorId: userId },
+  });
   return expenseDto(data);
+}
+
+export async function updateExpense(group, userId, expenseId, body) {
+  const payload = {};
+  if (body.title !== undefined) payload.title = body.title.trim();
+  if (body.note !== undefined) payload.note = body.note?.trim() ?? '';
+  if (Object.keys(payload).length === 0) {
+    return getExpense(expenseId);
+  }
+  const { data, error } = await db()
+    .from('expenses')
+    .update(payload)
+    .eq('group_id', group.id)
+    .eq('id', expenseId)
+    .is('locked_at', null)
+    .select()
+    .single();
+  assertDb(error);
+  await logActivity({
+    groupId: group.id,
+    actorId: userId,
+    action: 'expense_updated',
+    entityType: 'expense',
+    entityId: data.id,
+    title: 'Expense updated',
+    body: `${data.title} was updated.`,
+  });
+  await publishGroupEvent(group.id, {
+    type: 'expense_changed',
+    payload: { operation: 'updated', expenseId: data.id, actorId: userId },
+  });
+  return getExpense(data.id);
 }

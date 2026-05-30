@@ -67,6 +67,37 @@ class BackendRealtimeEvent {
   final Map<String, dynamic> data;
 }
 
+class BackendRealtimeConfig {
+  const BackendRealtimeConfig({
+    required this.supabaseUrl,
+    required this.supabasePublishableKey,
+    required this.accessToken,
+    required this.expiresAt,
+    required this.topics,
+  });
+
+  factory BackendRealtimeConfig.fromJson(Map<String, dynamic> json) {
+    return BackendRealtimeConfig(
+      supabaseUrl: json['supabaseUrl']?.toString() ?? '',
+      supabasePublishableKey: json['supabasePublishableKey']?.toString() ?? '',
+      accessToken: json['accessToken']?.toString() ?? '',
+      expiresAt:
+          DateTime.tryParse(json['expiresAt']?.toString() ?? '') ??
+          DateTime.now(),
+      topics: [
+        for (final topic in (json['topics'] as List<dynamic>? ?? const []))
+          topic.toString(),
+      ],
+    );
+  }
+
+  final String supabaseUrl;
+  final String supabasePublishableKey;
+  final String accessToken;
+  final DateTime expiresAt;
+  final List<String> topics;
+}
+
 class BackendApi {
   BackendApi({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
@@ -136,6 +167,34 @@ class BackendApi {
     return get('/api/me', accessToken: accessToken);
   }
 
+  Future<Map<String, dynamic>> updateProfile({
+    required String accessToken,
+    required Map<String, Object?> profile,
+  }) {
+    return _patch('/api/me', profile, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> deleteAccount({required String accessToken}) {
+    return _delete('/api/me', accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> settings({required String accessToken}) async {
+    final data = await get('/api/settings', accessToken: accessToken);
+    return (data['settings'] as Map<String, dynamic>?) ?? {};
+  }
+
+  Future<Map<String, dynamic>> updateSettings({
+    required String accessToken,
+    required Map<String, Object?> settings,
+  }) async {
+    final data = await _patch(
+      '/api/settings',
+      settings,
+      accessToken: accessToken,
+    );
+    return (data['settings'] as Map<String, dynamic>?) ?? {};
+  }
+
   Future<Map<String, dynamic>> groups({required String accessToken}) {
     return get('/api/groups', accessToken: accessToken);
   }
@@ -147,8 +206,91 @@ class BackendApi {
     return get('/api/groups/$groupId', accessToken: accessToken);
   }
 
+  Future<Map<String, dynamic>> createGroup({
+    required String accessToken,
+    required Map<String, Object?> group,
+  }) {
+    return _post('/api/groups', group, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> updateGroup({
+    required String accessToken,
+    required String groupId,
+    required Map<String, Object?> group,
+  }) {
+    return _patch('/api/groups/$groupId', group, accessToken: accessToken);
+  }
+
+  Future<void> deleteGroup({
+    required String accessToken,
+    required String groupId,
+  }) async {
+    await _delete('/api/groups/$groupId', accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> leaveGroup({
+    required String accessToken,
+    required String groupId,
+    String? transferAdminTo,
+  }) {
+    return _post('/api/groups/$groupId/leave', {
+      'transferAdminTo': transferAdminTo,
+    }, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> addGroupMember({
+    required String accessToken,
+    required String groupId,
+    required String userId,
+    required String role,
+  }) {
+    return _post('/api/groups/$groupId/members', {
+      'userId': userId,
+      'role': role,
+    }, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> updateGroupMember({
+    required String accessToken,
+    required String groupId,
+    required String memberId,
+    String? role,
+    String? status,
+  }) {
+    return _patch('/api/groups/$groupId/members/$memberId', {
+      'role': role,
+      'status': status,
+    }, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> removeGroupMember({
+    required String accessToken,
+    required String groupId,
+    required String memberId,
+  }) {
+    return _delete(
+      '/api/groups/$groupId/members/$memberId',
+      accessToken: accessToken,
+    );
+  }
+
   Future<Map<String, dynamic>> notifications({required String accessToken}) {
     return get('/api/notifications', accessToken: accessToken);
+  }
+
+  Future<void> markAllNotificationsRead({required String accessToken}) async {
+    await _patch('/api/notifications/read-all', {}, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> markNotificationRead({
+    required String accessToken,
+    required String notificationId,
+  }) {
+    return _patch(
+      '/api/notifications/$notificationId/read',
+      {},
+      accessToken: accessToken,
+    );
   }
 
   Future<Map<String, dynamic>> requestConnection({
@@ -225,6 +367,224 @@ class BackendApi {
 
   Future<Map<String, dynamic>> appBootstrap({required String accessToken}) {
     return get('/api/app/bootstrap', accessToken: accessToken);
+  }
+
+  Future<BackendRealtimeConfig> realtimeToken({
+    required String accessToken,
+  }) async {
+    final data = await get('/api/app/realtime-token', accessToken: accessToken);
+    return BackendRealtimeConfig.fromJson(data);
+  }
+
+  Future<Map<String, dynamic>> createExpense({
+    required String accessToken,
+    required String groupId,
+    required Map<String, Object?> expense,
+  }) {
+    return _post(
+      '/api/expenses/group/$groupId',
+      expense,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> updateExpense({
+    required String accessToken,
+    required String groupId,
+    required String expenseId,
+    required Map<String, Object?> expense,
+  }) {
+    return _patch(
+      '/api/expenses/group/$groupId/$expenseId',
+      expense,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> voidExpense({
+    required String accessToken,
+    required String groupId,
+    required String expenseId,
+    required String reason,
+  }) {
+    return _post('/api/expenses/group/$groupId/$expenseId/void', {
+      'reason': reason,
+    }, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> createAdjustment({
+    required String accessToken,
+    required String groupId,
+    required Map<String, Object?> adjustment,
+  }) {
+    return _post(
+      '/api/adjustments/group/$groupId',
+      adjustment,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> createSettlement({
+    required String accessToken,
+    required String groupId,
+    required Map<String, Object?> settlement,
+  }) {
+    return _post(
+      '/api/settlements/group/$groupId',
+      settlement,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> confirmSettlement({
+    required String accessToken,
+    required String groupId,
+    required String settlementId,
+    required Map<String, Object?> payment,
+  }) {
+    return _post(
+      '/api/settlements/group/$groupId/$settlementId/confirm',
+      payment,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> cancelSettlement({
+    required String accessToken,
+    required String groupId,
+    required String settlementId,
+  }) {
+    return _post(
+      '/api/settlements/group/$groupId/$settlementId/cancel',
+      {},
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> sendGift({
+    required String accessToken,
+    required Map<String, Object?> gift,
+  }) {
+    return _post('/api/gifts', gift, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> openGift({
+    required String accessToken,
+    required String giftId,
+  }) {
+    return _post('/api/gifts/$giftId/open', {}, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> createGiftPool({
+    required String accessToken,
+    required String groupId,
+    required Map<String, Object?> giftPool,
+  }) {
+    return _post(
+      '/api/gifts/pools/group/$groupId',
+      giftPool,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> contributeToGiftPool({
+    required String accessToken,
+    required String giftPoolId,
+    required int amountMinor,
+    required String idempotencyKey,
+    String? paymentProvider,
+    String? paymentReference,
+    Map<String, Object?>? rawPayload,
+  }) {
+    return _post('/api/gifts/pools/$giftPoolId/contributions', {
+      'amountMinor': amountMinor,
+      'idempotencyKey': idempotencyKey,
+      'paymentProvider': paymentProvider,
+      'paymentReference': paymentReference,
+      'rawPayload': rawPayload,
+    }, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> cancelGiftPool({
+    required String accessToken,
+    required String groupId,
+    required String giftPoolId,
+  }) {
+    return _post(
+      '/api/gifts/pools/group/$groupId/$giftPoolId/cancel',
+      {},
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> createCommunitySavingsGroup({
+    required String accessToken,
+    required Map<String, Object?> group,
+  }) {
+    return _post('/api/community-savings', group, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> updateCommunitySavingsGroup({
+    required String accessToken,
+    required String savingsGroupId,
+    required Map<String, Object?> group,
+  }) {
+    return _patch(
+      '/api/community-savings/$savingsGroupId',
+      group,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> submitCommunitySavingsContribution({
+    required String accessToken,
+    required String savingsGroupId,
+    required String contributionId,
+    required Map<String, Object?> contribution,
+  }) {
+    return _post(
+      '/api/community-savings/groups/$savingsGroupId/contributions/$contributionId/submit',
+      contribution,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> confirmCommunitySavingsContribution({
+    required String accessToken,
+    required String savingsGroupId,
+    required String contributionId,
+    required Map<String, Object?> contribution,
+  }) {
+    return _post(
+      '/api/community-savings/groups/$savingsGroupId/contributions/$contributionId/confirm',
+      contribution,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> waiveCommunitySavingsContribution({
+    required String accessToken,
+    required String savingsGroupId,
+    required String contributionId,
+    required Map<String, Object?> contribution,
+  }) {
+    return _post(
+      '/api/community-savings/groups/$savingsGroupId/contributions/$contributionId/waive',
+      contribution,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> recordCommunitySavingsExpense({
+    required String accessToken,
+    required String savingsGroupId,
+    required Map<String, Object?> expense,
+  }) {
+    return _post(
+      '/api/community-savings/groups/$savingsGroupId/expenses',
+      expense,
+      accessToken: accessToken,
+    );
   }
 
   Stream<BackendRealtimeEvent> appEvents({required String accessToken}) async* {
@@ -321,6 +681,21 @@ class BackendApi {
   }) async {
     final response = await _send(
       () => _client.delete(_uri(path), headers: _headers(accessToken)),
+    );
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> _patch(
+    String path,
+    Map<String, Object?> body, {
+    String? accessToken,
+  }) async {
+    final response = await _send(
+      () => _client.patch(
+        _uri(path),
+        headers: _headers(accessToken),
+        body: jsonEncode(body),
+      ),
     );
     return _decode(response);
   }

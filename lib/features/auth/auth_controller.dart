@@ -171,8 +171,34 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> updateProfile(UserProfile profile) async {
-    await _writeAuthValue(_activeUserProfileKey, profile.toJsonString());
-    _state = _state.copyWith(activeUser: profile);
+    _assertBackendConfigured();
+    final token = await backendAccessToken();
+    if (token == null) {
+      throw const AuthValidationException(
+        'Sign in again to update your profile.',
+      );
+    }
+    final Map<String, dynamic> data;
+    try {
+      data = await _backendApi.updateProfile(
+        accessToken: token,
+        profile: {
+          'fullName': profile.displayName,
+          'phone': profile.phone,
+          'avatarUrl': profile.avatarUrl,
+          'avatarInitials': profile.initials,
+          'district': profile.district,
+        },
+      );
+    } on BackendApiException catch (error) {
+      throw AuthValidationException(error.message);
+    }
+    final updatedProfile = _profileFromBackendProfile(
+      (data['profile'] as Map<String, dynamic>?) ?? data,
+      fallback: profile,
+    );
+    await _writeAuthValue(_activeUserProfileKey, updatedProfile.toJsonString());
+    _state = _state.copyWith(activeUser: updatedProfile);
     notifyListeners();
   }
 
@@ -195,6 +221,18 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> deleteAccount() async {
+    _assertBackendConfigured();
+    final token = await backendAccessToken();
+    if (token == null) {
+      throw const AuthValidationException(
+        'Sign in again to delete your account.',
+      );
+    }
+    try {
+      await _backendApi.deleteAccount(accessToken: token);
+    } on BackendApiException catch (error) {
+      throw AuthValidationException(error.message);
+    }
     final preferences = await _prefs();
     await preferences.setBool(_hasSeenIntroKey, true);
     await _clearSession(notify: false);
@@ -370,6 +408,32 @@ class AuthController extends ChangeNotifier {
       createdAt:
           DateTime.tryParse(profile['createdAt']?.toString() ?? '') ??
           DateTime.now(),
+    );
+  }
+
+  UserProfile _profileFromBackendProfile(
+    Map<String, dynamic> profile, {
+    required UserProfile fallback,
+  }) {
+    return UserProfile(
+      id: profile['id']?.toString() ?? fallback.id,
+      displayName:
+          profile['displayName']?.toString() ??
+          profile['fullName']?.toString() ??
+          fallback.displayName,
+      phone: profile['phone']?.toString() ?? fallback.phone,
+      esewaId:
+          profile['esewaId']?.toString() ??
+          profile['email']?.toString() ??
+          fallback.esewaId,
+      district: profile['district']?.toString() ?? fallback.district,
+      avatarUrl: profile['avatarUrl']?.toString() ?? fallback.avatarUrl,
+      dateOfBirth:
+          DateTime.tryParse(profile['dateOfBirth']?.toString() ?? '') ??
+          fallback.dateOfBirth,
+      createdAt:
+          DateTime.tryParse(profile['createdAt']?.toString() ?? '') ??
+          fallback.createdAt,
     );
   }
 }

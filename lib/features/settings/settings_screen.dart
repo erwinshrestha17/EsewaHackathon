@@ -276,13 +276,23 @@ class SettingsScreen extends StatelessWidget {
     if (updated == null || !context.mounted) {
       return;
     }
-    await authController.updateProfile(updated);
+    try {
+      await authController.updateProfile(updated);
+    } on AuthValidationException catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
     if (!context.mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile updated on this device.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Profile updated.')));
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
@@ -388,7 +398,17 @@ class SettingsScreen extends StatelessWidget {
     if (confirmed != true || !context.mounted) {
       return;
     }
-    await authController.deleteAccount();
+    try {
+      await authController.deleteAccount();
+    } on AuthValidationException catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
     if (!context.mounted) {
       return;
     }

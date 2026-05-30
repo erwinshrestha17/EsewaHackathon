@@ -1,4 +1,20 @@
 import { db, assertDb } from '../common/db.js';
+import { publishUserEvent } from '../realtime/realtime.service.js';
+
+function settingsDto(row) {
+  if (!row) return {};
+  return {
+    userId: row.user_id,
+    themeMode: row.theme_mode,
+    language: row.language,
+    pushPreviewEnabled: row.push_preview_enabled,
+    confirmBeforePayment: row.confirm_before_payment,
+    biometricEnabled: row.biometric_enabled,
+    notificationPreferences: row.notification_preferences ?? {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 export async function getSettings(userId) {
   const { data, error } = await db()
@@ -7,7 +23,7 @@ export async function getSettings(userId) {
     .eq('user_id', userId)
     .maybeSingle();
   assertDb(error);
-  return data ?? {};
+  return settingsDto(data);
 }
 
 export async function updateSettings(userId, body) {
@@ -29,5 +45,9 @@ export async function updateSettings(userId, body) {
     .select()
     .single();
   assertDb(error);
-  return data;
+  publishUserEvent(userId, {
+    type: 'settings_changed',
+    payload: { operation: 'updated' },
+  });
+  return settingsDto(data);
 }

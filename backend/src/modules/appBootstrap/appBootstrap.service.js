@@ -146,61 +146,252 @@ function mapPayment(row, profileIds) {
   };
 }
 
-export async function appBootstrap(currentUserId) {
-  const tables = await Promise.all([
-    db().from('profiles').select('*').order('created_at', { ascending: true }),
-    db().from('connections').select('*').order('created_at', { ascending: true }),
-    db().from('connection_events').select('*').order('created_at', { ascending: true }),
-    db().from('connection_blocks').select('*').order('created_at', { ascending: true }),
-    db().from('connection_reports').select('*').order('created_at', { ascending: true }),
-    db().from('groups').select('*').eq('is_active', true).order('created_at', { ascending: true }),
-    db().from('group_members').select('*').order('joined_at', { ascending: true }),
-    db().from('expenses').select('*').order('created_at', { ascending: true }),
-    db().from('expense_payers').select('*'),
-    db().from('expense_shares').select('*'),
-    db().from('expense_items').select('*').order('sort_order', { ascending: true }),
-    db().from('expense_item_assignments').select('*'),
-    db().from('payment_transactions').select('*').order('created_at', { ascending: true }),
-    db().from('settlements').select('*').order('created_at', { ascending: true }),
-    db().from('gifts').select('*').order('created_at', { ascending: true }),
-    db().from('gift_pools').select('*').order('created_at', { ascending: true }),
-    db().from('gift_pool_contributions').select('*').order('created_at', { ascending: true }),
-    db().from('community_savings_groups').select('*').eq('is_active', true).order('created_at', {
-      ascending: true,
-    }),
-    db().from('contribution_records').select('*').order('month', { ascending: true }),
-    db().from('community_expenses').select('*').order('expense_date', { ascending: true }),
-    db().from('activity_logs').select('*').order('created_at', { ascending: true }),
-    db().from('notifications').select('*').order('created_at', { ascending: true }),
-  ]);
-  for (const result of tables) {
-    assertDb(result.error);
-  }
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
 
-  const [
-    profiles,
-    connections,
-    connectionEvents,
-    connectionBlocks,
-    connectionReports,
-    groups,
-    groupMembers,
-    expenses,
-    expensePayers,
-    expenseShares,
-    expenseItems,
-    expenseItemAssignments,
-    payments,
-    settlements,
-    gifts,
-    giftPools,
-    giftPoolContributions,
-    communitySavingsGroups,
-    contributionRecords,
-    communityExpenses,
-    activityLogs,
-    notifications,
-  ] = tables.map((result) => result.data ?? []);
+function mergeById(...lists) {
+  const rows = new Map();
+  for (const list of lists) {
+    for (const row of list ?? []) {
+      if (row?.id) rows.set(row.id, row);
+    }
+  }
+  return [...rows.values()];
+}
+
+async function rows(query) {
+  const { data, error } = await query;
+  assertDb(error);
+  return data ?? [];
+}
+
+async function rowsIn(table, column, values, select = '*') {
+  const ids = unique(values);
+  if (ids.length === 0) return [];
+  return rows(db().from(table).select(select).in(column, ids));
+}
+
+export async function appBootstrap(currentUserId) {
+  const connections = await rows(
+    db()
+      .from('connections')
+      .select('*')
+      .or(`requester_id.eq.${currentUserId},recipient_id.eq.${currentUserId}`)
+      .order('created_at', { ascending: true }),
+  );
+  const connectionIds = connections.map((row) => row.id);
+  const currentMemberships = await rows(
+    db()
+      .from('group_members')
+      .select('*')
+      .eq('user_id', currentUserId)
+      .in('status', ['active', 'invited'])
+      .order('joined_at', { ascending: true }),
+  );
+  const membershipGroupIds = currentMemberships.map((row) => row.group_id);
+  const groups = membershipGroupIds.length
+    ? await rows(
+        db()
+          .from('groups')
+          .select('*')
+          .in('id', unique(membershipGroupIds))
+          .eq('is_active', true)
+          .order('created_at', { ascending: true }),
+      )
+    : [];
+  const visibleGroupIds = groups.map((row) => row.id);
+  const groupMembers = visibleGroupIds.length
+    ? await rows(
+        db()
+          .from('group_members')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .order('joined_at', { ascending: true }),
+      )
+    : [];
+
+  const expenses = visibleGroupIds.length
+    ? await rows(
+        db()
+          .from('expenses')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .order('created_at', { ascending: true }),
+      )
+    : [];
+  const expenseIds = expenses.map((row) => row.id);
+  const [connectionEvents, connectionBlocks, connectionReports, expensePayers, expenseShares, expenseItems] =
+    await Promise.all([
+      rowsIn('connection_events', 'connection_id', connectionIds),
+      rowsIn('connection_blocks', 'connection_id', connectionIds),
+      rowsIn('connection_reports', 'connection_id', connectionIds),
+      rowsIn('expense_payers', 'expense_id', expenseIds),
+      rowsIn('expense_shares', 'expense_id', expenseIds),
+      rowsIn('expense_items', 'expense_id', expenseIds),
+    ]);
+  expenseItems.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const expenseItemAssignments = await rowsIn(
+    'expense_item_assignments',
+    'expense_item_id',
+    expenseItems.map((row) => row.id),
+  );
+
+  const settlements = visibleGroupIds.length
+    ? await rows(
+        db()
+          .from('settlements')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .order('created_at', { ascending: true }),
+      )
+    : [];
+  const adjustments = visibleGroupIds.length
+    ? await rows(
+        db()
+          .from('adjustments')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .order('created_at', { ascending: true }),
+      )
+    : [];
+  const adjustmentEntries = await rowsIn(
+    'adjustment_entries',
+    'adjustment_id',
+    adjustments.map((row) => row.id),
+  );
+  const userGifts = await rows(
+    db()
+      .from('gifts')
+      .select('*')
+      .or(`sender_id.eq.${currentUserId},recipient_id.eq.${currentUserId}`)
+      .order('created_at', { ascending: true }),
+  );
+  const groupGifts = visibleGroupIds.length
+    ? await rows(
+        db()
+          .from('gifts')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .order('created_at', { ascending: true }),
+      )
+    : [];
+  const gifts = mergeById(userGifts, groupGifts);
+  const giftPools = visibleGroupIds.length
+    ? await rows(
+        db()
+          .from('gift_pools')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .order('created_at', { ascending: true }),
+      )
+    : [];
+  const giftPoolContributions = await rowsIn(
+    'gift_pool_contributions',
+    'gift_pool_id',
+    giftPools.map((row) => row.id),
+  );
+  giftPoolContributions.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+  const communitySavingsGroups = visibleGroupIds.length
+    ? await rows(
+        db()
+          .from('community_savings_groups')
+          .select('*')
+          .in('group_id', visibleGroupIds)
+          .eq('is_active', true)
+          .order('created_at', { ascending: true }),
+      )
+    : [];
+  const savingsGroupIds = communitySavingsGroups.map((row) => row.id);
+  const [contributionRecords, communityExpenses] = await Promise.all([
+    rowsIn('contribution_records', 'savings_group_id', savingsGroupIds),
+    rowsIn('community_expenses', 'savings_group_id', savingsGroupIds),
+  ]);
+  contributionRecords.sort((a, b) => new Date(a.month) - new Date(b.month));
+  communityExpenses.sort((a, b) => new Date(a.expense_date) - new Date(b.expense_date));
+
+  const visibleEntityIds = unique([
+    ...settlements.map((row) => row.id),
+    ...adjustments.map((row) => row.id),
+    ...gifts.map((row) => row.id),
+    ...giftPoolContributions.map((row) => row.id),
+    ...contributionRecords.map((row) => row.id),
+  ]);
+  const actorPayments = await rows(
+    db()
+      .from('payment_transactions')
+      .select('*')
+      .eq('actor_id', currentUserId)
+      .order('created_at', { ascending: true }),
+  );
+  const entityPayments = await rowsIn('payment_transactions', 'entity_id', visibleEntityIds);
+  const payments = mergeById(actorPayments, entityPayments).sort(
+    (a, b) => new Date(a.created_at) - new Date(b.created_at),
+  );
+
+  const activityLogs = visibleGroupIds.length
+    ? await rows(
+        db()
+          .from('activity_logs')
+          .select('*')
+          .or(`actor_id.eq.${currentUserId},group_id.in.(${visibleGroupIds.join(',')})`)
+          .order('created_at', { ascending: true }),
+      )
+    : await rows(
+        db()
+          .from('activity_logs')
+          .select('*')
+          .eq('actor_id', currentUserId)
+          .order('created_at', { ascending: true }),
+      );
+  const notifications = await rows(
+    db()
+      .from('notifications')
+      .select('*')
+      .eq('user_id', currentUserId)
+      .order('created_at', { ascending: true }),
+  );
+
+  const visibleProfileIds = unique([
+    currentUserId,
+    ...connections.flatMap((row) => [
+      row.requester_id,
+      row.recipient_id,
+      row.user_low_id,
+      row.user_high_id,
+    ]),
+    ...groups.flatMap((row) => [row.created_by, row.disbanded_by]),
+    ...groupMembers.map((row) => row.user_id),
+    ...connectionEvents.map((row) => row.actor_id),
+    ...connectionBlocks.flatMap((row) => [row.blocker_id, row.blocked_user_id]),
+    ...connectionReports.flatMap((row) => [row.reporter_id, row.reported_user_id]),
+    ...expenses.flatMap((row) => [row.payer_id, row.created_by, row.voided_by]),
+    ...expensePayers.map((row) => row.user_id),
+    ...expenseShares.map((row) => row.user_id),
+    ...expenseItemAssignments.map((row) => row.user_id),
+    ...payments.map((row) => row.actor_id),
+    ...settlements.flatMap((row) => [row.payer_id, row.payee_id]),
+    ...adjustments.map((row) => row.created_by),
+    ...adjustmentEntries.map((row) => row.user_id),
+    ...gifts.flatMap((row) => [row.sender_id, row.recipient_id]),
+    ...giftPools.flatMap((row) => [row.created_by, row.recipient_id]),
+    ...giftPoolContributions.map((row) => row.contributor_id),
+    ...communitySavingsGroups.map((row) => row.created_by),
+    ...contributionRecords.flatMap((row) => [row.user_id, row.confirmed_by]),
+    ...communityExpenses.map((row) => row.recorded_by),
+    ...activityLogs.map((row) => row.actor_id),
+    ...notifications.map((row) => row.user_id),
+  ]);
+  const profiles = visibleProfileIds.length
+    ? await rows(
+        db()
+          .from('profiles')
+          .select('*')
+          .in('id', visibleProfileIds)
+          .order('created_at', { ascending: true }),
+      )
+    : [];
 
   const profileIds = new Map(profiles.map((row) => [row.id, fallbackLegacyId(row, 'user')]));
   const groupIds = new Map(groups.map((row) => [row.id, fallbackLegacyId(row, 'group')]));
@@ -271,6 +462,23 @@ export async function appBootstrap(currentUserId) {
       balanceSnapshotHash: row.balance_snapshot_hash,
       paidAt: row.paid_at,
       createdAt: row.created_at,
+    })),
+    adjustments: adjustments.map((row) => ({
+      id: row.id,
+      groupId: groupIds.get(row.group_id) ?? row.group_id,
+      reason: row.reason,
+      adjustmentType: row.adjustment_type,
+      createdBy: profileIds.get(row.created_by) ?? row.created_by,
+      createdAt: row.created_at,
+      reversesSourceType: row.reverses_source_type,
+      reversesSourceId: row.reverses_source_id,
+    })),
+    adjustmentEntries: adjustmentEntries.map((row) => ({
+      id: row.id,
+      adjustmentId: row.adjustment_id,
+      userId: profileIds.get(row.user_id) ?? row.user_id,
+      amountMinor: row.amount_minor,
+      direction: row.direction,
     })),
     gifts: gifts.map((row) => ({
       id: row.id,

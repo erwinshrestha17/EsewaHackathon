@@ -7,6 +7,7 @@ import { redisDelete, redisGetJson, redisSetJson } from '../../config/redis.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { assertDb, db, maybeSingle } from '../common/db.js';
 import { profileDto } from '../common/mappers.js';
+import { publishUserEvent } from '../realtime/realtime.service.js';
 import { sendSignupOtp, verifySignupOtp } from './otp.service.js';
 
 const mpinIterations = 120000;
@@ -298,6 +299,51 @@ export async function updateCurrentProfile(userId, body) {
     .select()
     .single();
   assertDb(error);
+  publishUserEvent(userId, {
+    type: 'profile_changed',
+    payload: { operation: 'updated' },
+  });
+  return profileDto(data);
+}
+
+export async function deleteCurrentProfile(userId) {
+  const pending = await maybeSingle(
+    db()
+      .from('settlements')
+      .select('id')
+      .or(`payer_id.eq.${userId},payee_id.eq.${userId}`)
+      .eq('status', 'pending')
+      .limit(1),
+  );
+  if (pending) {
+    throw new ApiError(409, 'Settle pending balances before deleting your account.');
+  }
+
+  await logoutAllSessions(userId);
+  const { error: credentialError } = await db()
+    .from('app_user_credentials')
+    .delete()
+    .eq('user_id', userId);
+  assertDb(credentialError);
+  const { data, error } = await db()
+    .from('profiles')
+    .update({
+      full_name: 'Deleted Member',
+      phone: null,
+      email: null,
+      avatar_url: null,
+      avatar_initials: 'DM',
+      district: null,
+      privacy_mode: 'qr_invite_only',
+    })
+    .eq('id', userId)
+    .select()
+    .single();
+  assertDb(error);
+  publishUserEvent(userId, {
+    type: 'profile_changed',
+    payload: { operation: 'deleted' },
+  });
   return profileDto(data);
 }
 

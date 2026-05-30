@@ -3,6 +3,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import { logActivity, createNotification } from '../common/audit.js';
 import { db, assertDb, findByIdOrLegacy, isUuid, single } from '../common/db.js';
 import { groupDto, memberDto } from '../common/mappers.js';
+import { publishGroupEvent } from '../realtime/realtime.service.js';
 
 const groupKinds = ['expense', 'dhukuti'];
 const memberRoles = ['admin', 'member', 'treasurer'];
@@ -50,6 +51,38 @@ export async function createGroup(userId, body) {
   });
   assertDb(memberError);
 
+  const memberIds = [
+    ...new Set(
+      (Array.isArray(body.memberIds) ? body.memberIds : [])
+        .map((id) => id?.toString())
+        .filter(Boolean)
+        .filter((id) => id !== userId),
+    ),
+  ];
+  if (memberIds.length > 0) {
+    const { error: invitedError } = await db().from('group_members').upsert(
+      memberIds.map((memberId) => ({
+        group_id: group.id,
+        user_id: memberId,
+        role: 'member',
+        status: 'active',
+      })),
+      { onConflict: 'group_id,user_id' },
+    );
+    assertDb(invitedError);
+    await Promise.all(
+      memberIds.map((memberId) =>
+        createNotification({
+          userId: memberId,
+          title: 'Added to group',
+          body: `You were added to ${group.name}.`,
+          type: 'member_added',
+          metadata: { groupId: group.id },
+        }),
+      ),
+    );
+  }
+
   await logActivity({
     groupId: group.id,
     actorId: userId,
@@ -58,6 +91,10 @@ export async function createGroup(userId, body) {
     entityId: group.id,
     title: 'Group created',
     body: `${group.name} was created.`,
+  });
+  await publishGroupEvent(group.id, {
+    type: 'group_changed',
+    payload: { operation: 'created', actorId: userId },
   });
   return groupDto(group);
 }
@@ -102,6 +139,10 @@ export async function updateGroup(group, userId, body) {
     title: 'Group updated',
     body: `${data.name} settings were updated.`,
   });
+  await publishGroupEvent(group.id, {
+    type: 'group_changed',
+    payload: { operation: 'updated', actorId: userId },
+  });
   return groupDto(data);
 }
 
@@ -119,6 +160,10 @@ export async function deactivateGroup(group, userId) {
     entityId: group.id,
     title: 'Group archived',
     body: `${group.name} was archived.`,
+  });
+  await publishGroupEvent(group.id, {
+    type: 'group_changed',
+    payload: { operation: 'deleted', actorId: userId },
   });
 }
 
@@ -170,6 +215,10 @@ export async function addMember(group, actorId, body) {
     title: 'Member added',
     body: `${user.full_name} was added to ${group.name}.`,
   });
+  await publishGroupEvent(group.id, {
+    type: 'group_changed',
+    payload: { operation: 'member_added', actorId, memberId: data.id },
+  });
   return memberDto(data);
 }
 
@@ -196,6 +245,65 @@ export async function updateMember(group, actorId, memberId, body) {
     entityId: data.id,
     title: 'Member updated',
     body: 'A group member record was updated.',
+  });
+  await publishGroupEvent(group.id, {
+    type: 'group_changed',
+    payload: { operation: 'member_updated', actorId, memberId: data.id },
+  });
+  return memberDto(data);
+}
+
+export async function leaveGroup(group, userId, body = {}) {
+  const { data: activeMembers, error: activeError } = await db()
+    .from('group_members')
+    .select('*')
+    .eq('group_id', group.id)
+    .eq('status', 'active');
+  assertDb(activeError);
+  const current = activeMembers.find((member) => member.user_id === userId);
+  if (!current) {
+    throw new ApiError(404, 'Group membership not found.');
+  }
+  const otherAdmins = activeMembers.filter(
+    (member) => member.user_id !== userId && member.role === 'admin',
+  );
+  if (current.role === 'admin' && otherAdmins.length === 0) {
+    if (!body.transferAdminTo) {
+      throw new ApiError(409, 'Choose another active member as admin before leaving.');
+    }
+    const transferMember = activeMembers.find(
+      (member) => member.user_id === body.transferAdminTo || member.id === body.transferAdminTo,
+    );
+    if (!transferMember || transferMember.user_id === userId) {
+      throw new ApiError(400, 'Admin transfer member is not active in this group.');
+    }
+    const { error: transferError } = await db()
+      .from('group_members')
+      .update({ role: 'admin' })
+      .eq('group_id', group.id)
+      .eq('id', transferMember.id);
+    assertDb(transferError);
+  }
+  const { data, error } = await db()
+    .from('group_members')
+    .update({ status: 'removed', removed_at: new Date().toISOString() })
+    .eq('group_id', group.id)
+    .eq('id', current.id)
+    .select('*, profiles(*)')
+    .single();
+  assertDb(error);
+  await logActivity({
+    groupId: group.id,
+    actorId: userId,
+    action: 'member_left',
+    entityType: 'group_member',
+    entityId: data.id,
+    title: 'Member left',
+    body: 'A member left the group.',
+  });
+  await publishGroupEvent(group.id, {
+    type: 'group_changed',
+    payload: { operation: 'member_left', actorId: userId, memberId: data.id },
   });
   return memberDto(data);
 }

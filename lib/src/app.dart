@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show PointerDeviceKind;
@@ -20,6 +22,7 @@ import '../features/settings/settings_controller.dart';
 import '../features/settings/settings_models.dart';
 import '../features/settings/settings_screen.dart';
 import '../shared/api/backend_api.dart';
+import '../shared/api/realtime_sync_service.dart';
 import '../shared/design_system/app_colors.dart';
 import '../shared/design_system/app_components.dart' as ds;
 import '../shared/design_system/app_spacing.dart';
@@ -50,6 +53,38 @@ class StoreScope extends InheritedNotifier<AppStore> {
     assert(scope != null, 'No StoreScope found in context.');
     return scope!.notifier!;
   }
+}
+
+const _backendRequiredMessage =
+    'Backend API is required for signed-in actions. Start the API server and set BACKEND_API_BASE_URL.';
+
+Future<String> _requireBackendAccessToken(
+  BuildContext context, {
+  BackendApi? api,
+}) async {
+  final backendApi = api ?? BackendApi();
+  if (!backendApi.isConfigured) {
+    throw const BackendApiException(_backendRequiredMessage);
+  }
+  final auth = AuthScope.of(context);
+  final token = await auth.backendAccessToken();
+  if (token == null) {
+    throw const BackendApiException('Sign in again to continue.');
+  }
+  return token;
+}
+
+Future<void> _reloadBackendProjection(
+  BuildContext context, {
+  BackendApi? api,
+  String? accessToken,
+}) async {
+  final backendApi = api ?? BackendApi();
+  final store = StoreScope.of(context);
+  final token =
+      accessToken ?? await _requireBackendAccessToken(context, api: backendApi);
+  final snapshot = await backendApi.appBootstrap(accessToken: token);
+  store.loadBackendSnapshot(snapshot);
 }
 
 class SajhaKharchaApp extends StatefulWidget {
@@ -198,6 +233,113 @@ List<TransactionParticipant> _transactionParticipantsFromShares(
   ];
 }
 
+Map<String, Object?> _expensePayload({
+  required String title,
+  required int totalMinor,
+  required Map<String, int> payerAmounts,
+  required String category,
+  required SplitMode splitMode,
+  required List<String> participantIds,
+  required Map<String, int> shareAmounts,
+  required String note,
+  List<ParsedReceiptItem> receiptItems = const <ParsedReceiptItem>[],
+  Map<int, String>? itemAssignments,
+  Map<int, ItemSplitInput>? itemSplitInputs,
+  int taxMinor = 0,
+  int serviceChargeMinor = 0,
+  int discountMinor = 0,
+  int roundingAdjustmentMinor = 0,
+}) {
+  return {
+    'title': title,
+    'totalMinor': totalMinor,
+    'subtotalMinor': receiptItems.isEmpty
+        ? totalMinor - taxMinor - serviceChargeMinor + discountMinor
+        : receiptItems.fold<int>(0, (sum, item) => sum + item.amountMinor),
+    'payerId': payerAmounts.keys.first,
+    'payers': [
+      for (final entry in payerAmounts.entries)
+        if (entry.value > 0) {'userId': entry.key, 'amountMinor': entry.value},
+    ],
+    'category': category,
+    'splitMode': splitMode.name,
+    'participantIds': participantIds,
+    'equalAmounts': splitMode == SplitMode.equal ? shareAmounts : null,
+    'customAmounts': splitMode == SplitMode.equal ? null : shareAmounts,
+    'note': note,
+    'billTaxMinor': taxMinor,
+    'billServiceChargeMinor': serviceChargeMinor,
+    'billDiscountMinor': discountMinor,
+    'billRoundingAdjustmentMinor': roundingAdjustmentMinor,
+    'items': _expenseItemPayloads(
+      receiptItems: receiptItems,
+      participantIds: participantIds,
+      payerAmounts: payerAmounts,
+      itemAssignments: itemAssignments,
+      itemSplitInputs: itemSplitInputs,
+    ),
+  };
+}
+
+List<Map<String, Object?>> _expenseItemPayloads({
+  required List<ParsedReceiptItem> receiptItems,
+  required List<String> participantIds,
+  required Map<String, int> payerAmounts,
+  Map<int, String>? itemAssignments,
+  Map<int, ItemSplitInput>? itemSplitInputs,
+}) {
+  return [
+    for (var itemIndex = 0; itemIndex < receiptItems.length; itemIndex++)
+      _expenseItemPayload(
+        receiptItems[itemIndex],
+        itemIndex,
+        participantIds: participantIds,
+        payerAmounts: payerAmounts,
+        itemAssignments: itemAssignments,
+        itemSplitInputs: itemSplitInputs,
+      ),
+  ];
+}
+
+Map<String, Object?> _expenseItemPayload(
+  ParsedReceiptItem item,
+  int itemIndex, {
+  required List<String> participantIds,
+  required Map<String, int> payerAmounts,
+  Map<int, String>? itemAssignments,
+  Map<int, ItemSplitInput>? itemSplitInputs,
+}) {
+  final splitInput = itemSplitInputs?[itemIndex];
+  final assignment = itemAssignments?[itemIndex];
+  final assignedUsers =
+      splitInput?.userIds ??
+      (assignment == null || assignment == 'all'
+          ? participantIds
+          : <String>[assignment]);
+  final safeUsers = assignedUsers.isEmpty ? participantIds : assignedUsers;
+  final units = splitInput?.shareUnits;
+  final amounts = units == null
+      ? equalShares(item.amountMinor, safeUsers, payerAmounts: payerAmounts)
+      : unitShares(item.amountMinor, [
+          for (final userId in safeUsers) units[userId] ?? 1,
+        ]);
+  return {
+    'label': item.label,
+    'quantity': item.quantity,
+    'unitAmountMinor': item.unitAmountMinor,
+    'totalAmountMinor': item.amountMinor,
+    'ocrConfidence': item.confidence,
+    'assignments': [
+      for (var index = 0; index < safeUsers.length; index++)
+        {
+          'userId': safeUsers[index],
+          'assignedAmountMinor': amounts[index],
+          'splitUnits': units?[safeUsers[index]] ?? 1,
+        },
+    ],
+  };
+}
+
 class _SettlementOption {
   const _SettlementOption({required this.group, required this.suggestion});
 
@@ -210,18 +352,49 @@ Future<TransactionResult?> _openSettlementConfirmation(
   AppStore store,
   SettlementSuggestion suggestion,
 ) {
+  final backendApi = BackendApi();
   final data = _settlementConfirmationData(store, suggestion);
   return openTransactionConfirmation(context, data, () {
     return confirmWithEsewa(
       context: context,
       data: data,
       onSuccess: (receipt) async {
-        final settlement = store.createOrReuseSettlement(suggestion);
-        store.confirmSettlement(
-          settlement.id,
-          paymentProvider: 'esewa',
-          paymentReference: receipt.reference,
-          rawPayload: receipt.rawPayload,
+        final token = await _requireBackendAccessToken(
+          context,
+          api: backendApi,
+        );
+        final settlementId =
+            suggestion.pendingSettlementId ??
+            ((await backendApi.createSettlement(
+                      accessToken: token,
+                      groupId: suggestion.groupId,
+                      settlement: {
+                        'payerId': suggestion.payerId,
+                        'payeeId': suggestion.payeeId,
+                        'amountMinor': suggestion.amountMinor,
+                        'operationType': 'esewa_settlement',
+                        'idempotencyKey':
+                            'esewa-${suggestion.groupId}-${suggestion.payerId}-${suggestion.payeeId}-${suggestion.amountMinor}',
+                        'balanceSnapshotHash':
+                            '${suggestion.groupId}:${suggestion.amountMinor}',
+                      },
+                    ))['settlement']
+                    as Map<String, dynamic>)['id']
+                .toString();
+        await backendApi.confirmSettlement(
+          accessToken: token,
+          groupId: suggestion.groupId,
+          settlementId: settlementId,
+          payment: {
+            'paymentProvider': 'esewa',
+            'paymentReference': receipt.reference,
+            'rawPayload': receipt.rawPayload,
+          },
+        );
+        await _reloadBackendProjection(
+          context,
+          api: backendApi,
+          accessToken: token,
         );
         return _successResult(
           title: 'Payment Successful',
@@ -266,21 +439,37 @@ Future<TransactionResult?> _openDhukutiContributionConfirmation(
   DhukutiPool pool,
   DhukutiContribution contribution,
 ) {
+  final backendApi = BackendApi();
   final data = _dhukutiContributionConfirmationData(store, pool, contribution);
   return openTransactionConfirmation(context, data, () {
     return confirmWithEsewa(
       context: context,
       data: data,
       onSuccess: (receipt) async {
-        store.payDhukutiContribution(
-          contribution.id,
-          paymentProvider: 'esewa',
-          paymentReference: receipt.reference,
-          rawPayload: receipt.rawPayload,
+        final token = await _requireBackendAccessToken(
+          context,
+          api: backendApi,
+        );
+        await backendApi.submitCommunitySavingsContribution(
+          accessToken: token,
+          savingsGroupId: pool.id,
+          contributionId: contribution.id,
+          contribution: {
+            'amountPaid': contribution.amountMinor,
+            'paymentMethod': 'esewa',
+            'referenceNumber': receipt.reference,
+            'note': 'Submitted via eSewa',
+          },
+        );
+        await _reloadBackendProjection(
+          context,
+          api: backendApi,
+          accessToken: token,
         );
         return _successResult(
-          title: 'Contribution Paid',
-          message: 'Your community savings contribution was paid via eSewa.',
+          title: 'Contribution Submitted',
+          message:
+              'Your community savings contribution was submitted for admin confirmation.',
           amount: contribution.amountMinor,
           reference: receipt.reference,
         );
@@ -412,11 +601,44 @@ Future<void> showExternalSettlementRequestDialog(
   if (confirmed != true || !context.mounted) {
     return;
   }
-  final settlement = store.createOrReuseExternalSettlement(suggestion);
-  showSnack(
-    context,
-    'Approval request sent to ${store.nameOf(settlement.payeeId)}.',
-  );
+  final backendApi = BackendApi();
+  try {
+    final token = await _requireBackendAccessToken(context, api: backendApi);
+    await backendApi.createSettlement(
+      accessToken: token,
+      groupId: suggestion.groupId,
+      settlement: {
+        'payerId': suggestion.payerId,
+        'payeeId': suggestion.payeeId,
+        'amountMinor': suggestion.amountMinor,
+        'operationType': 'external_settlement',
+        'idempotencyKey':
+            'external-${suggestion.groupId}-${suggestion.payerId}-${suggestion.payeeId}-${suggestion.amountMinor}',
+        'balanceSnapshotHash':
+            '${suggestion.groupId}:${suggestion.amountMinor}',
+      },
+    );
+    await _reloadBackendProjection(
+      context,
+      api: backendApi,
+      accessToken: token,
+    );
+    if (context.mounted) {
+      showSnack(context, 'Approval request sent to $payeeName.');
+    }
+  } on BackendApiException catch (error) {
+    if (store.allowLocalMutations) {
+      final settlement = store.createOrReuseExternalSettlement(suggestion);
+      showSnack(
+        context,
+        'Approval request sent to ${store.nameOf(settlement.payeeId)}.',
+      );
+      return;
+    }
+    if (context.mounted) {
+      showSnack(context, error.message);
+    }
+  }
 }
 
 Future<void> showApproveExternalSettlementDialog(
@@ -452,11 +674,44 @@ Future<void> showApproveExternalSettlementDialog(
   if (confirmed != true || !context.mounted) {
     return;
   }
-  final error = store.approveExternalSettlement(settlementId);
-  showSnack(
-    context,
-    error ?? 'External settlement approved. Group balances are updated.',
-  );
+  final backendApi = BackendApi();
+  try {
+    final token = await _requireBackendAccessToken(context, api: backendApi);
+    await backendApi.confirmSettlement(
+      accessToken: token,
+      groupId: settlement.groupId,
+      settlementId: settlementId,
+      payment: {
+        'paymentProvider': 'external',
+        'paymentReference': 'external-$settlementId',
+        'rawPayload': {'approvedBy': store.currentUserId},
+      },
+    );
+    await _reloadBackendProjection(
+      context,
+      api: backendApi,
+      accessToken: token,
+    );
+    if (context.mounted) {
+      showSnack(
+        context,
+        'External settlement approved. Group balances are updated.',
+      );
+    }
+  } on BackendApiException catch (error) {
+    if (store.allowLocalMutations) {
+      final localError = store.approveExternalSettlement(settlementId);
+      showSnack(
+        context,
+        localError ??
+            'External settlement approved. Group balances are updated.',
+      );
+      return;
+    }
+    if (context.mounted) {
+      showSnack(context, error.message);
+    }
+  }
 }
 
 class SajhaKharchaShell extends StatefulWidget {
@@ -475,13 +730,14 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   AuthController? _authController;
   AppStore? _store;
   final _backendApi = BackendApi();
+  final _backendRealtimeService = BackendRealtimeSyncService();
   var _loadingBackendSnapshot = false;
   var _initializingAuth = false;
+  var _applyingBackendSettings = false;
   String? _loadedBackendSnapshotToken;
   StreamSubscription<BackendRealtimeEvent>? _backendRealtimeSubscription;
-  Timer? _backendRealtimeReconnectTimer;
-  String? _backendRealtimeToken;
   var _startingBackendRealtime = false;
+  Timer? _settingsSaveTimer;
   static const _incomingConnectionBannerTimeout = Duration(seconds: 8);
   Timer? _incomingConnectionBannerTimer;
   String? _visibleIncomingConnectionId;
@@ -519,8 +775,9 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   @override
   void dispose() {
     _incomingConnectionBannerTimer?.cancel();
-    _backendRealtimeReconnectTimer?.cancel();
+    _settingsSaveTimer?.cancel();
     unawaited(_backendRealtimeSubscription?.cancel());
+    unawaited(_backendRealtimeService.dispose());
     _authController?.removeListener(_handleAuthChanged);
     _settingsController.removeListener(_handleSettingsChanged);
     super.dispose();
@@ -761,6 +1018,9 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     if (mounted) {
       setState(() {});
     }
+    if (!_applyingBackendSettings) {
+      _scheduleBackendSettingsSave();
+    }
   }
 
   void _handleAuthChanged() {
@@ -832,10 +1092,17 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     _loadingBackendSnapshot = true;
     try {
       final snapshot = await _backendApi.appBootstrap(accessToken: token);
+      final settings = await _backendApi.settings(accessToken: token);
       if (!mounted) {
         return;
       }
       store.loadBackendSnapshot(snapshot);
+      _applyingBackendSettings = true;
+      try {
+        _settingsController.applyBackendSettings(settings);
+      } finally {
+        _applyingBackendSettings = false;
+      }
       _loadedBackendSnapshotToken = token;
     } on BackendApiException catch (error) {
       debugPrint('Backend bootstrap failed: ${error.message}');
@@ -853,86 +1120,93 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     }
     _startingBackendRealtime = true;
     try {
-      final token = await authController.backendAccessToken();
-      if (token == null || !mounted) {
-        return;
-      }
-      if (!force &&
-          _backendRealtimeToken == token &&
-          _backendRealtimeSubscription != null) {
+      if (!force && _backendRealtimeSubscription != null) {
         return;
       }
       await _backendRealtimeSubscription?.cancel();
-      _backendRealtimeReconnectTimer?.cancel();
-      _backendRealtimeToken = token;
-      _backendRealtimeSubscription = _backendApi
-          .appEvents(accessToken: token)
-          .listen(
-            _handleBackendRealtimeEvent,
-            onError: (Object error) {
-              debugPrint('Backend realtime stream failed: $error');
-              _scheduleBackendRealtimeReconnect();
-            },
-            onDone: _scheduleBackendRealtimeReconnect,
-          );
+      _backendRealtimeSubscription = _backendRealtimeService.events.listen(
+        _handleBackendRealtimeEvent,
+        onError: (Object error) {
+          debugPrint('Backend realtime stream failed: $error');
+        },
+      );
+      await _backendRealtimeService.start(
+        accessTokenProvider: authController.backendAccessToken,
+      );
     } finally {
       _startingBackendRealtime = false;
     }
   }
 
   Future<void> _stopBackendRealtime() async {
-    _backendRealtimeReconnectTimer?.cancel();
-    _backendRealtimeReconnectTimer = null;
-    _backendRealtimeToken = null;
     final subscription = _backendRealtimeSubscription;
     _backendRealtimeSubscription = null;
     await subscription?.cancel();
+    await _backendRealtimeService.stop();
   }
 
   void _handleBackendRealtimeEvent(BackendRealtimeEvent event) {
-    if (!mounted || event.type == 'connected') {
+    if (!mounted) {
       return;
     }
-    if (event.type == 'connection_changed') {
-      unawaited(_loadBackendSnapshot(force: true));
-    }
+    unawaited(_loadBackendSnapshot(force: true));
   }
 
-  void _scheduleBackendRealtimeReconnect() {
-    if (!mounted || !_backendApi.isConfigured) {
+  void _scheduleBackendSettingsSave() {
+    if (!_backendApi.isConfigured ||
+        _authController?.state.isLoggedIn != true) {
       return;
     }
-    _backendRealtimeSubscription = null;
-    _backendRealtimeReconnectTimer?.cancel();
-    _backendRealtimeReconnectTimer = Timer(const Duration(seconds: 2), () {
-      unawaited(_startBackendRealtime(force: true));
-    });
+    _settingsSaveTimer?.cancel();
+    _settingsSaveTimer = Timer(
+      const Duration(milliseconds: 600),
+      () => unawaited(_saveBackendSettings()),
+    );
+  }
+
+  Future<void> _saveBackendSettings() async {
+    final authController = _authController;
+    if (!_backendApi.isConfigured || authController == null) {
+      return;
+    }
+    final token = await authController.backendAccessToken();
+    if (token == null) {
+      return;
+    }
+    try {
+      await _backendApi.updateSettings(
+        accessToken: token,
+        settings: _settingsController.toBackendPayload(),
+      );
+    } on BackendApiException catch (error) {
+      debugPrint('Backend settings save failed: ${error.message}');
+    }
   }
 
   Future<String> _requestConnection(String targetUserId) async {
     final store = _store;
-    final authController = _authController;
     if (store == null) {
       throw const BackendApiException('Store is not ready yet.');
     }
     final target = store.userById(targetUserId);
-    if (_backendApi.isConfigured && authController != null) {
-      final token = await authController.backendAccessToken();
-      if (token != null) {
-        await _backendApi.requestConnection(
-          accessToken: token,
-          targetUserId: targetUserId,
-        );
-        await _loadBackendSnapshot(force: true);
-        return 'Request sent to ${target.displayName}.';
+    try {
+      final token = await _requireBackendAccessToken(context, api: _backendApi);
+      await _backendApi.requestConnection(
+        accessToken: token,
+        targetUserId: targetUserId,
+      );
+      await _loadBackendSnapshot(force: true);
+      return 'Request sent to ${target.displayName}.';
+    } on BackendApiException {
+      if (!store.allowLocalMutations) {
+        rethrow;
       }
+      return store.sendConnectionRequest(targetUserId);
     }
-    return store.sendConnectionRequest(targetUserId);
   }
 
   Future<String> _approveConnection(String connectionId) async {
     final store = _store;
-    final authController = _authController;
     if (store == null) {
       throw const BackendApiException('Store is not ready yet.');
     }
@@ -940,24 +1214,24 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
       (item) => item.id == connectionId,
     );
     final other = store.userById(connection.otherUserId(store.currentUserId));
-    if (_backendApi.isConfigured && authController != null) {
-      final token = await authController.backendAccessToken();
-      if (token != null) {
-        await _backendApi.approveConnection(
-          accessToken: token,
-          connectionId: connectionId,
-        );
-        await _loadBackendSnapshot(force: true);
-        return '${other.displayName} is now connected.';
+    try {
+      final token = await _requireBackendAccessToken(context, api: _backendApi);
+      await _backendApi.approveConnection(
+        accessToken: token,
+        connectionId: connectionId,
+      );
+      await _loadBackendSnapshot(force: true);
+    } on BackendApiException {
+      if (!store.allowLocalMutations) {
+        rethrow;
       }
+      store.approveConnection(connectionId);
     }
-    store.approveConnection(connectionId);
     return '${other.displayName} is now connected.';
   }
 
   Future<String> _declineConnection(String connectionId) async {
     final store = _store;
-    final authController = _authController;
     if (store == null) {
       throw const BackendApiException('Store is not ready yet.');
     }
@@ -965,24 +1239,24 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
       (item) => item.id == connectionId,
     );
     final other = store.userById(connection.otherUserId(store.currentUserId));
-    if (_backendApi.isConfigured && authController != null) {
-      final token = await authController.backendAccessToken();
-      if (token != null) {
-        await _backendApi.declineConnection(
-          accessToken: token,
-          connectionId: connectionId,
-        );
-        await _loadBackendSnapshot(force: true);
-        return 'Request from ${other.displayName} declined.';
+    try {
+      final token = await _requireBackendAccessToken(context, api: _backendApi);
+      await _backendApi.declineConnection(
+        accessToken: token,
+        connectionId: connectionId,
+      );
+      await _loadBackendSnapshot(force: true);
+    } on BackendApiException {
+      if (!store.allowLocalMutations) {
+        rethrow;
       }
+      store.declineConnection(connectionId);
     }
-    store.declineConnection(connectionId);
     return 'Request from ${other.displayName} declined.';
   }
 
   Future<String> _removeConnection(String connectionId) async {
     final store = _store;
-    final authController = _authController;
     if (store == null) {
       throw const BackendApiException('Store is not ready yet.');
     }
@@ -990,18 +1264,19 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
       (item) => item.id == connectionId,
     );
     final other = store.userById(connection.otherUserId(store.currentUserId));
-    if (_backendApi.isConfigured && authController != null) {
-      final token = await authController.backendAccessToken();
-      if (token != null) {
-        await _backendApi.removeConnection(
-          accessToken: token,
-          connectionId: connectionId,
-        );
-        await _loadBackendSnapshot(force: true);
-        return '${other.displayName} removed from active connections.';
+    try {
+      final token = await _requireBackendAccessToken(context, api: _backendApi);
+      await _backendApi.removeConnection(
+        accessToken: token,
+        connectionId: connectionId,
+      );
+      await _loadBackendSnapshot(force: true);
+    } on BackendApiException {
+      if (!store.allowLocalMutations) {
+        rethrow;
       }
+      store.removeConnection(connectionId);
     }
-    store.removeConnection(connectionId);
     return '${other.displayName} removed from active connections.';
   }
 
@@ -1010,24 +1285,24 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     String blockedUserId,
   ) async {
     final store = _store;
-    final authController = _authController;
     if (store == null) {
       throw const BackendApiException('Store is not ready yet.');
     }
     final blocked = store.userById(blockedUserId);
-    if (_backendApi.isConfigured && authController != null) {
-      final token = await authController.backendAccessToken();
-      if (token != null) {
-        await _backendApi.blockConnection(
-          accessToken: token,
-          connectionId: connectionId,
-          blockedUserId: blockedUserId,
-        );
-        await _loadBackendSnapshot(force: true);
-        return '${blocked.displayName} blocked.';
+    try {
+      final token = await _requireBackendAccessToken(context, api: _backendApi);
+      await _backendApi.blockConnection(
+        accessToken: token,
+        connectionId: connectionId,
+        blockedUserId: blockedUserId,
+      );
+      await _loadBackendSnapshot(force: true);
+    } on BackendApiException {
+      if (!store.allowLocalMutations) {
+        rethrow;
       }
+      store.blockConnection(connectionId, blockedUserId);
     }
-    store.blockConnection(connectionId, blockedUserId);
     return '${blocked.displayName} blocked.';
   }
 
@@ -1036,24 +1311,24 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     String blockedUserId,
   ) async {
     final store = _store;
-    final authController = _authController;
     if (store == null) {
       throw const BackendApiException('Store is not ready yet.');
     }
     final blocked = store.userById(blockedUserId);
-    if (_backendApi.isConfigured && authController != null) {
-      final token = await authController.backendAccessToken();
-      if (token != null) {
-        await _backendApi.unblockConnection(
-          accessToken: token,
-          connectionId: connectionId,
-          blockedUserId: blockedUserId,
-        );
-        await _loadBackendSnapshot(force: true);
-        return '${blocked.displayName} unblocked.';
+    try {
+      final token = await _requireBackendAccessToken(context, api: _backendApi);
+      await _backendApi.unblockConnection(
+        accessToken: token,
+        connectionId: connectionId,
+        blockedUserId: blockedUserId,
+      );
+      await _loadBackendSnapshot(force: true);
+    } on BackendApiException {
+      if (!store.allowLocalMutations) {
+        rethrow;
       }
+      store.unblockConnection(connectionId, blockedUserId);
     }
-    store.unblockConnection(connectionId, blockedUserId);
     return '${blocked.displayName} unblocked.';
   }
 
@@ -1064,32 +1339,33 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     required String note,
   }) async {
     final store = _store;
-    final authController = _authController;
     if (store == null) {
       throw const BackendApiException('Store is not ready yet.');
     }
     final reported = store.userById(reportedUserId);
-    if (_backendApi.isConfigured && authController != null) {
-      final token = await authController.backendAccessToken();
-      if (token != null) {
-        await _backendApi.reportConnection(
-          accessToken: token,
-          connectionId: connectionId,
-          reportedUserId: reportedUserId,
-          reasonCode: reason,
-          note: note,
-        );
-        await _loadBackendSnapshot(force: true);
-        return 'Report submitted for ${reported.displayName}.';
+    try {
+      final token = await _requireBackendAccessToken(context, api: _backendApi);
+      await _backendApi.reportConnection(
+        accessToken: token,
+        connectionId: connectionId,
+        reportedUserId: reportedUserId,
+        reasonCode: reason,
+        note: note,
+      );
+      await _loadBackendSnapshot(force: true);
+      return 'Report submitted for ${reported.displayName}.';
+    } on BackendApiException {
+      if (!store.allowLocalMutations) {
+        rethrow;
       }
+      final error = store.reportConnection(
+        connectionId,
+        reportedUserId,
+        reason,
+        note: note,
+      );
+      return error ?? 'Report submitted for ${reported.displayName}.';
     }
-    final error = store.reportConnection(
-      connectionId,
-      reportedUserId,
-      reason,
-      note: note,
-    );
-    return error ?? 'Report submitted for ${reported.displayName}.';
   }
 
   Connection? _incomingConnection(AppStore store) {
@@ -3017,17 +3293,33 @@ class GroupDetail extends StatelessWidget {
                               label: const Text('Edit'),
                             ),
                             TextButton.icon(
-                              onPressed: () {
-                                final ok = store.voidExpense(
-                                  expense.id,
-                                  'Demo void requested',
-                                );
-                                showSnack(
-                                  context,
-                                  ok
-                                      ? 'Expense voided.'
-                                      : 'Expense is locked; use adjustment.',
-                                );
+                              onPressed: () async {
+                                final backendApi = BackendApi();
+                                try {
+                                  final token =
+                                      await _requireBackendAccessToken(
+                                        context,
+                                        api: backendApi,
+                                      );
+                                  await backendApi.voidExpense(
+                                    accessToken: token,
+                                    groupId: expense.groupId,
+                                    expenseId: expense.id,
+                                    reason: 'Void requested',
+                                  );
+                                  await _reloadBackendProjection(
+                                    context,
+                                    api: backendApi,
+                                    accessToken: token,
+                                  );
+                                  if (context.mounted) {
+                                    showSnack(context, 'Expense voided.');
+                                  }
+                                } on BackendApiException catch (error) {
+                                  if (context.mounted) {
+                                    showSnack(context, error.message);
+                                  }
+                                }
                               },
                               icon: const Icon(Icons.cancel_outlined),
                               label: const Text('Void'),
@@ -3233,16 +3525,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       onTap: canOpen
-          ? () {
-              if (store.openGift(gift.id)) {
-                showGiftOpenedCelebration(
-                  context,
-                  gift,
-                  fromName: senderName,
-                  toName: recipientName,
-                );
-              }
-            }
+          ? () => unawaited(_openGift(context, gift, senderName, recipientName))
           : null,
       leading: CircleAvatar(
         backgroundColor: theme.from.withValues(alpha: 0.12),
@@ -3270,6 +3553,36 @@ class _GiftsScreenState extends State<GiftsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _openGift(
+    BuildContext context,
+    GiftCard gift,
+    String senderName,
+    String recipientName,
+  ) async {
+    final backendApi = BackendApi();
+    try {
+      final token = await _requireBackendAccessToken(context, api: backendApi);
+      await backendApi.openGift(accessToken: token, giftId: gift.id);
+      await _reloadBackendProjection(
+        context,
+        api: backendApi,
+        accessToken: token,
+      );
+      if (context.mounted) {
+        showGiftOpenedCelebration(
+          context,
+          gift,
+          fromName: senderName,
+          toName: recipientName,
+        );
+      }
+    } on BackendApiException catch (error) {
+      if (context.mounted) {
+        showSnack(context, error.message);
+      }
+    }
   }
 
   Widget _buildCompose(
@@ -3378,18 +3691,33 @@ class _GiftsScreenState extends State<GiftsScreen> {
         context: context,
         data: data,
         onSuccess: (receipt) async {
-          final message = store.sendGift(
-            recipientId: _recipientId!,
-            template: _theme.label,
-            amountMinor: amountMinor,
-            message: giftMessage,
-            paymentProvider: 'esewa',
-            paymentReference: receipt.reference,
-            rawPayload: receipt.rawPayload,
-          );
-          if (!message.startsWith('Gift sent')) {
+          final backendApi = BackendApi();
+          try {
+            final token = await _requireBackendAccessToken(
+              context,
+              api: backendApi,
+            );
+            await backendApi.sendGift(
+              accessToken: token,
+              gift: {
+                'recipientId': _recipientId!,
+                'template': _theme.label,
+                'amountMinor': amountMinor,
+                'message': giftMessage,
+                'idempotencyKey': data.idempotencyKey,
+                'paymentProvider': 'esewa',
+                'paymentReference': receipt.reference,
+                'rawPayload': receipt.rawPayload,
+              },
+            );
+            await _reloadBackendProjection(
+              context,
+              api: backendApi,
+              accessToken: token,
+            );
+          } on BackendApiException catch (error) {
             return TransactionResult.failure(
-              reason: message,
+              reason: error.message,
               amount: amountMinor,
               transactionReference: receipt.reference,
               createdAt: DateTime.now(),
@@ -4410,7 +4738,7 @@ class NotificationsScreen extends StatelessWidget {
                     action: TextButton.icon(
                       onPressed: store.currentNotifications.isEmpty
                           ? null
-                          : store.markNotificationsRead,
+                          : () => unawaited(_markNotificationsRead(context)),
                       icon: const Icon(Icons.done_all),
                       label: const Text('Mark read'),
                     ),
@@ -4422,6 +4750,26 @@ class NotificationsScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+Future<void> _markNotificationsRead(BuildContext context) async {
+  final backendApi = BackendApi();
+  try {
+    final token = await _requireBackendAccessToken(context, api: backendApi);
+    await backendApi.markAllNotificationsRead(accessToken: token);
+    await _reloadBackendProjection(
+      context,
+      api: backendApi,
+      accessToken: token,
+    );
+    if (context.mounted) {
+      showSnack(context, 'Notifications marked read.');
+    }
+  } on BackendApiException catch (error) {
+    if (context.mounted) {
+      showSnack(context, error.message);
+    }
   }
 }
 
@@ -7000,37 +7348,59 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
         ],
       );
       final result = await openTransactionConfirmation(context, data, () async {
-        final expenseId = store.addExpense(
-          groupId: widget.groupId,
-          title: expenseTitle,
-          totalMinor: total,
-          payerId: payerAmounts.keys.first,
-          payerAmounts: payerAmounts,
-          category: category,
-          splitMode: effectiveSplitMode,
-          participantIds: selectedParticipants,
-          note: _note.text,
-          equalAmounts: effectiveSplitMode == SplitMode.equal
-              ? _equalPreview
-              : null,
-          customAmounts: _custom.map(
-            (key, value) => MapEntry(key, parseMoneyToMinor(value)),
-          ),
-          receiptItems: receiptItems,
-          itemAssignments: itemAssignments,
-          itemSplitInputs: itemSplitInputs,
-          equalBillAdjustmentAllocation: _allocateBillAdjustmentsEqually,
-          taxMinor: totals.taxMinor,
-          serviceChargeMinor: totals.serviceChargeMinor,
-          discountMinor: totals.discountMinor.abs(),
-          roundingAdjustmentMinor: totals.roundingAdjustmentMinor,
-        );
-        return _successResult(
-          title: 'Expense Added',
-          message: 'Your group balances have been updated.',
-          amount: total,
-          reference: expenseId,
-        );
+        final backendApi = BackendApi();
+        try {
+          final token = await _requireBackendAccessToken(
+            context,
+            api: backendApi,
+          );
+          final response = await backendApi.createExpense(
+            accessToken: token,
+            groupId: widget.groupId,
+            expense: _expensePayload(
+              title: expenseTitle,
+              totalMinor: total,
+              payerAmounts: payerAmounts,
+              category: category,
+              splitMode: effectiveSplitMode,
+              participantIds: selectedParticipants,
+              shareAmounts: splitPreview,
+              note: _note.text,
+              receiptItems: receiptItems,
+              itemAssignments: itemAssignments?.map(
+                (key, value) =>
+                    MapEntry(key, value.length == 1 ? value.first : 'all'),
+              ),
+              itemSplitInputs: itemSplitInputs,
+              taxMinor: totals.taxMinor,
+              serviceChargeMinor: totals.serviceChargeMinor,
+              discountMinor: totals.discountMinor.abs(),
+              roundingAdjustmentMinor: totals.roundingAdjustmentMinor,
+            ),
+          );
+          await _reloadBackendProjection(
+            context,
+            api: backendApi,
+            accessToken: token,
+          );
+          final expenseId =
+              ((response['expense'] as Map<String, dynamic>?)?['id'] ?? '')
+                  .toString();
+          return _successResult(
+            title: 'Expense Added',
+            message: 'Your group balances have been updated.',
+            amount: total,
+            reference: expenseId.isEmpty ? data.id : expenseId,
+          );
+        } on BackendApiException catch (error) {
+          return TransactionResult.failure(
+            reason: error.message,
+            amount: total,
+            transactionReference: data.id,
+            createdAt: DateTime.now(),
+            status: TransactionStatus.failedReview,
+          );
+        }
       });
       if (result?.isSuccess == true) {
         widget.onSaved();
@@ -8452,22 +8822,45 @@ Future<void> showCreateGroupDialog(
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: () {
-                  final groupId = store.createGroup(
-                    name: name.text.trim().isEmpty
-                        ? 'New Expense Group'
-                        : name.text.trim(),
-                    category: category,
-                    memberIds: selected.toList(),
-                    kind: GroupKind.expense,
-                  );
-                  Navigator.pop(dialogContext);
-                  store.selectedGroupId = groupId;
-                  onCreated?.call(GroupKind.expense);
-                  showSnack(
-                    context,
-                    '${store.groupById(groupId).name} created.',
-                  );
+                onPressed: () async {
+                  final backendApi = BackendApi();
+                  final groupName = name.text.trim().isEmpty
+                      ? 'New Expense Group'
+                      : name.text.trim();
+                  try {
+                    final token = await _requireBackendAccessToken(
+                      context,
+                      api: backendApi,
+                    );
+                    final response = await backendApi.createGroup(
+                      accessToken: token,
+                      group: {
+                        'name': groupName,
+                        'category': category.name,
+                        'memberIds': selected.toList(),
+                        'kind': GroupKind.expense.name,
+                      },
+                    );
+                    final groupId =
+                        ((response['group'] as Map<String, dynamic>?)?['id'] ??
+                                '')
+                            .toString();
+                    await _reloadBackendProjection(
+                      context,
+                      api: backendApi,
+                      accessToken: token,
+                    );
+                    store.selectedGroupId = groupId.isEmpty ? null : groupId;
+                    if (context.mounted) {
+                      Navigator.pop(dialogContext);
+                      onCreated?.call(GroupKind.expense);
+                      showSnack(context, '$groupName created.');
+                    }
+                  } on BackendApiException catch (error) {
+                    if (context.mounted) {
+                      showSnack(context, error.message);
+                    }
+                  }
                 },
                 child: const Text('Create Expense Group'),
               ),
@@ -8621,31 +9014,66 @@ Future<void> showCreateDhukutiGroupDialog(
               ),
               FilledButton(
                 onPressed: canCreate
-                    ? () {
+                    ? () async {
+                        final backendApi = BackendApi();
                         final groupName = name.text.trim().isEmpty
                             ? 'New Community Fund Group'
                             : name.text.trim();
-                        final groupId = store.createGroup(
-                          name: groupName,
-                          category: GroupCategory.custom,
-                          memberIds: selected.toList(),
-                          kind: GroupKind.dhukuti,
-                          template: 'Community Savings Tracker',
-                        );
-                        final poolId = store.createDhukutiPool(
-                          groupId: groupId,
-                          name: groupName,
-                          contributionAmountMinor: amount,
-                          frequency: frequency,
-                          startDate: DateTime.now(),
-                          memberIds: selected.toList(),
-                        );
-                        store
-                          ..selectedDhukutiPoolId = poolId
-                          ..selectedGroupId = null;
-                        Navigator.pop(dialogContext);
-                        onCreated?.call(GroupKind.dhukuti);
-                        showSnack(context, '$groupName tracker created.');
+                        try {
+                          final token = await _requireBackendAccessToken(
+                            context,
+                            api: backendApi,
+                          );
+                          final response = await backendApi.createGroup(
+                            accessToken: token,
+                            group: {
+                              'name': groupName,
+                              'category': GroupCategory.custom.name,
+                              'memberIds': selected.toList(),
+                              'kind': GroupKind.dhukuti.name,
+                              'template': 'Community Savings Tracker',
+                            },
+                          );
+                          final groupId =
+                              ((response['group']
+                                          as Map<String, dynamic>?)?['id'] ??
+                                      '')
+                                  .toString();
+                          final savingsResponse = await backendApi
+                              .createCommunitySavingsGroup(
+                                accessToken: token,
+                                group: {
+                                  'groupId': groupId,
+                                  'name': groupName,
+                                  'monthlyContributionAmount': amount,
+                                  'currency': 'Rs.',
+                                },
+                              );
+                          final savingsId =
+                              ((savingsResponse['group']
+                                          as Map<String, dynamic>?)?['id'] ??
+                                      '')
+                                  .toString();
+                          await _reloadBackendProjection(
+                            context,
+                            api: backendApi,
+                            accessToken: token,
+                          );
+                          store
+                            ..selectedDhukutiPoolId = savingsId.isEmpty
+                                ? null
+                                : savingsId
+                            ..selectedGroupId = null;
+                          if (context.mounted) {
+                            Navigator.pop(dialogContext);
+                            onCreated?.call(GroupKind.dhukuti);
+                            showSnack(context, '$groupName tracker created.');
+                          }
+                        } on BackendApiException catch (error) {
+                          if (context.mounted) {
+                            showSnack(context, error.message);
+                          }
+                        }
                       }
                     : null,
                 child: const Text('Create Tracker Group'),
@@ -8754,14 +9182,37 @@ Future<void> showAddMemberDialog(BuildContext context, String groupId) async {
               FilledButton(
                 onPressed: selected == null
                     ? null
-                    : () {
+                    : () async {
                         final selectedUserId = selected!;
-                        store.addGroupMember(groupId, selectedUserId, role);
-                        Navigator.pop(dialogContext);
-                        showSnack(
-                          context,
-                          '${store.nameOf(selectedUserId)} added to ${store.groupById(groupId).name}.',
-                        );
+                        final backendApi = BackendApi();
+                        try {
+                          final token = await _requireBackendAccessToken(
+                            context,
+                            api: backendApi,
+                          );
+                          await backendApi.addGroupMember(
+                            accessToken: token,
+                            groupId: groupId,
+                            userId: selectedUserId,
+                            role: role.name,
+                          );
+                          await _reloadBackendProjection(
+                            context,
+                            api: backendApi,
+                            accessToken: token,
+                          );
+                          if (context.mounted) {
+                            Navigator.pop(dialogContext);
+                            showSnack(
+                              context,
+                              '${store.nameOf(selectedUserId)} added to ${store.groupById(groupId).name}.',
+                            );
+                          }
+                        } on BackendApiException catch (error) {
+                          if (context.mounted) {
+                            showSnack(context, error.message);
+                          }
+                        }
                       },
                 child: const Text('Add'),
               ),
@@ -8784,6 +9235,25 @@ Future<void> showLeaveGroupDialog(BuildContext context, String groupId) async {
   String? newAdminId = adminCandidates.isEmpty
       ? null
       : adminCandidates.first.userId;
+  Future<String?> leaveOnBackend({String? transferAdminTo}) async {
+    final backendApi = BackendApi();
+    final token = await _requireBackendAccessToken(
+      rootContext,
+      api: backendApi,
+    );
+    await backendApi.leaveGroup(
+      accessToken: token,
+      groupId: groupId,
+      transferAdminTo: transferAdminTo,
+    );
+    await _reloadBackendProjection(
+      rootContext,
+      api: backendApi,
+      accessToken: token,
+    );
+    return null;
+  }
+
   await showDialog<void>(
     context: rootContext,
     builder: (dialogContext) {
@@ -8889,9 +9359,16 @@ Future<void> showLeaveGroupDialog(BuildContext context, String groupId) async {
                                   (item) => item.payerId == store.currentUserId,
                                 )
                                 .toList();
-                            error = remaining.isEmpty
-                                ? store.leaveGroup(groupId)
-                                : 'Pay the remaining settlement before leaving.';
+                            if (remaining.isEmpty) {
+                              try {
+                                error = await leaveOnBackend();
+                              } on BackendApiException catch (backendError) {
+                                error = backendError.message;
+                              }
+                            } else {
+                              error =
+                                  'Pay the remaining settlement before leaving.';
+                            }
                             showSnack(
                               rootContext,
                               error ?? 'You left ${group.name}.',
@@ -8899,14 +9376,19 @@ Future<void> showLeaveGroupDialog(BuildContext context, String groupId) async {
                           }
                           return;
                         } else if (isAdminTransfer && newAdminId != null) {
-                          store.updateMemberRole(
-                            groupId,
-                            newAdminId!,
-                            MemberRole.admin,
-                          );
-                          error = store.leaveGroup(groupId);
+                          try {
+                            error = await leaveOnBackend(
+                              transferAdminTo: newAdminId,
+                            );
+                          } on BackendApiException catch (backendError) {
+                            error = backendError.message;
+                          }
                         } else {
-                          error = store.leaveGroup(groupId);
+                          try {
+                            error = await leaveOnBackend();
+                          } on BackendApiException catch (backendError) {
+                            error = backendError.message;
+                          }
                         }
                         Navigator.pop(dialogContext);
                         showSnack(
@@ -8973,10 +9455,31 @@ Future<void> showDisbandGroupDialog(
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              final error = store.disbandGroup(groupId);
-              Navigator.pop(dialogContext);
-              showSnack(context, error ?? '${group.name} was disbanded.');
+            onPressed: () async {
+              final backendApi = BackendApi();
+              try {
+                final token = await _requireBackendAccessToken(
+                  context,
+                  api: backendApi,
+                );
+                await backendApi.deleteGroup(
+                  accessToken: token,
+                  groupId: groupId,
+                );
+                await _reloadBackendProjection(
+                  context,
+                  api: backendApi,
+                  accessToken: token,
+                );
+                if (context.mounted) {
+                  Navigator.pop(dialogContext);
+                  showSnack(context, '${group.name} was disbanded.');
+                }
+              } on BackendApiException catch (error) {
+                if (context.mounted) {
+                  showSnack(context, error.message);
+                }
+              }
             },
             child: const Text('Disband'),
           ),
@@ -9030,14 +9533,35 @@ Future<void> showRenameGroupDialog(BuildContext context, String groupId) async {
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: () {
-                  final error = store.renameGroup(groupId, name.text);
-                  if (error != null) {
-                    setState(() => errorText = error);
+                onPressed: () async {
+                  final nextName = name.text.trim();
+                  if (nextName.isEmpty) {
+                    setState(() => errorText = 'Group name is required.');
                     return;
                   }
-                  Navigator.pop(dialogContext);
-                  showSnack(context, '${store.groupById(groupId).name} saved.');
+                  final backendApi = BackendApi();
+                  try {
+                    final token = await _requireBackendAccessToken(
+                      context,
+                      api: backendApi,
+                    );
+                    await backendApi.updateGroup(
+                      accessToken: token,
+                      groupId: groupId,
+                      group: {'name': nextName},
+                    );
+                    await _reloadBackendProjection(
+                      context,
+                      api: backendApi,
+                      accessToken: token,
+                    );
+                    if (context.mounted) {
+                      Navigator.pop(dialogContext);
+                      showSnack(context, '$nextName saved.');
+                    }
+                  } on BackendApiException catch (error) {
+                    setState(() => errorText = error.message);
+                  }
                 },
                 child: const Text('Save'),
               ),
@@ -9071,10 +9595,32 @@ Future<void> showRemoveMemberDialog(
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              store.removeGroupMember(groupId, member.userId);
-              Navigator.pop(dialogContext);
-              showSnack(context, '$name was removed from the group.');
+            onPressed: () async {
+              final backendApi = BackendApi();
+              try {
+                final token = await _requireBackendAccessToken(
+                  context,
+                  api: backendApi,
+                );
+                await backendApi.removeGroupMember(
+                  accessToken: token,
+                  groupId: groupId,
+                  memberId: member.id,
+                );
+                await _reloadBackendProjection(
+                  context,
+                  api: backendApi,
+                  accessToken: token,
+                );
+                if (context.mounted) {
+                  Navigator.pop(dialogContext);
+                  showSnack(context, '$name was removed from the group.');
+                }
+              } on BackendApiException catch (error) {
+                if (context.mounted) {
+                  showSnack(context, error.message);
+                }
+              }
             },
             child: const Text('Remove'),
           ),
@@ -9117,9 +9663,32 @@ Future<void> showRoleDialog(
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: () {
-                  store.updateMemberRole(groupId, member.userId, role);
-                  Navigator.pop(dialogContext);
+                onPressed: () async {
+                  final backendApi = BackendApi();
+                  try {
+                    final token = await _requireBackendAccessToken(
+                      context,
+                      api: backendApi,
+                    );
+                    await backendApi.updateGroupMember(
+                      accessToken: token,
+                      groupId: groupId,
+                      memberId: member.id,
+                      role: role.name,
+                    );
+                    await _reloadBackendProjection(
+                      context,
+                      api: backendApi,
+                      accessToken: token,
+                    );
+                    if (context.mounted) {
+                      Navigator.pop(dialogContext);
+                    }
+                  } on BackendApiException catch (error) {
+                    if (context.mounted) {
+                      showSnack(context, error.message);
+                    }
+                  }
                 },
                 child: const Text('Save'),
               ),
@@ -9534,10 +10103,6 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                                   ? ids
                                   : <String>[entry.value],
                           };
-                          final customAmounts = custom.map(
-                            (key, value) =>
-                                MapEntry(key, parseMoneyToMinor(value)),
-                          );
                           final data = TransactionConfirmationData(
                             id: 'expense-$groupId-${DateTime.now().microsecondsSinceEpoch}',
                             transactionType: splitMode == SplitMode.item
@@ -9582,36 +10147,61 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                           );
                           Navigator.pop(dialogContext);
                           unawaited(
-                            openTransactionConfirmation(
-                              context,
-                              data,
-                              () async {
-                                final expenseId = store.addExpense(
-                                  groupId: groupId,
-                                  title: expenseTitle,
-                                  totalMinor: totalMinor,
-                                  payerId: payerAmounts.keys.first,
-                                  payerAmounts: payerAmounts,
-                                  category: category,
-                                  splitMode: splitMode,
-                                  participantIds: ids,
-                                  note: note.text,
-                                  equalAmounts: splitMode == SplitMode.equal
-                                      ? equalPreview
-                                      : null,
-                                  customAmounts: customAmounts,
-                                  receiptItems: parsed,
-                                  itemAssignments: assignmentMap,
+                            openTransactionConfirmation(context, data, () async {
+                              final backendApi = BackendApi();
+                              try {
+                                final token = await _requireBackendAccessToken(
+                                  context,
+                                  api: backendApi,
                                 );
+                                final response = await backendApi.createExpense(
+                                  accessToken: token,
+                                  groupId: groupId,
+                                  expense: _expensePayload(
+                                    title: expenseTitle,
+                                    totalMinor: totalMinor,
+                                    payerAmounts: payerAmounts,
+                                    category: category,
+                                    splitMode: splitMode,
+                                    participantIds: ids,
+                                    shareAmounts: splitPreview,
+                                    note: note.text,
+                                    receiptItems: parsed,
+                                    itemAssignments: itemAssignments,
+                                  ),
+                                );
+                                await _reloadBackendProjection(
+                                  context,
+                                  api: backendApi,
+                                  accessToken: token,
+                                );
+                                final expenseId =
+                                    ((response['expense']
+                                                as Map<
+                                                  String,
+                                                  dynamic
+                                                >?)?['id'] ??
+                                            '')
+                                        .toString();
                                 return _successResult(
                                   title: 'Expense Added',
                                   message:
                                       'Your group balances have been updated.',
                                   amount: totalMinor,
-                                  reference: expenseId,
+                                  reference: expenseId.isEmpty
+                                      ? data.id
+                                      : expenseId,
                                 );
-                              },
-                            ),
+                              } on BackendApiException catch (error) {
+                                return TransactionResult.failure(
+                                  reason: error.message,
+                                  amount: totalMinor,
+                                  transactionReference: data.id,
+                                  createdAt: DateTime.now(),
+                                  status: TransactionStatus.failedReview,
+                                );
+                              }
+                            }),
                           );
                         } on ArgumentError catch (error) {
                           showSnack(context, error.message.toString());
@@ -10350,7 +10940,6 @@ Future<void> showEditExpenseDialog(
   BuildContext context,
   Expense expense,
 ) async {
-  final store = StoreScope.of(context);
   final title = TextEditingController(text: expense.title);
   final note = TextEditingController(text: expense.note);
   await showDialog<void>(
@@ -10387,17 +10976,38 @@ Future<void> showEditExpenseDialog(
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              final ok = store.editExpenseTitle(
-                expense.id,
-                title.text.trim().isEmpty ? expense.title : title.text.trim(),
-                note.text,
-              );
-              Navigator.pop(dialogContext);
-              showSnack(
-                context,
-                ok ? 'Expense updated.' : 'Adjustment required.',
-              );
+            onPressed: () async {
+              final backendApi = BackendApi();
+              try {
+                final token = await _requireBackendAccessToken(
+                  context,
+                  api: backendApi,
+                );
+                await backendApi.updateExpense(
+                  accessToken: token,
+                  groupId: expense.groupId,
+                  expenseId: expense.id,
+                  expense: {
+                    'title': title.text.trim().isEmpty
+                        ? expense.title
+                        : title.text.trim(),
+                    'note': note.text,
+                  },
+                );
+                await _reloadBackendProjection(
+                  context,
+                  api: backendApi,
+                  accessToken: token,
+                );
+                if (context.mounted) {
+                  Navigator.pop(dialogContext);
+                  showSnack(context, 'Expense updated.');
+                }
+              } on BackendApiException catch (error) {
+                if (context.mounted) {
+                  showSnack(context, error.message);
+                }
+              }
             },
             child: const Text('Save'),
           ),
@@ -10528,20 +11138,53 @@ Future<void> showAdjustmentDialog(
                     Navigator.pop(dialogContext);
                     unawaited(
                       openTransactionConfirmation(context, data, () async {
-                        final adjustmentId = store.createZeroSumAdjustment(
-                          groupId: groupId,
-                          creditUserId: creditUserId,
-                          debitUserId: debitUserId,
-                          amountMinor: amountMinor,
-                          reason: reason.text,
-                        );
-                        return _successResult(
-                          title: 'Adjustment Recorded',
-                          message:
-                              'The correction entry has been added without deleting historical records.',
-                          amount: amountMinor,
-                          reference: adjustmentId,
-                        );
+                        final backendApi = BackendApi();
+                        try {
+                          final token = await _requireBackendAccessToken(
+                            context,
+                            api: backendApi,
+                          );
+                          final response = await backendApi.createAdjustment(
+                            accessToken: token,
+                            groupId: groupId,
+                            adjustment: {
+                              'creditUserId': creditUserId,
+                              'debitUserId': debitUserId,
+                              'amountMinor': amountMinor,
+                              'reason': reason.text.trim().isEmpty
+                                  ? 'Locked expense correction'
+                                  : reason.text.trim(),
+                              'adjustmentType': AdjustmentType.correction.name,
+                            },
+                          );
+                          await _reloadBackendProjection(
+                            context,
+                            api: backendApi,
+                            accessToken: token,
+                          );
+                          final adjustmentId =
+                              ((response['adjustment']
+                                          as Map<String, dynamic>?)?['id'] ??
+                                      '')
+                                  .toString();
+                          return _successResult(
+                            title: 'Adjustment Recorded',
+                            message:
+                                'The correction entry has been added without deleting historical records.',
+                            amount: amountMinor,
+                            reference: adjustmentId.isEmpty
+                                ? data.id
+                                : adjustmentId,
+                          );
+                        } on BackendApiException catch (error) {
+                          return TransactionResult.failure(
+                            reason: error.message,
+                            amount: amountMinor,
+                            transactionReference: data.id,
+                            createdAt: DateTime.now(),
+                            status: TransactionStatus.failedReview,
+                          );
+                        }
                       }),
                     );
                   } on ArgumentError catch (error) {
@@ -11475,32 +12118,55 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
               FilledButton(
                 onPressed: !canCreate
                     ? null
-                    : () {
-                        store.createGiftPool(
-                          groupId: groupId!,
-                          recipientId: recipientId!,
-                          title: title.text,
-                          template: 'Gift Pool',
-                          targetAmountMinor: targetAmountMinor,
-                          contributionRule: contributionRule,
-                          allowOverTarget: allowOverTarget,
-                          equalContributionAmountMinor:
-                              contributionRule == GiftPoolContributionRule.equal
-                              ? equalAmountMinor
-                              : null,
-                          minContributionAmountMinor:
-                              contributionRule ==
-                                  GiftPoolContributionRule.threshold
-                              ? minAmountMinor
-                              : null,
-                          maxContributionAmountMinor:
-                              contributionRule ==
-                                  GiftPoolContributionRule.threshold
-                              ? maxAmountMinor
-                              : null,
-                          message: message.text,
-                        );
-                        Navigator.pop(dialogContext);
+                    : () async {
+                        final backendApi = BackendApi();
+                        try {
+                          final token = await _requireBackendAccessToken(
+                            context,
+                            api: backendApi,
+                          );
+                          await backendApi.createGiftPool(
+                            accessToken: token,
+                            groupId: groupId!,
+                            giftPool: {
+                              'recipientId': recipientId!,
+                              'title': title.text,
+                              'template': 'Gift Pool',
+                              'targetAmountMinor': targetAmountMinor,
+                              'contributionRule': contributionRule.name,
+                              'allowOverTarget': allowOverTarget,
+                              'equalContributionAmountMinor':
+                                  contributionRule ==
+                                      GiftPoolContributionRule.equal
+                                  ? equalAmountMinor
+                                  : null,
+                              'minContributionAmountMinor':
+                                  contributionRule ==
+                                      GiftPoolContributionRule.threshold
+                                  ? minAmountMinor
+                                  : null,
+                              'maxContributionAmountMinor':
+                                  contributionRule ==
+                                      GiftPoolContributionRule.threshold
+                                  ? maxAmountMinor
+                                  : null,
+                              'message': message.text,
+                            },
+                          );
+                          await _reloadBackendProjection(
+                            context,
+                            api: backendApi,
+                            accessToken: token,
+                          );
+                          if (context.mounted) {
+                            Navigator.pop(dialogContext);
+                            showSnack(context, 'Gift pool created.');
+                          }
+                        } on BackendApiException catch (error) {
+                          if (context.mounted) {
+                            showSnack(context, error.message);
+                          }
+                        }
                       },
                 child: const Text('Create'),
               ),
@@ -11685,22 +12351,38 @@ Future<void> showContributeToGiftPoolDialog(
                               context: context,
                               data: data,
                               onSuccess: (receipt) async {
-                                final message = store.contributeToGiftPool(
-                                  pool.id,
-                                  amountMinor,
-                                  paymentProvider: 'esewa',
-                                  paymentReference: receipt.reference,
-                                  rawPayload: receipt.rawPayload,
-                                );
-                                if (!message.startsWith('Added')) {
+                                final backendApi = BackendApi();
+                                try {
+                                  final token =
+                                      await _requireBackendAccessToken(
+                                        context,
+                                        api: backendApi,
+                                      );
+                                  await backendApi.contributeToGiftPool(
+                                    accessToken: token,
+                                    giftPoolId: pool.id,
+                                    amountMinor: amountMinor,
+                                    idempotencyKey: data.idempotencyKey,
+                                    paymentProvider: 'esewa',
+                                    paymentReference: receipt.reference,
+                                    rawPayload: {'raw': receipt.rawPayload},
+                                  );
+                                  await _reloadBackendProjection(
+                                    context,
+                                    api: backendApi,
+                                    accessToken: token,
+                                  );
+                                } on BackendApiException catch (error) {
                                   return TransactionResult.failure(
-                                    reason: message,
+                                    reason: error.message,
                                     amount: amountMinor,
                                     transactionReference: receipt.reference,
                                     createdAt: DateTime.now(),
                                     status: TransactionStatus.failedReview,
                                   );
                                 }
+                                const message =
+                                    'Added contribution to gift pool.';
                                 messenger
                                   ..hideCurrentSnackBar()
                                   ..showSnackBar(
@@ -11957,19 +12639,48 @@ Future<void> showCreateDhukutiDialog(
               FilledButton(
                 onPressed: groupId == null
                     ? null
-                    : () {
-                        final poolId = store.createDhukutiPool(
-                          groupId: groupId!,
-                          name: name.text,
-                          contributionAmountMinor: parseMoneyToMinor(
-                            contribution.text,
-                          ),
-                          frequency: frequency,
-                          startDate: DateTime.now(),
-                          memberIds: members.toList(),
-                        );
-                        store.selectedDhukutiPoolId = poolId;
-                        Navigator.pop(dialogContext);
+                    : () async {
+                        final backendApi = BackendApi();
+                        try {
+                          final token = await _requireBackendAccessToken(
+                            context,
+                            api: backendApi,
+                          );
+                          final response = await backendApi
+                              .createCommunitySavingsGroup(
+                                accessToken: token,
+                                group: {
+                                  'groupId': groupId!,
+                                  'name': name.text.trim().isEmpty
+                                      ? 'New Community Fund'
+                                      : name.text.trim(),
+                                  'monthlyContributionAmount':
+                                      parseMoneyToMinor(contribution.text),
+                                  'currency': 'Rs.',
+                                  'frequency': frequency,
+                                },
+                              );
+                          final savingsId =
+                              ((response['group']
+                                          as Map<String, dynamic>?)?['id'] ??
+                                      '')
+                                  .toString();
+                          await _reloadBackendProjection(
+                            context,
+                            api: backendApi,
+                            accessToken: token,
+                          );
+                          store.selectedDhukutiPoolId = savingsId.isEmpty
+                              ? null
+                              : savingsId;
+                          if (context.mounted) {
+                            Navigator.pop(dialogContext);
+                          }
+                        } on BackendApiException catch (error) {
+                          if (context.mounted) {
+                            showSnack(context, error.message);
+                          }
+                        }
                       },
                 child: const Text('Create'),
               ),

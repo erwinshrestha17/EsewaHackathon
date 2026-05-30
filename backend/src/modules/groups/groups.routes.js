@@ -10,6 +10,7 @@ import {
   getGroup,
   listGroups,
   listMembers,
+  leaveGroup,
   updateGroup,
   updateMember,
 } from './groups.service.js';
@@ -53,6 +54,16 @@ groupsRouter.delete(
   asyncHandler(async (req, res) => {
     await deactivateGroup(req.group, req.userProfile.id);
     res.status(204).end();
+  }),
+);
+
+groupsRouter.post(
+  '/:groupId/leave',
+  requireGroupMember(),
+  asyncHandler(async (req, res) => {
+    res.json({
+      member: await leaveGroup(req.group, req.userProfile.id, req.body),
+    });
   }),
 );
 

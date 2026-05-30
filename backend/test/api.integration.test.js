@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
+import jwt from 'jsonwebtoken';
 
 import { app, isAllowedCorsOrigin } from '../src/app.js';
 import { env } from '../src/config/env.js';
 import { db } from '../src/modules/common/db.js';
 import {
   publishAppEvent,
+  publishRealtimeTopics,
+  realtimeAuth,
+  setRealtimeBroadcastSenderForTesting,
+  setRealtimeTopicResolverForTesting,
   subscribeAppEvents,
 } from '../src/modules/realtime/realtime.service.js';
 import { ApiError } from '../src/utils/ApiError.js';
@@ -119,6 +124,64 @@ test('realtime app events deliver only to subscribed users', () => {
     payload: { connectionId: 'conn-2' },
   });
   assert.equal(chunks.length, afterClose);
+});
+
+test('realtime auth mints a Supabase-compatible short-lived JWT with scoped topics', async () => {
+  const previous = {
+    hasSupabaseRealtimeConfig: env.hasSupabaseRealtimeConfig,
+    supabaseUrl: env.supabaseUrl,
+    supabasePublishableKey: env.supabasePublishableKey,
+    supabaseJwtSecret: env.supabaseJwtSecret,
+    realtimeTokenTtlMinutes: env.realtimeTokenTtlMinutes,
+  };
+  const restoreTopics = setRealtimeTopicResolverForTesting(async (userId) => [
+    `user:${userId}`,
+    'group:g-visible',
+  ]);
+  env.hasSupabaseRealtimeConfig = true;
+  env.supabaseUrl = 'https://example.supabase.co';
+  env.supabasePublishableKey = 'publishable-key';
+  env.supabaseJwtSecret = 'test-supabase-jwt-secret';
+  env.realtimeTokenTtlMinutes = 3;
+  try {
+    const config = await realtimeAuth('profile-1');
+    const decoded = jwt.verify(config.accessToken, env.supabaseJwtSecret, {
+      audience: 'authenticated',
+    });
+    assert.equal(decoded.sub, 'profile-1');
+    assert.equal(decoded.role, 'authenticated');
+    assert.deepEqual(config.topics, ['user:profile-1', 'group:g-visible']);
+    assert.equal(config.expiresInSeconds, 180);
+    assert.equal(config.supabaseUrl, env.supabaseUrl);
+    assert.equal(config.supabasePublishableKey, env.supabasePublishableKey);
+  } finally {
+    restoreTopics();
+    Object.assign(env, previous);
+  }
+});
+
+test('realtime invalidation broadcasts one message per authorized topic', async () => {
+  const sent = [];
+  const restore = setRealtimeBroadcastSenderForTesting(async (messages) => {
+    sent.push(...messages);
+  });
+  try {
+    publishRealtimeTopics(['user:u1', 'user:u1', 'group:g1'], {
+      type: 'expense_changed',
+      payload: { expenseId: 'expense-1' },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(sent.length, 2);
+    assert.deepEqual(
+      sent.map((message) => message.topic).sort(),
+      ['group:g1', 'user:u1'],
+    );
+    assert.equal(sent[0].event, 'expense_changed');
+    assert.equal(sent[0].payload.expenseId, 'expense-1');
+    assert.equal(sent[0].payload.type, 'expense_changed');
+  } finally {
+    restore();
+  }
 });
 
 test(

@@ -80,6 +80,8 @@ flutter pub get
 flutter run -d macos --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
 ```
 
+Realtime UI refresh uses private Supabase Broadcast topics from the backend. Fill `SUPABASE_JWT_SECRET` in `backend/.env` and apply the latest Supabase migrations before testing multiple signed-in clients.
+
 Other generated targets are available too:
 
 ```sh
@@ -104,7 +106,7 @@ flutter run -d chrome --dart-define=BACKEND_API_BASE_URL=http://192.168.1.25:300
 - P2: Flutter cross-platform app, local cache projection, smart item assignment defaults, emergency Saving Circle exit workflow, admin review surfaces, analytics dashboard, and multi-group batch settlement for the current user.
 - P3: no P3 items are defined in the PRD.
 
-Redis-backed session caching and Twilio OTP delivery are implemented in the bundled backend. Bill OCR now runs on-device; production cloud OCR fallback, delivery infrastructure, and payment webhooks remain outside this app.
+Redis-backed session caching, Twilio OTP delivery, backend-backed CUD actions, and Supabase Realtime invalidation are implemented in the bundled backend. Bill OCR now runs on-device; production cloud OCR fallback, delivery infrastructure, and payment webhooks remain outside this app.
 
 ## Verification
 

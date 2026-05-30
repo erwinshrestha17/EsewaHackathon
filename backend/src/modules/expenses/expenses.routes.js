@@ -3,7 +3,13 @@ import { Router } from 'express';
 import { requireGroupMember } from '../../middleware/role.middleware.js';
 import { requireBody } from '../../middleware/validate.middleware.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { createExpense, getExpense, listGroupExpenses, voidExpense } from './expenses.service.js';
+import {
+  createExpense,
+  getExpense,
+  listGroupExpenses,
+  updateExpense,
+  voidExpense,
+} from './expenses.service.js';
 
 export const expensesRouter = Router();
 
@@ -30,6 +36,21 @@ expensesRouter.get(
   '/:expenseId',
   asyncHandler(async (req, res) => {
     res.json({ expense: await getExpense(req.params.expenseId) });
+  }),
+);
+
+expensesRouter.patch(
+  '/group/:groupId/:expenseId',
+  requireGroupMember(),
+  asyncHandler(async (req, res) => {
+    res.json({
+      expense: await updateExpense(
+        req.group,
+        req.userProfile.id,
+        req.params.expenseId,
+        req.body,
+      ),
+    });
   }),
 );
 

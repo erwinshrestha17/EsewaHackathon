@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../auth/auth_controller.dart';
+import '../../shared/api/backend_api.dart';
 import '../../shared/design_system/app_spacing.dart';
 import '../../shared/design_system/app_text_styles.dart';
 import '../../src/app_state.dart';
@@ -206,7 +208,9 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                           _groupId != null &&
                           amount > 0 &&
                           memberCount > 1
-                      ? () => _createPool(context)
+                      ? () {
+                          _createPool(context);
+                        }
                       : null,
                   icon: const Icon(Icons.send_outlined),
                   label: const Text('Send Invites'),
@@ -219,23 +223,47 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
     );
   }
 
-  void _createPool(BuildContext context) {
-    final id = widget.store.createDhukutiPool(
-      groupId: _groupId!,
-      name: _poolName.text.trim().isEmpty
+  Future<void> _createPool(BuildContext context) async {
+    final api = BackendApi();
+    try {
+      if (!api.isConfigured) {
+        throw const BackendApiException(
+          'Backend API is required for signed-in actions.',
+        );
+      }
+      final token = await AuthScope.of(context).backendAccessToken();
+      if (token == null) {
+        throw const BackendApiException('Sign in again to continue.');
+      }
+      final name = _poolName.text.trim().isEmpty
           ? 'New Community Fund'
-          : _poolName.text.trim(),
-      contributionAmountMinor: parseMoneyToMinor(_amount.text),
-      frequency: _frequency,
-      startDate: DateTime(2026, 6, 15),
-      memberIds: _selectedMembers.toList(),
-    );
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${widget.store.poolById(id).name} invites sent.'),
-      ),
-    );
-    Navigator.pop(context);
+          : _poolName.text.trim();
+      await api.createCommunitySavingsGroup(
+        accessToken: token,
+        group: {
+          'groupId': _groupId!,
+          'name': name,
+          'monthlyContributionAmount': parseMoneyToMinor(_amount.text),
+          'currency': 'Rs.',
+          'frequency': _frequency.toLowerCase(),
+        },
+      );
+      final snapshot = await api.appBootstrap(accessToken: token);
+      widget.store.loadBackendSnapshot(snapshot);
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$name invites sent.')));
+      Navigator.pop(context);
+    } on BackendApiException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
   }
 }
 

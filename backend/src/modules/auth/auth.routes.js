@@ -7,6 +7,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ApiError } from '../../utils/ApiError.js';
 import {
   currentProfile,
+  deleteCurrentProfile,
   login,
   logoutAllSessions,
   logoutSession,
@@ -129,5 +130,13 @@ authRouter.patch(
   authenticateUser,
   asyncHandler(async (req, res) => {
     res.json({ profile: await updateCurrentProfile(req.userProfile.id, req.body) });
+  }),
+);
+
+authRouter.delete(
+  '/me',
+  authenticateUser,
+  asyncHandler(async (req, res) => {
+    res.json({ profile: await deleteCurrentProfile(req.userProfile.id) });
   }),
 );

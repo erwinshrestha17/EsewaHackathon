@@ -4,6 +4,7 @@ import { requireGroupMember } from '../../middleware/role.middleware.js';
 import { requireBody } from '../../middleware/validate.middleware.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import {
+  cancelGiftPool,
   contributeToGiftPool,
   createGiftPool,
   listGiftPools,
@@ -51,6 +52,16 @@ giftsRouter.post(
   asyncHandler(async (req, res) => {
     res.status(201).json({
       giftPool: await createGiftPool(req.group, req.userProfile.id, req.body),
+    });
+  }),
+);
+
+giftsRouter.post(
+  '/pools/group/:groupId/:giftPoolId/cancel',
+  requireGroupMember(),
+  asyncHandler(async (req, res) => {
+    res.json({
+      giftPool: await cancelGiftPool(req.group, req.userProfile.id, req.params.giftPoolId),
     });
   }),
 );

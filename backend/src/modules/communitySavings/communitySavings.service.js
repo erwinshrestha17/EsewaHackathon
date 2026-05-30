@@ -3,6 +3,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import { createNotification, logActivity } from '../common/audit.js';
 import { db, assertDb, findByIdOrLegacy } from '../common/db.js';
 import { groupDto } from '../common/mappers.js';
+import { publishGroupEvent } from '../realtime/realtime.service.js';
 
 const paymentMethods = ['cash', 'bank_transfer', 'esewa', 'khalti', 'ime_pay', 'other'];
 const expenseCategories = ['food', 'event', 'emergency', 'maintenance', 'donation', 'travel', 'supplies', 'other'];
@@ -186,6 +187,10 @@ export async function createSavingsGroup(group, userId, body) {
     title: 'Community savings tracker created',
     body: `${data.name} was created.`,
   });
+  await publishGroupEvent(group.id, {
+    type: 'community_savings_changed',
+    payload: { operation: 'created', savingsGroupId: data.id, actorId: userId },
+  });
   return groupMap(data);
 }
 
@@ -229,6 +234,10 @@ export async function updateSavingsGroup(savingsGroup, body) {
     .select()
     .single();
   assertDb(error);
+  await publishGroupEvent(savingsGroup.group_id, {
+    type: 'community_savings_changed',
+    payload: { operation: 'updated', savingsGroupId: data.id },
+  });
   return groupMap(data);
 }
 
@@ -278,6 +287,15 @@ export async function submitContribution(savingsGroup, userId, body, contributio
     title: 'Contribution submitted',
     body: 'A contribution note was submitted for admin confirmation.',
   });
+  await publishGroupEvent(savingsGroup.group_id, {
+    type: 'community_savings_changed',
+    payload: {
+      operation: 'contribution_submitted',
+      savingsGroupId: savingsGroup.id,
+      contributionId: data.id,
+      actorId: userId,
+    },
+  });
   return contributionMap(data);
 }
 
@@ -317,6 +335,15 @@ export async function confirmContribution(savingsGroup, actorId, contributionId,
     title: 'Contribution confirmed',
     body: 'A community savings contribution was confirmed.',
   });
+  await publishGroupEvent(savingsGroup.group_id, {
+    type: 'community_savings_changed',
+    payload: {
+      operation: 'contribution_confirmed',
+      savingsGroupId: savingsGroup.id,
+      contributionId: data.id,
+      actorId,
+    },
+  });
   return contributionMap(data);
 }
 
@@ -344,6 +371,15 @@ export async function waiveContribution(savingsGroup, actorId, contributionId, b
     entityId: data.id,
     title: 'Contribution waived',
     body: 'A community savings contribution was waived.',
+  });
+  await publishGroupEvent(savingsGroup.group_id, {
+    type: 'community_savings_changed',
+    payload: {
+      operation: 'contribution_waived',
+      savingsGroupId: savingsGroup.id,
+      contributionId: data.id,
+      actorId,
+    },
   });
   return contributionMap(data);
 }
@@ -375,6 +411,15 @@ export async function recordExpense(savingsGroup, actorId, body) {
     entityId: data.id,
     title: 'Expense recorded',
     body: `${data.title} was recorded for community savings.`,
+  });
+  await publishGroupEvent(savingsGroup.group_id, {
+    type: 'community_savings_changed',
+    payload: {
+      operation: 'expense_recorded',
+      savingsGroupId: savingsGroup.id,
+      expenseId: data.id,
+      actorId,
+    },
   });
   return expenseMap(data);
 }

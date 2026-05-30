@@ -77,6 +77,30 @@ class _FakeBackendApi extends BackendApi {
   @override
   Future<void> logout({String? accessToken, String? refreshToken}) async {}
 
+  @override
+  Future<Map<String, dynamic>> deleteAccount({
+    required String accessToken,
+  }) async {
+    return {'profile': <String, dynamic>{}};
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateProfile({
+    required String accessToken,
+    required Map<String, Object?> profile,
+  }) async {
+    return {
+      'profile': {
+        'id': _testUserProfile.id,
+        'fullName': profile['fullName'] ?? _testUserProfile.displayName,
+        'phone': profile['phone'] ?? _testUserProfile.phone,
+        'district': profile['district'] ?? _testUserProfile.district,
+        'avatarUrl': profile['avatarUrl'],
+        'createdAt': _testUserProfile.createdAt.toIso8601String(),
+      },
+    };
+  }
+
   BackendAuthSession _session({
     required String phone,
     String displayName = 'Sita Shrestha',

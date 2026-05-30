@@ -4,6 +4,7 @@ import { requireGroupMember } from '../../middleware/role.middleware.js';
 import { requireBody } from '../../middleware/validate.middleware.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import {
+  cancelSettlement,
   confirmSettlement,
   createSettlement,
   listSettlements,
@@ -43,6 +44,21 @@ settlementsRouter.post(
   asyncHandler(async (req, res) => {
     res.json({
       settlement: await confirmSettlement(
+        req.group,
+        req.userProfile.id,
+        req.params.settlementId,
+        req.body,
+      ),
+    });
+  }),
+);
+
+settlementsRouter.post(
+  '/group/:groupId/:settlementId/cancel',
+  requireGroupMember(),
+  asyncHandler(async (req, res) => {
+    res.json({
+      settlement: await cancelSettlement(
         req.group,
         req.userProfile.id,
         req.params.settlementId,

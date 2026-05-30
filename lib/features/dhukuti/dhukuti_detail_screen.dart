@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth/auth_controller.dart';
+import '../../shared/api/backend_api.dart';
 import '../../shared/payments/esewa_payment_service.dart';
 import '../../shared/design_system/app_components.dart' as ds;
 import '../../shared/design_system/app_spacing.dart';
@@ -92,17 +93,44 @@ Future<void> showRenameDhukutiPoolDialog({
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: () {
-                  final error = store.renameDhukutiPool(pool.id, name.text);
-                  if (error != null) {
-                    setState(() => errorText = error);
+                onPressed: () async {
+                  final nextName = name.text.trim();
+                  if (nextName.isEmpty) {
+                    setState(() => errorText = 'Group name is required.');
                     return;
                   }
-                  Navigator.pop(dialogContext);
-                  onRenamed();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${pool.name} saved.')),
-                  );
+                  final api = BackendApi();
+                  try {
+                    if (!api.isConfigured) {
+                      throw const BackendApiException(
+                        'Backend API is required for signed-in actions.',
+                      );
+                    }
+                    final token = await AuthScope.of(
+                      context,
+                    ).backendAccessToken();
+                    if (token == null) {
+                      throw const BackendApiException(
+                        'Sign in again to continue.',
+                      );
+                    }
+                    await api.updateCommunitySavingsGroup(
+                      accessToken: token,
+                      savingsGroupId: pool.id,
+                      group: {'name': nextName},
+                    );
+                    final snapshot = await api.appBootstrap(accessToken: token);
+                    store.loadBackendSnapshot(snapshot);
+                    if (context.mounted) {
+                      Navigator.pop(dialogContext);
+                      onRenamed();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$nextName saved.')),
+                      );
+                    }
+                  } on BackendApiException catch (error) {
+                    setState(() => errorText = error.message);
+                  }
                 },
                 child: const Text('Save'),
               ),

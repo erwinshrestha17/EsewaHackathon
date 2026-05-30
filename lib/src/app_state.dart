@@ -5,13 +5,15 @@ import 'finance.dart';
 import 'models.dart';
 
 class AppStore extends ChangeNotifier {
-  AppStore({bool seedLocalData = false}) {
+  AppStore({bool seedLocalData = false}) : allowLocalMutations = seedLocalData {
     if (seedLocalData) {
       _seed();
     }
   }
 
   factory AppStore.seeded() => AppStore(seedLocalData: true);
+
+  final bool allowLocalMutations;
 
   final List<AppUser> users = <AppUser>[];
   final List<Connection> connections = <Connection>[];
@@ -389,6 +391,38 @@ class AppStore extends ChangeNotifier {
           expiredAt: _optionalDate(row['expiredAt']),
           cancelledAt: _optionalDate(row['cancelledAt']),
           refundedAt: _optionalDate(row['refundedAt']),
+        ),
+      );
+    }
+
+    final entriesByAdjustment = <String, List<AdjustmentEntry>>{};
+    for (final row in _rows(snapshot, 'adjustmentEntries')) {
+      final entry = AdjustmentEntry(
+        id: _string(row, 'id'),
+        adjustmentId: _string(row, 'adjustmentId'),
+        userId: _string(row, 'userId'),
+        amountMinor: _int(row, 'amountMinor'),
+        direction: _string(row, 'direction'),
+      );
+      entriesByAdjustment.putIfAbsent(entry.adjustmentId, () => []).add(entry);
+    }
+    for (final row in _rows(snapshot, 'adjustments')) {
+      final adjustmentId = _string(row, 'id');
+      adjustments.add(
+        Adjustment(
+          id: adjustmentId,
+          groupId: _string(row, 'groupId'),
+          reason: _string(row, 'reason'),
+          adjustmentType: _enumValue(
+            AdjustmentType.values,
+            row['adjustmentType'],
+            AdjustmentType.correction,
+          ),
+          createdBy: _string(row, 'createdBy'),
+          createdAt: _date(row['createdAt']),
+          reversesSourceType: _nullableString(row['reversesSourceType']),
+          reversesSourceId: _nullableString(row['reversesSourceId']),
+          entries: entriesByAdjustment[adjustmentId] ?? [],
         ),
       );
     }

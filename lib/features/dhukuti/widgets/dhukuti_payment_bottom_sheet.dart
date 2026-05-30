@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../features/auth/auth_controller.dart';
+import '../../../shared/api/backend_api.dart';
 import '../../../shared/payments/esewa_payment_service.dart';
 import '../../../shared/transactions/transaction_confirmation_controller.dart';
 import '../../../shared/transactions/transaction_confirmation_data.dart';
@@ -38,15 +40,54 @@ Future<bool> showDhukutiPaymentBottomSheet({
       context: context,
       data: data,
       onSuccess: (receipt) async {
-        store.payDhukutiContribution(
-          contribution.id,
-          paymentProvider: 'esewa',
-          paymentReference: receipt.reference,
-          rawPayload: receipt.rawPayload,
-        );
+        final api = BackendApi();
+        if (!api.isConfigured) {
+          return TransactionResult.failure(
+            reason:
+                'Backend API is required for signed-in actions. Start the API server and set BACKEND_API_BASE_URL.',
+            amount: contribution.amountMinor,
+            transactionReference: receipt.reference,
+            createdAt: DateTime.now(),
+            status: TransactionStatus.failedReview,
+          );
+        }
+        final token = await AuthScope.of(context).backendAccessToken();
+        if (token == null) {
+          return TransactionResult.failure(
+            reason: 'Sign in again to continue.',
+            amount: contribution.amountMinor,
+            transactionReference: receipt.reference,
+            createdAt: DateTime.now(),
+            status: TransactionStatus.failedReview,
+          );
+        }
+        try {
+          await api.submitCommunitySavingsContribution(
+            accessToken: token,
+            savingsGroupId: pool.id,
+            contributionId: contribution.id,
+            contribution: {
+              'amountPaid': contribution.amountMinor,
+              'paymentMethod': 'esewa',
+              'referenceNumber': receipt.reference,
+              'note': 'Submitted via eSewa',
+            },
+          );
+          final snapshot = await api.appBootstrap(accessToken: token);
+          store.loadBackendSnapshot(snapshot);
+        } on BackendApiException catch (error) {
+          return TransactionResult.failure(
+            reason: error.message,
+            amount: contribution.amountMinor,
+            transactionReference: receipt.reference,
+            createdAt: DateTime.now(),
+            status: TransactionStatus.failedReview,
+          );
+        }
         return TransactionResult.success(
-          title: 'Contribution Paid',
-          message: 'Your community savings contribution was paid via eSewa.',
+          title: 'Contribution Submitted',
+          message:
+              'Your community savings contribution was submitted for admin confirmation.',
           amount: contribution.amountMinor,
           transactionReference: receipt.reference,
           createdAt: DateTime.now(),

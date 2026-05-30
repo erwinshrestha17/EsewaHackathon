@@ -15,6 +15,7 @@ Node.js/Express API for Sajha Kharcha. It uses Supabase PostgreSQL as the system
    - `SUPABASE_URL`
    - `SUPABASE_SECRET_KEY` as a server-only `sb_secret_...` key
    - `SUPABASE_PUBLISHABLE_KEY` for token verification
+   - `SUPABASE_JWT_SECRET` for private Supabase Realtime Broadcast auth
 
 3. Fill auth/session infrastructure values:
 
@@ -37,6 +38,8 @@ Node.js/Express API for Sajha Kharcha. It uses Supabase PostgreSQL as the system
    - `supabase/migrations/20260530120000_create_full_app_backend.sql`
    - `supabase/migrations/20260530085341_add_mpin_auth_sessions.sql`
    - `supabase/migrations/20260530150000_production_auth.sql`
+   - `supabase/migrations/20260531120000_realtime_private_topics.sql`
+   - `supabase/migrations/20260531121500_create_adjustments.sql`
 
    `supabase/seed.sql` is intentionally empty and does not recreate demo users.
 
@@ -77,6 +80,12 @@ Authorization: Bearer eyJ...
 
 Refresh tokens are stored only as hashes in `app_sessions` and rotated by `POST /api/auth/refresh`. Redis caches active session state and OTP challenges; Postgres remains the source of truth.
 
+## Realtime Invalidation
+
+Flutter reads canonical data from `GET /api/app/bootstrap` and subscribes to private Supabase Realtime Broadcast topics from `GET /api/app/realtime-token`. The backend mints short-lived Supabase JWTs with `role=authenticated`, and Realtime RLS allows only `user:<profileId>` plus active/invited `group:<groupId>` topics.
+
+Write routes publish invalidation events after successful mutations so other signed-in clients refresh their backend projection without a manual page reload.
+
 Run Flutter against the backend auth/API layer with:
 
 ```bash
@@ -114,6 +123,7 @@ is `false`, copy `backend/.env.example` to `backend/.env` and fill
 - `GET /api/groups/:groupId`
 - `PATCH /api/groups/:groupId`
 - `DELETE /api/groups/:groupId`
+- `POST /api/groups/:groupId/leave`
 - `GET /api/groups/:groupId/members`
 - `POST /api/groups/:groupId/members`
 - `PATCH /api/groups/:groupId/members/:memberId`
@@ -127,17 +137,24 @@ is `false`, copy `backend/.env.example` to `backend/.env` and fill
 - `POST /api/connections/:connectionId/block`
 - `POST /api/connections/:connectionId/unblock`
 - `POST /api/connections/:connectionId/report`
-- `GET /api/app/events` (server-sent realtime app updates)
+- `GET /api/app/bootstrap`
+- `GET /api/app/realtime-token`
+- `GET /api/app/events` (legacy server-sent app updates)
 - `GET /api/expenses/group/:groupId`
 - `POST /api/expenses/group/:groupId`
+- `PATCH /api/expenses/group/:groupId/:expenseId`
+- `POST /api/expenses/group/:groupId/:expenseId/void`
+- `POST /api/adjustments/group/:groupId`
 - `GET /api/settlements`
 - `POST /api/settlements/group/:groupId`
 - `POST /api/settlements/group/:groupId/:settlementId/confirm`
+- `POST /api/settlements/group/:groupId/:settlementId/cancel`
 - `GET /api/gifts`
 - `POST /api/gifts`
 - `POST /api/gifts/:giftId/open`
 - `GET /api/gifts/pools/group/:groupId`
 - `POST /api/gifts/pools/group/:groupId`
+- `POST /api/gifts/pools/group/:groupId/:giftPoolId/cancel`
 - `POST /api/gifts/pools/:giftPoolId/contributions`
 - `GET /api/community-savings`
 - `POST /api/community-savings`
