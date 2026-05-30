@@ -117,11 +117,22 @@ export async function updateConnection(userId, connectionId, status) {
       .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`),
     'Connection not found.',
   );
+  if (status === 'approved' || status === 'declined') {
+    if (current.recipient_id !== userId) {
+      throw new ApiError(
+        403,
+        `Only the request recipient can ${status.slice(0, -1)} this request.`,
+      );
+    }
+    if (current.status !== 'pending') {
+      throw new ApiError(409, 'Only pending connection requests can be updated.');
+    }
+  }
   const { data, error } = await db()
     .from('connections')
     .update({ status })
     .eq('id', current.id)
-    .select()
+    .select(connectionSelect)
     .single();
   assertDb(error);
   await logActivity({

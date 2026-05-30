@@ -478,6 +478,10 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   var _loadingBackendSnapshot = false;
   var _initializingAuth = false;
   String? _loadedBackendSnapshotToken;
+  static const _incomingConnectionBannerTimeout = Duration(seconds: 8);
+  Timer? _incomingConnectionBannerTimer;
+  String? _visibleIncomingConnectionId;
+  final Set<String> _dismissedIncomingConnectionBannerIds = <String>{};
 
   SettingsController get _settingsController => widget.settingsController;
 
@@ -510,6 +514,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
 
   @override
   void dispose() {
+    _incomingConnectionBannerTimer?.cancel();
     _authController?.removeListener(_handleAuthChanged);
     _settingsController.removeListener(_handleSettingsChanged);
     super.dispose();
@@ -559,7 +564,11 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         activityTimelineLimit:
             _settingsController.state.activityTimelineLimit.count,
       ),
-      2 => ConnectionsScreen(onRequestConnection: _requestConnection),
+      2 => ConnectionsScreen(
+        onRequestConnection: _requestConnection,
+        onApproveConnection: _approveConnection,
+        onDeclineConnection: _declineConnection,
+      ),
       3 => const GiftsScreen(),
       4 => SettingsScreen(
         controller: _settingsController,
@@ -588,6 +597,8 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 900;
           final scheme = Theme.of(context).colorScheme;
+          final incomingConnection = _incomingConnection(store);
+          _syncIncomingConnectionBanner(incomingConnection);
           return Scaffold(
             appBar: _index == 0
                 ? null
@@ -660,10 +671,15 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
                 Expanded(
                   child: Column(
                     children: [
-                      if (_incomingConnection(store) case final connection?)
+                      if (incomingConnection case final connection?)
                         _IncomingConnectionBanner(
                           connection: connection,
-                          onReview: () => _go(2),
+                          onReview: () {
+                            _dismissIncomingConnectionBanner(connection.id);
+                            _go(2);
+                          },
+                          onDismiss: () =>
+                              _dismissIncomingConnectionBanner(connection.id),
                         ),
                       Expanded(
                         child: KeyedSubtree(
@@ -837,15 +853,104 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     return store.sendConnectionRequest(targetUserId);
   }
 
+  Future<String> _approveConnection(String connectionId) async {
+    final store = _store;
+    final authController = _authController;
+    if (store == null) {
+      throw const BackendApiException('Store is not ready yet.');
+    }
+    final connection = store.connections.firstWhere(
+      (item) => item.id == connectionId,
+    );
+    final other = store.userById(connection.otherUserId(store.currentUserId));
+    if (_backendApi.isConfigured && authController != null) {
+      final token = await authController.backendAccessToken();
+      if (token != null) {
+        await _backendApi.approveConnection(
+          accessToken: token,
+          connectionId: connectionId,
+        );
+        await _loadBackendSnapshot(force: true);
+        return '${other.displayName} is now connected.';
+      }
+    }
+    store.approveConnection(connectionId);
+    return '${other.displayName} is now connected.';
+  }
+
+  Future<String> _declineConnection(String connectionId) async {
+    final store = _store;
+    final authController = _authController;
+    if (store == null) {
+      throw const BackendApiException('Store is not ready yet.');
+    }
+    final connection = store.connections.firstWhere(
+      (item) => item.id == connectionId,
+    );
+    final other = store.userById(connection.otherUserId(store.currentUserId));
+    if (_backendApi.isConfigured && authController != null) {
+      final token = await authController.backendAccessToken();
+      if (token != null) {
+        await _backendApi.declineConnection(
+          accessToken: token,
+          connectionId: connectionId,
+        );
+        await _loadBackendSnapshot(force: true);
+        return 'Request from ${other.displayName} declined.';
+      }
+    }
+    store.declineConnection(connectionId);
+    return 'Request from ${other.displayName} declined.';
+  }
+
   Connection? _incomingConnection(AppStore store) {
     for (final connection in store.connectionsFor(store.currentUserId)) {
       if (connection.recipientId == store.currentUserId &&
           connection.status == ConnectionStatus.pending &&
+          !_dismissedIncomingConnectionBannerIds.contains(connection.id) &&
           store.userByIdOrNull(connection.requesterId) != null) {
         return connection;
       }
     }
     return null;
+  }
+
+  void _syncIncomingConnectionBanner(Connection? connection) {
+    if (connection == null) {
+      _incomingConnectionBannerTimer?.cancel();
+      _incomingConnectionBannerTimer = null;
+      _visibleIncomingConnectionId = null;
+      return;
+    }
+    if (_visibleIncomingConnectionId == connection.id) {
+      return;
+    }
+    _incomingConnectionBannerTimer?.cancel();
+    _visibleIncomingConnectionId = connection.id;
+    _incomingConnectionBannerTimer = Timer(
+      _incomingConnectionBannerTimeout,
+      () {
+        if (!mounted || _visibleIncomingConnectionId != connection.id) {
+          return;
+        }
+        setState(() {
+          _dismissedIncomingConnectionBannerIds.add(connection.id);
+          _visibleIncomingConnectionId = null;
+          _incomingConnectionBannerTimer = null;
+        });
+      },
+    );
+  }
+
+  void _dismissIncomingConnectionBanner(String connectionId) {
+    _incomingConnectionBannerTimer?.cancel();
+    _incomingConnectionBannerTimer = null;
+    setState(() {
+      _dismissedIncomingConnectionBannerIds.add(connectionId);
+      if (_visibleIncomingConnectionId == connectionId) {
+        _visibleIncomingConnectionId = null;
+      }
+    });
   }
 
   void _openNotifications() {
@@ -967,9 +1072,16 @@ class ActivityScreen extends StatelessWidget {
 }
 
 class ConnectionsScreen extends StatefulWidget {
-  const ConnectionsScreen({this.onRequestConnection, super.key});
+  const ConnectionsScreen({
+    this.onRequestConnection,
+    this.onApproveConnection,
+    this.onDeclineConnection,
+    super.key,
+  });
 
   final Future<String> Function(String targetUserId)? onRequestConnection;
+  final Future<String> Function(String connectionId)? onApproveConnection;
+  final Future<String> Function(String connectionId)? onDeclineConnection;
 
   @override
   State<ConnectionsScreen> createState() => _ConnectionsScreenState();
@@ -978,6 +1090,7 @@ class ConnectionsScreen extends StatefulWidget {
 class _ConnectionsScreenState extends State<ConnectionsScreen> {
   final _searchController = TextEditingController();
   final Set<String> _requestingUserIds = <String>{};
+  final Set<String> _actioningConnectionIds = <String>{};
 
   @override
   void dispose() {
@@ -1061,7 +1174,13 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
             child: Column(
               children: [
                 for (final connection in incoming)
-                  _ConnectionTile(connection: connection, compact: false),
+                  _ConnectionTile(
+                    connection: connection,
+                    compact: false,
+                    actioning: _actioningConnectionIds.contains(connection.id),
+                    onApprove: () => _approveConnection(connection),
+                    onDecline: () => _declineConnection(connection),
+                  ),
               ],
             ),
           ),
@@ -1077,7 +1196,13 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
               : Column(
                   children: [
                     for (final connection in active)
-                      _ConnectionTile(connection: connection, compact: false),
+                      _ConnectionTile(
+                        connection: connection,
+                        compact: false,
+                        actioning: _actioningConnectionIds.contains(
+                          connection.id,
+                        ),
+                      ),
                   ],
                 ),
         ),
@@ -1106,6 +1231,54 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
     } finally {
       if (mounted) {
         setState(() => _requestingUserIds.remove(user.id));
+      }
+    }
+  }
+
+  Future<void> _approveConnection(Connection connection) async {
+    await _updateConnection(
+      connection,
+      fallback: () {
+        StoreScope.of(context).approveConnection(connection.id);
+        return 'Connection approved.';
+      },
+      action: widget.onApproveConnection,
+    );
+  }
+
+  Future<void> _declineConnection(Connection connection) async {
+    await _updateConnection(
+      connection,
+      fallback: () {
+        StoreScope.of(context).declineConnection(connection.id);
+        return 'Connection declined.';
+      },
+      action: widget.onDeclineConnection,
+    );
+  }
+
+  Future<void> _updateConnection(
+    Connection connection, {
+    required String Function() fallback,
+    required Future<String> Function(String connectionId)? action,
+  }) async {
+    if (_actioningConnectionIds.contains(connection.id)) {
+      return;
+    }
+    setState(() => _actioningConnectionIds.add(connection.id));
+    try {
+      final message = action == null ? fallback() : await action(connection.id);
+      if (!mounted) {
+        return;
+      }
+      showSnack(context, message);
+    } on BackendApiException catch (error) {
+      if (mounted) {
+        showSnack(context, error.message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _actioningConnectionIds.remove(connection.id));
       }
     }
   }
@@ -1156,10 +1329,12 @@ class _IncomingConnectionBanner extends StatelessWidget {
   const _IncomingConnectionBanner({
     required this.connection,
     required this.onReview,
+    required this.onDismiss,
   });
 
   final Connection connection;
   final VoidCallback onReview;
+  final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) {
@@ -1189,6 +1364,11 @@ class _IncomingConnectionBanner extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           TextButton(onPressed: onReview, child: const Text('View request')),
+          IconButton(
+            tooltip: 'Dismiss',
+            onPressed: onDismiss,
+            icon: const Icon(Icons.close),
+          ),
         ],
       ),
     );
@@ -1240,10 +1420,19 @@ class _InviteQrView extends StatelessWidget {
 }
 
 class _ConnectionTile extends StatelessWidget {
-  const _ConnectionTile({required this.connection, required this.compact});
+  const _ConnectionTile({
+    required this.connection,
+    required this.compact,
+    this.actioning = false,
+    this.onApprove,
+    this.onDecline,
+  });
 
   final Connection connection;
   final bool compact;
+  final bool actioning;
+  final VoidCallback? onApprove;
+  final VoidCallback? onDecline;
 
   @override
   Widget build(BuildContext context) {
@@ -1272,14 +1461,25 @@ class _ConnectionTile extends StatelessWidget {
                     connection.recipientId == store.currentUserId)
                   IconButton.filledTonal(
                     tooltip: 'Approve',
-                    onPressed: () => store.approveConnection(connection.id),
-                    icon: const Icon(Icons.check),
+                    onPressed: actioning
+                        ? null
+                        : onApprove ??
+                              () => store.approveConnection(connection.id),
+                    icon: actioning
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check),
                   ),
                 if (connection.status == ConnectionStatus.pending &&
                     connection.recipientId == store.currentUserId)
                   IconButton.outlined(
                     tooltip: 'Decline',
-                    onPressed: () => store.declineConnection(connection.id),
+                    onPressed: actioning
+                        ? null
+                        : onDecline ??
+                              () => store.declineConnection(connection.id),
                     icon: const Icon(Icons.close),
                   ),
                 if (connection.status == ConnectionStatus.approved)

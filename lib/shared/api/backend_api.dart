@@ -153,6 +153,28 @@ class BackendApi {
     }, accessToken: accessToken);
   }
 
+  Future<Map<String, dynamic>> approveConnection({
+    required String accessToken,
+    required String connectionId,
+  }) {
+    return _post(
+      '/api/connections/$connectionId/approve',
+      {},
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> declineConnection({
+    required String accessToken,
+    required String connectionId,
+  }) {
+    return _post(
+      '/api/connections/$connectionId/decline',
+      {},
+      accessToken: accessToken,
+    );
+  }
+
   Future<Map<String, dynamic>> appBootstrap({required String accessToken}) {
     return get('/api/app/bootstrap', accessToken: accessToken);
   }

@@ -696,6 +696,96 @@ void main() {
     expect(find.text('Kabir Lama'), findsWidgets);
   });
 
+  testWidgets('incoming connection banner dismisses manually and by timeout', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    _mockLoggedInStorage();
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(backendApi: _FakeBackendApi()),
+        child: StoreScope(
+          notifier: AppStore.seeded(),
+          child: const SajhaKharchaApp(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kabir Lama wants to connect with you.'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.pump();
+
+    expect(find.text('Kabir Lama wants to connect with you.'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(backendApi: _FakeBackendApi()),
+        child: StoreScope(
+          notifier: AppStore.seeded(),
+          child: const SajhaKharchaApp(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kabir Lama wants to connect with you.'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 8));
+    await tester.pump();
+
+    expect(find.text('Kabir Lama wants to connect with you.'), findsNothing);
+  });
+
+  testWidgets('incoming connection approve updates the request', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    _mockLoggedInStorage();
+    final store = AppStore.seeded();
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(backendApi: _FakeBackendApi()),
+        child: StoreScope(notifier: store, child: const SajhaKharchaApp()),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, 'View request'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Incoming Requests'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Approve'));
+    await tester.pumpAndSettle();
+
+    expect(
+      store.connectionBetween('u-sita', 'u-kabir')?.status,
+      ConnectionStatus.approved,
+    );
+    expect(find.text('Incoming Requests'), findsNothing);
+    expect(find.text('Kabir Lama is now connected.'), findsOneWidget);
+  });
+
   testWidgets(
     'main route initializes auth before rendering store-backed home',
     (tester) async {
