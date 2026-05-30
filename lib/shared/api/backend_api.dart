@@ -302,6 +302,14 @@ class BackendApi {
     }, accessToken: accessToken);
   }
 
+  Future<Map<String, dynamic>> searchConnectionProfiles({
+    required String accessToken,
+    required String query,
+  }) {
+    final encoded = Uri(queryParameters: {'q': query}).query;
+    return get('/api/connections/search?$encoded', accessToken: accessToken);
+  }
+
   Future<Map<String, dynamic>> approveConnection({
     required String accessToken,
     required String connectionId,

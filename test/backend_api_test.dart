@@ -92,4 +92,29 @@ void main() {
       'note': 'Repeated messages',
     });
   });
+
+  test('connection profile search encodes query and auth header', () async {
+    late http.Request captured;
+    final api = BackendApi(
+      baseUrl: 'http://127.0.0.1:3000',
+      client: MockClient((request) async {
+        captured = request;
+        return http.Response(
+          '{"users":[{"id":"u-maya","fullName":"Maya Gurung"}]}',
+          200,
+        );
+      }),
+    );
+
+    final response = await api.searchConnectionProfiles(
+      accessToken: 'access-token',
+      query: 'Maya 980',
+    );
+
+    expect(captured.method, 'GET');
+    expect(captured.url.path, '/api/connections/search');
+    expect(captured.url.queryParameters['q'], 'Maya 980');
+    expect(captured.headers['authorization'], 'Bearer access-token');
+    expect(response['users'], isA<List<dynamic>>());
+  });
 }

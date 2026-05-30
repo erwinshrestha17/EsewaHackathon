@@ -62,60 +62,96 @@ class _GroupCard extends StatelessWidget {
     return ds.AppCard(
       onTap: onTap,
       padding: const EdgeInsets.all(14),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 88),
-        child: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: scheme.primaryContainer,
-              foregroundColor: scheme.onPrimaryContainer,
-              child: Icon(group.icon),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final identity = Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: scheme.primaryContainer,
+                foregroundColor: scheme.onPrimaryContainer,
+                child: Icon(group.icon),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      group.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.cardTitle,
+                    ),
+                    Text(
+                      '${group.category} · ${group.memberCount} members',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodySecondary,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      group.recentText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+          final balance = Column(
+            crossAxisAlignment: constraints.maxWidth < 390
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.end,
+            children: [
+              Text(
+                balanceLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: constraints.maxWidth < 390
+                    ? TextAlign.start
+                    : TextAlign.end,
+                style: AppTextStyles.cardTitle.copyWith(color: balanceColor),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                group.dueStatus,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          );
+          if (constraints.maxWidth < 390) {
+            return ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 88),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    group.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.cardTitle,
-                  ),
-                  Text(
-                    '${group.category} · ${group.memberCount} members',
-                    style: AppTextStyles.bodySecondary,
-                  ),
+                  identity,
                   const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    group.recentText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.caption,
-                  ),
+                  balance,
                 ],
               ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            );
+          }
+          return ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 88),
+            child: Row(
               children: [
-                Text(
-                  balanceLabel,
-                  textAlign: TextAlign.end,
-                  style: AppTextStyles.cardTitle.copyWith(color: balanceColor),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  group.dueStatus,
-                  style: AppTextStyles.caption.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                Expanded(child: identity),
+                const SizedBox(width: AppSpacing.md),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 160),
+                  child: balance,
                 ),
               ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

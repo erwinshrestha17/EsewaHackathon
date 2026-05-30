@@ -35,9 +35,11 @@ Future<bool> showDhukutiPaymentBottomSheet({
       TransactionDetail('Due date', _dateLabel(contribution.dueDate)),
     ],
   );
-  final result = await openTransactionConfirmation(context, data, () {
+  final result = await openTransactionConfirmation(context, data, (
+    paymentContext,
+  ) {
     return confirmWithEsewa(
-      context: context,
+      context: paymentContext,
       data: data,
       onSuccess: (receipt) async {
         final api = BackendApi();

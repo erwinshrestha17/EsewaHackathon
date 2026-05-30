@@ -151,6 +151,29 @@ void main() {
     expect(connection.reports.single.details, 'Repeated messages');
   });
 
+  test('AppStore upserts backend search users and normalizes phone search', () {
+    final store = AppStore.seeded();
+    store.upsertUser(
+      AppUser(
+        id: 'u-new',
+        displayName: 'Naya Shrestha',
+        phone: '+977 980-123-4567',
+        avatar: 'NS',
+        district: 'Kathmandu',
+        createdAt: DateTime(2026, 5, 31),
+      ),
+    );
+
+    expect(
+      store.searchUsers('980123').map((user) => user.id),
+      contains('u-new'),
+    );
+    expect(
+      store.searchUsers('kathmandu').map((user) => user.id),
+      contains('u-new'),
+    );
+  });
+
   test('equal shares keep integer paisa totals exact', () {
     final shares = equalShares(npr(100), const ['a', 'b', 'c']);
 

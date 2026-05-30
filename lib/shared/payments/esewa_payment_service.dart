@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:esewa_flutter/esewa_flutter.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 import '../transactions/transaction_confirmation_data.dart';
 import '../transactions/transaction_status.dart';
@@ -71,7 +71,14 @@ class EsewaPaymentService {
     }
     final transactionUuid = _transactionUuidFor(data);
     final config = _configFor(data, transactionUuid);
-    final result = await Esewa.i.init(context: context, eSewaConfig: config);
+    final result = await Esewa.i.init(
+      context: context,
+      eSewaConfig: config,
+      walletPageContent: EsewaPageContent(
+        appBar: AppBar(title: const Text('Pay with eSewa')),
+        progressLoader: const _EsewaCheckoutLoader(),
+      ),
+    );
     if (result.hasError) {
       throw EsewaPaymentException(
         _friendlyGatewayError(result.error),
@@ -271,6 +278,42 @@ class EsewaPaymentService {
       result |= left.codeUnitAt(i) ^ right.codeUnitAt(i);
     }
     return result == 0;
+  }
+}
+
+class _EsewaCheckoutLoader extends StatelessWidget {
+  const _EsewaCheckoutLoader();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 280),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: scheme.primary),
+            const SizedBox(height: 16),
+            Text(
+              'Opening eSewa checkout...',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Keep this screen open while the secure payment page loads.',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

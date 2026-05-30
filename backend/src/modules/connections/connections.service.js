@@ -80,11 +80,21 @@ export async function searchProfiles(currentUserId, query) {
   if (!term) {
     return [];
   }
+  const safeTerm = term.replace(/[(),]/g, ' ').trim();
+  const digits = term.replace(/\D/g, '');
+  const filters = [
+    `full_name.ilike.%${safeTerm}%`,
+    `phone.ilike.%${safeTerm}%`,
+    `legacy_user_id.ilike.%${safeTerm}%`,
+  ];
+  if (digits && digits !== safeTerm) {
+    filters.push(`phone.ilike.%${digits}%`);
+  }
   const { data, error } = await db()
     .from('profiles')
     .select('*')
     .neq('id', currentUserId)
-    .or(`full_name.ilike.%${term}%,phone.ilike.%${term}%,legacy_user_id.ilike.%${term}%`)
+    .or(filters.join(','))
     .limit(20);
   assertDb(error);
   return data.map(profileDto);

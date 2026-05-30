@@ -85,21 +85,43 @@ class DhukutiSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ds.AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 420;
+        final header = action == null
+            ? Text(title, style: AppTextStyles.sectionTitle)
+            : compact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTextStyles.sectionTitle),
+                  const SizedBox(height: AppSpacing.sm),
+                  Align(alignment: Alignment.centerLeft, child: action!),
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(title, style: AppTextStyles.sectionTitle),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Flexible(
+                    child: Align(alignment: Alignment.topRight, child: action!),
+                  ),
+                ],
+              );
+        return ds.AppCard(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: Text(title, style: AppTextStyles.sectionTitle)),
-              ?action,
+              header,
+              const SizedBox(height: AppSpacing.md),
+              child,
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          child,
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -153,7 +175,11 @@ class DhukutiHeader extends StatelessWidget {
                 children: [
                   Text(title, style: AppTextStyles.screenTitle),
                   const SizedBox(height: AppSpacing.xs),
-                  Text(subtitle, style: AppTextStyles.bodySecondary),
+                  Text(
+                    subtitle,
+                    softWrap: true,
+                    style: AppTextStyles.bodySecondary,
+                  ),
                 ],
               ),
             ),
@@ -177,7 +203,9 @@ class DhukutiHeader extends StatelessWidget {
           children: [
             Expanded(child: titleBlock),
             const SizedBox(width: AppSpacing.lg),
-            action!,
+            Flexible(
+              child: Align(alignment: Alignment.topRight, child: action!),
+            ),
           ],
         );
       },
@@ -308,8 +336,18 @@ class DhukutiMetricCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: AppTextStyles.caption),
-                Text(value, style: AppTextStyles.sectionTitle),
+                Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption,
+                ),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.sectionTitle,
+                ),
                 if (helper != null)
                   Text(helper!, style: AppTextStyles.bodySecondary),
               ],

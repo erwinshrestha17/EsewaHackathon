@@ -8,6 +8,7 @@ import 'package:sajha_kharcha/features/auth/screens/auth_screen.dart';
 import 'package:sajha_kharcha/features/auth/screens/login_form.dart';
 import 'package:sajha_kharcha/features/auth/screens/register_form.dart';
 import 'package:sajha_kharcha/shared/api/backend_api.dart';
+import 'package:sajha_kharcha/shared/api/realtime_sync_service.dart';
 import 'package:sajha_kharcha/features/home/home_controller.dart';
 import 'package:sajha_kharcha/features/settings/settings_controller.dart';
 import 'package:sajha_kharcha/features/settings/settings_screen.dart';
@@ -78,6 +79,31 @@ class _FakeBackendApi extends BackendApi {
   Future<void> logout({String? accessToken, String? refreshToken}) async {}
 
   @override
+  Future<Map<String, dynamic>> appBootstrap({
+    required String accessToken,
+  }) async {
+    return {
+      'currentUserId': _testUserProfile.id,
+      'users': [
+        {
+          'id': _testUserProfile.id,
+          'displayName': _testUserProfile.displayName,
+          'phone': _testUserProfile.phone,
+          'avatar': 'S',
+          'district': _testUserProfile.district,
+          'createdAt': _testUserProfile.createdAt.toIso8601String(),
+          'privacyMode': 'everyone',
+        },
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> settings({required String accessToken}) async {
+    return {};
+  }
+
+  @override
   Future<Map<String, dynamic>> deleteAccount({
     required String accessToken,
   }) async {
@@ -124,6 +150,20 @@ class _FakeBackendApi extends BackendApi {
         'dateOfBirth': dateOfBirth,
         'createdAt': _testUserProfile.createdAt.toIso8601String(),
       },
+    );
+  }
+}
+
+class _FailingRealtimeSyncService extends BackendRealtimeSyncService {
+  var starts = 0;
+
+  @override
+  Future<void> start({
+    required Future<String?> Function() accessTokenProvider,
+  }) async {
+    starts += 1;
+    throw const BackendApiException(
+      'Supabase realtime is not configured. Set SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, and SUPABASE_JWT_SECRET.',
     );
   }
 }
@@ -688,6 +728,97 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'compact connections and groups layouts render without overflow',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      _mockLoggedInStorage();
+
+      await tester.pumpWidget(
+        AuthScope(
+          notifier: AuthController(backendApi: _FakeBackendApi()),
+          child: StoreScope(
+            notifier: AppStore.seeded(),
+            child: const SajhaKharchaApp(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.widgetWithText(NavigationDestination, 'Connections'),
+      );
+      await tester.pumpAndSettle();
+
+      final searchField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Search name or phone',
+      );
+      await tester.enterText(searchField, 'Maya');
+      await tester.pump();
+
+      expect(find.text('Maya Gurung'), findsWidgets);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Groups'));
+      await tester.pumpAndSettle();
+
+      final savingsTrackerTab = find.text('Community Savings').first;
+      await tester.ensureVisible(savingsTrackerTab);
+      await tester.tapAt(tester.getCenter(savingsTrackerTab));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Family Dashain Community Fund'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('empty home create group flow keeps a stable parent context', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    _mockLoggedInStorage();
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(backendApi: _FakeBackendApi()),
+        child: StoreScope(notifier: AppStore(), child: const SajhaKharchaApp()),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    final createGroup = find.widgetWithText(FilledButton, 'Create Group');
+    await tester.ensureVisible(createGroup);
+    await tester.tap(createGroup);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create Expense Group'), findsWidgets);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Create Expense Group'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Backend API is required for signed-in actions. Start the API server and set BACKEND_API_BASE_URL.',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('incoming connection requests show a recipient banner', (
     tester,
   ) async {
@@ -842,6 +973,43 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('missing realtime setup does not crash the signed-in shell', (
+    tester,
+  ) async {
+    _mockLoggedInStorage();
+    final settings = SettingsController();
+    final backendApi = _FakeBackendApi();
+    final realtimeService = _FailingRealtimeSyncService();
+    addTearDown(settings.dispose);
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(backendApi: backendApi),
+        child: StoreScope(
+          notifier: AppStore(),
+          child: MaterialApp(
+            routes: {
+              '/auth': (_) => const AuthScreen(),
+              '/intro': (_) => const Scaffold(body: Text('Intro')),
+            },
+            home: SajhaKharchaShell(
+              settingsController: settings,
+              backendApi: backendApi,
+              backendRealtimeService: realtimeService,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(realtimeService.starts, greaterThanOrEqualTo(1));
+    expect(find.text('Namaste, Sita'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('connection report dialog requires note and blocks duplicates', (
     tester,

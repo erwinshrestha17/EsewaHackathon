@@ -287,23 +287,42 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final titleBlock = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: AppTextStyles.sectionTitle),
+            if (subtitle != null) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(subtitle!, style: AppTextStyles.bodySecondary),
+            ],
+          ],
+        );
+        if (action == null) {
+          return titleBlock;
+        }
+        if (constraints.maxWidth < 420) {
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: AppTextStyles.sectionTitle),
-              if (subtitle != null) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Text(subtitle!, style: AppTextStyles.bodySecondary),
-              ],
+              titleBlock,
+              const SizedBox(height: AppSpacing.sm),
+              action!,
             ],
-          ),
-        ),
-        if (action != null) ...[const SizedBox(width: AppSpacing.md), action!],
-      ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: titleBlock),
+            const SizedBox(width: AppSpacing.md),
+            Flexible(
+              child: Align(alignment: Alignment.topRight, child: action!),
+            ),
+          ],
+        );
+      },
     );
   }
 }

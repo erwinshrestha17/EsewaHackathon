@@ -54,11 +54,15 @@ class BalanceSummaryCard extends StatelessWidget {
             children: [
               const Icon(Icons.account_balance_wallet, color: Colors.white),
               const SizedBox(width: AppSpacing.sm),
-              Text(
-                'Your shared balance',
-                style: AppTextStyles.sectionTitle.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
+              Expanded(
+                child: Text(
+                  'Your shared balance',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.sectionTitle.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
             ],

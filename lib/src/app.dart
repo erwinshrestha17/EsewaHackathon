@@ -53,6 +53,12 @@ class StoreScope extends InheritedNotifier<AppStore> {
     assert(scope != null, 'No StoreScope found in context.');
     return scope!.notifier!;
   }
+
+  static AppStore read(BuildContext context) {
+    final scope = context.getInheritedWidgetOfExactType<StoreScope>();
+    assert(scope != null, 'No StoreScope found in context.');
+    return scope!.notifier!;
+  }
 }
 
 const _backendRequiredMessage =
@@ -66,7 +72,7 @@ Future<String> _requireBackendAccessToken(
   if (!backendApi.isConfigured) {
     throw const BackendApiException(_backendRequiredMessage);
   }
-  final auth = AuthScope.of(context);
+  final auth = AuthScope.read(context);
   final token = await auth.backendAccessToken();
   if (token == null) {
     throw const BackendApiException('Sign in again to continue.');
@@ -80,7 +86,7 @@ Future<void> _reloadBackendProjection(
   String? accessToken,
 }) async {
   final backendApi = api ?? BackendApi();
-  final store = StoreScope.of(context);
+  final store = StoreScope.read(context);
   final token =
       accessToken ?? await _requireBackendAccessToken(context, api: backendApi);
   final snapshot = await backendApi.appBootstrap(accessToken: token);
@@ -354,9 +360,9 @@ Future<TransactionResult?> _openSettlementConfirmation(
 ) {
   final backendApi = BackendApi();
   final data = _settlementConfirmationData(store, suggestion);
-  return openTransactionConfirmation(context, data, () {
+  return openTransactionConfirmation(context, data, (paymentContext) {
     return confirmWithEsewa(
-      context: context,
+      context: paymentContext,
       data: data,
       onSuccess: (receipt) async {
         final token = await _requireBackendAccessToken(
@@ -441,9 +447,9 @@ Future<TransactionResult?> _openDhukutiContributionConfirmation(
 ) {
   final backendApi = BackendApi();
   final data = _dhukutiContributionConfirmationData(store, pool, contribution);
-  return openTransactionConfirmation(context, data, () {
+  return openTransactionConfirmation(context, data, (paymentContext) {
     return confirmWithEsewa(
-      context: context,
+      context: paymentContext,
       data: data,
       onSuccess: (receipt) async {
         final token = await _requireBackendAccessToken(
@@ -715,9 +721,16 @@ Future<void> showApproveExternalSettlementDialog(
 }
 
 class SajhaKharchaShell extends StatefulWidget {
-  const SajhaKharchaShell({required this.settingsController, super.key});
+  const SajhaKharchaShell({
+    required this.settingsController,
+    this.backendApi,
+    this.backendRealtimeService,
+    super.key,
+  });
 
   final SettingsController settingsController;
+  final BackendApi? backendApi;
+  final BackendRealtimeSyncService? backendRealtimeService;
 
   @override
   State<SajhaKharchaShell> createState() => _SajhaKharchaShellState();
@@ -729,8 +742,9 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   var _groupsInitialTab = GroupKind.expense;
   AuthController? _authController;
   AppStore? _store;
-  final _backendApi = BackendApi();
-  final _backendRealtimeService = BackendRealtimeSyncService();
+  late final _backendApi = widget.backendApi ?? BackendApi();
+  late final _backendRealtimeService =
+      widget.backendRealtimeService ?? BackendRealtimeSyncService();
   var _loadingBackendSnapshot = false;
   var _initializingAuth = false;
   var _applyingBackendSettings = false;
@@ -1133,6 +1147,17 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
       await _backendRealtimeService.start(
         accessTokenProvider: authController.backendAccessToken,
       );
+    } on BackendApiException catch (error) {
+      debugPrint('Backend realtime unavailable: ${error.message}');
+      await _backendRealtimeSubscription?.cancel();
+      _backendRealtimeSubscription = null;
+      await _backendRealtimeService.stop();
+    } on Object catch (error, stackTrace) {
+      debugPrint('Backend realtime startup failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      await _backendRealtimeSubscription?.cancel();
+      _backendRealtimeSubscription = null;
+      await _backendRealtimeService.stop();
     } finally {
       _startingBackendRealtime = false;
     }
@@ -1188,7 +1213,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     if (store == null) {
       throw const BackendApiException('Store is not ready yet.');
     }
-    final target = store.userById(targetUserId);
+    final target = store.userByIdOrNull(targetUserId);
     try {
       final token = await _requireBackendAccessToken(context, api: _backendApi);
       await _backendApi.requestConnection(
@@ -1196,7 +1221,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         targetUserId: targetUserId,
       );
       await _loadBackendSnapshot(force: true);
-      return 'Request sent to ${target.displayName}.';
+      return 'Request sent to ${target?.displayName ?? 'that member'}.';
     } on BackendApiException {
       if (!store.allowLocalMutations) {
         rethrow;
@@ -1427,6 +1452,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   void _openScanBillFromHome() {
     final store = StoreScope.of(context);
     final groups = store.visibleExpenseGroups;
+    final shellContext = context;
     final group = groups.isEmpty
         ? null
         : groups.any((group) => group.id == store.selectedGroupId)
@@ -1436,7 +1462,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
       showModalBottomSheet<void>(
         context: context,
         showDragHandle: true,
-        builder: (context) => SafeArea(
+        builder: (sheetContext) => SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             child: Column(
@@ -1446,7 +1472,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
                 Text(
                   'Scan Receipt',
                   style: Theme.of(
-                    context,
+                    sheetContext,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 8),
@@ -1456,8 +1482,12 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: () {
-                    Navigator.pop(context);
-                    showCreateGroupDialog(context);
+                    Navigator.pop(sheetContext);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        unawaited(showCreateGroupDialog(shellContext));
+                      }
+                    });
                   },
                   child: const Text('Create Group'),
                 ),
@@ -1572,11 +1602,19 @@ class ConnectionsScreen extends StatefulWidget {
 
 class _ConnectionsScreenState extends State<ConnectionsScreen> {
   final _searchController = TextEditingController();
+  final _backendApi = BackendApi();
   final Set<String> _requestingUserIds = <String>{};
   final Set<String> _actioningConnectionIds = <String>{};
+  final List<AppUser> _remoteResults = <AppUser>[];
+  Timer? _searchDebounce;
+  String _remoteQuery = '';
+  String? _searchError;
+  var _searching = false;
+  var _searchSerial = 0;
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -1595,7 +1633,11 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
     final active = connections
         .where((item) => item.status == ConnectionStatus.approved)
         .toList();
-    final results = store.searchUsers(_searchController.text);
+    final query = _searchController.text.trim();
+    final localResults = store.searchUsers(_searchController.text);
+    final results = _mergedSearchResults(store, localResults, query);
+    final shouldWaitForMoreInput =
+        _backendApi.isConfigured && query.isNotEmpty && query.length < 2;
 
     return AppScrollView(
       children: [
@@ -1631,8 +1673,29 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
                   labelText: 'Search name or phone',
                   prefixIcon: Icon(Icons.search),
                 ),
-                onChanged: (_) => setState(() {}),
+                onChanged: _handleSearchChanged,
               ),
+              if (_searching) ...[
+                const SizedBox(height: 10),
+                const LinearProgressIndicator(),
+              ],
+              if (shouldWaitForMoreInput) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Type at least 2 characters to search registered profiles.',
+                    style: AppTextStyles.caption,
+                  ),
+                ),
+              ],
+              if (_searchError != null) ...[
+                const SizedBox(height: 10),
+                _InlineSearchError(
+                  message: _searchError!,
+                  onRetry: () => _scheduleRemoteSearch(query, immediate: true),
+                ),
+              ],
               const SizedBox(height: 12),
               if (results.isEmpty)
                 const EmptyState(
@@ -1699,6 +1762,89 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
         ),
       ],
     );
+  }
+
+  void _handleSearchChanged(String value) {
+    setState(() {});
+    _scheduleRemoteSearch(value);
+  }
+
+  void _scheduleRemoteSearch(String rawQuery, {bool immediate = false}) {
+    _searchDebounce?.cancel();
+    final query = rawQuery.trim();
+    if (!_backendApi.isConfigured || query.length < 2) {
+      _searchSerial += 1;
+      setState(() {
+        _remoteQuery = '';
+        _remoteResults.clear();
+        _searchError = null;
+        _searching = false;
+      });
+      return;
+    }
+    final serial = ++_searchSerial;
+    final delay = immediate ? Duration.zero : const Duration(milliseconds: 320);
+    _searchDebounce = Timer(delay, () {
+      unawaited(_searchRegisteredProfiles(query, serial));
+    });
+  }
+
+  Future<void> _searchRegisteredProfiles(String query, int serial) async {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _remoteQuery = query;
+      _remoteResults.clear();
+      _searching = true;
+      _searchError = null;
+    });
+    try {
+      final token = await _requireBackendAccessToken(context, api: _backendApi);
+      final response = await _backendApi.searchConnectionProfiles(
+        accessToken: token,
+        query: query,
+      );
+      final users = _connectionSearchUsers(response);
+      if (!mounted || serial != _searchSerial) {
+        return;
+      }
+      StoreScope.of(context).upsertUsers(users, notify: false);
+      setState(() {
+        _remoteResults
+          ..clear()
+          ..addAll(users);
+        _searching = false;
+      });
+    } on BackendApiException catch (error) {
+      if (!mounted || serial != _searchSerial) {
+        return;
+      }
+      setState(() {
+        _searchError = error.message;
+        _remoteResults.clear();
+        _searching = false;
+      });
+    }
+  }
+
+  List<AppUser> _mergedSearchResults(
+    AppStore store,
+    List<AppUser> localResults,
+    String query,
+  ) {
+    final byId = <String, AppUser>{
+      for (final user in localResults) user.id: user,
+    };
+    if (query.isNotEmpty && _remoteQuery == query) {
+      for (final user in _remoteResults) {
+        if (user.id != store.currentUserId) {
+          byId[user.id] = user;
+        }
+      }
+    }
+    return byId.values.toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
   }
 
   Future<void> _sendRequest(AppUser user) async {
@@ -1847,6 +1993,101 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
   }
 }
 
+class _InlineSearchError extends StatelessWidget {
+  const _InlineSearchError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: scheme.errorContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: scheme.error.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(Icons.info_outline, size: 18, color: scheme.error),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTextStyles.caption.copyWith(color: scheme.onSurface),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+}
+
+List<AppUser> _connectionSearchUsers(Map<String, dynamic> response) {
+  final rawUsers = response['users'] as List<dynamic>? ?? const [];
+  final users = <AppUser>[];
+  for (final row in rawUsers) {
+    if (row is! Map) {
+      continue;
+    }
+    final user = _connectionSearchUser(row.cast<String, dynamic>());
+    if (user.id.isNotEmpty) {
+      users.add(user);
+    }
+  }
+  return users;
+}
+
+AppUser _connectionSearchUser(Map<String, dynamic> row) {
+  final displayName =
+      row['displayName']?.toString() ??
+      row['fullName']?.toString() ??
+      'Sajha Member';
+  return AppUser(
+    id: row['id']?.toString() ?? row['legacyUserId']?.toString() ?? '',
+    displayName: displayName,
+    phone: row['phone']?.toString() ?? '',
+    avatar:
+        row['avatar']?.toString() ??
+        row['avatarInitials']?.toString() ??
+        _initialsForName(displayName),
+    district: row['district']?.toString() ?? '',
+    createdAt:
+        DateTime.tryParse(row['createdAt']?.toString() ?? '') ?? DateTime.now(),
+    privacyMode: _privacyModeFrom(row['privacyMode']),
+  );
+}
+
+PrivacyMode _privacyModeFrom(Object? value) {
+  final name = value?.toString();
+  for (final mode in PrivacyMode.values) {
+    if (mode.name == name) {
+      return mode;
+    }
+  }
+  return PrivacyMode.everyone;
+}
+
+String _initialsForName(String name) {
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) {
+    return 'S';
+  }
+  return parts
+      .take(2)
+      .map((part) => part.characters.first.toUpperCase())
+      .join();
+}
+
 class _ContactRequestTile extends StatelessWidget {
   const _ContactRequestTile({
     required this.user,
@@ -1874,16 +2115,55 @@ class _ContactRequestTile extends StatelessWidget {
               : 'Review'
         : 'Connect';
     final enabled = !requesting && !isPending && !isApproved;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: UserAvatar(user: user),
-      title: Text(user.displayName),
-      subtitle: Text(user.phone),
-      trailing: FilledButton.icon(
-        onPressed: enabled ? onConnect : null,
-        icon: Icon(isApproved ? Icons.check : Icons.person_add_alt_1),
-        label: Text(label),
-      ),
+    final action = FilledButton.icon(
+      onPressed: enabled ? onConnect : null,
+      icon: Icon(isApproved ? Icons.check : Icons.person_add_alt_1),
+      label: Text(label),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 420) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    UserAvatar(user: user),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.displayName,
+                            style: AppTextStyles.cardTitle,
+                          ),
+                          Text(
+                            user.phone,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                action,
+              ],
+            ),
+          );
+        }
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: UserAvatar(user: user),
+          title: Text(user.displayName),
+          subtitle: Text(user.phone),
+          trailing: action,
+        );
+      },
     );
   }
 }
@@ -1904,36 +2184,63 @@ class _IncomingConnectionBanner extends StatelessWidget {
     final store = StoreScope.of(context);
     final requester = store.userById(connection.requesterId);
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      color: scheme.secondaryContainer,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: scheme.secondary,
-            foregroundColor: scheme.onSecondary,
-            child: const Icon(Icons.person_add_alt_1),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              '${requester.displayName} wants to connect with you.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: scheme.onSecondaryContainer,
-                fontWeight: FontWeight.w800,
+    final message = '${requester.displayName} wants to connect with you.';
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 560;
+        final title = Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: scheme.secondary,
+              foregroundColor: scheme.onSecondary,
+              child: const Icon(Icons.person_add_alt_1),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSecondaryContainer,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          TextButton(onPressed: onReview, child: const Text('View request')),
-          IconButton(
-            tooltip: 'Dismiss',
-            onPressed: onDismiss,
-            icon: const Icon(Icons.close),
-          ),
-        ],
-      ),
+          ],
+        );
+        final actions = Wrap(
+          spacing: AppSpacing.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            TextButton(onPressed: onReview, child: const Text('View request')),
+            IconButton(
+              tooltip: 'Dismiss',
+              onPressed: onDismiss,
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        );
+        return Container(
+          width: double.infinity,
+          color: scheme.secondaryContainer,
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    title,
+                    const SizedBox(height: AppSpacing.xs),
+                    actions,
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: title),
+                    const SizedBox(width: AppSpacing.sm),
+                    actions,
+                  ],
+                ),
+        );
+      },
     );
   }
 }
@@ -2014,81 +2321,118 @@ class _ConnectionTile extends StatelessWidget {
       store.currentUserId,
       other.id,
     );
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: UserAvatar(user: other),
-      title: Text(other.displayName),
-      subtitle: Text(
+    final subtitle =
         '${enumLabel(connection.status)} • ${connection.events.length} event(s)'
         '${blockedByMe ? ' • blocked by you' : ''}'
-        '${reportedByMe ? ' • reported by you' : ''}',
+        '${reportedByMe ? ' • reported by you' : ''}';
+    final actions = <Widget>[
+      if (connection.status == ConnectionStatus.pending &&
+          connection.recipientId == store.currentUserId)
+        IconButton.filledTonal(
+          tooltip: 'Approve',
+          onPressed: actioning
+              ? null
+              : onApprove ?? () => store.approveConnection(connection.id),
+          icon: actioning
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.check),
+        ),
+      if (connection.status == ConnectionStatus.pending &&
+          connection.recipientId == store.currentUserId)
+        IconButton.outlined(
+          tooltip: 'Decline',
+          onPressed: actioning
+              ? null
+              : onDecline ?? () => store.declineConnection(connection.id),
+          icon: const Icon(Icons.close),
+        ),
+      if (connection.status == ConnectionStatus.approved)
+        IconButton.outlined(
+          tooltip: 'Remove',
+          onPressed: actioning
+              ? null
+              : onRemove ?? () => store.removeConnection(connection.id),
+          icon: const Icon(Icons.person_remove_outlined),
+        ),
+      IconButton.outlined(
+        tooltip: blockedByMe ? 'Unblock' : 'Block',
+        onPressed: actioning
+            ? null
+            : blockedByMe
+            ? onUnblock ??
+                  () => store.unblockConnection(connection.id, other.id)
+            : onBlock ?? () => store.blockConnection(connection.id, other.id),
+        icon: Icon(blockedByMe ? Icons.lock_open : Icons.block),
       ),
-      trailing: compact
-          ? StatusPill(label: enumLabel(connection.status), tone: Tone.neutral)
-          : Wrap(
-              spacing: 6,
+      IconButton.outlined(
+        tooltip: reportedByMe ? 'Already reported' : 'Report',
+        onPressed: reportedByMe || actioning
+            ? null
+            : () => showReportConnectionDialog(
+                context,
+                connection,
+                other,
+                onReportConnection: onReportConnection,
+              ),
+        icon: Icon(reportedByMe ? Icons.flag : Icons.flag_outlined),
+      ),
+    ];
+    final actionWrap = Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: actions,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (!compact && constraints.maxWidth < 560) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (connection.status == ConnectionStatus.pending &&
-                    connection.recipientId == store.currentUserId)
-                  IconButton.filledTonal(
-                    tooltip: 'Approve',
-                    onPressed: actioning
-                        ? null
-                        : onApprove ??
-                              () => store.approveConnection(connection.id),
-                    icon: actioning
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.check),
-                  ),
-                if (connection.status == ConnectionStatus.pending &&
-                    connection.recipientId == store.currentUserId)
-                  IconButton.outlined(
-                    tooltip: 'Decline',
-                    onPressed: actioning
-                        ? null
-                        : onDecline ??
-                              () => store.declineConnection(connection.id),
-                    icon: const Icon(Icons.close),
-                  ),
-                if (connection.status == ConnectionStatus.approved)
-                  IconButton.outlined(
-                    tooltip: 'Remove',
-                    onPressed: actioning
-                        ? null
-                        : onRemove ??
-                              () => store.removeConnection(connection.id),
-                    icon: const Icon(Icons.person_remove_outlined),
-                  ),
-                IconButton.outlined(
-                  tooltip: blockedByMe ? 'Unblock' : 'Block',
-                  onPressed: actioning
-                      ? null
-                      : blockedByMe
-                      ? onUnblock ??
-                            () =>
-                                store.unblockConnection(connection.id, other.id)
-                      : onBlock ??
-                            () =>
-                                store.blockConnection(connection.id, other.id),
-                  icon: Icon(blockedByMe ? Icons.lock_open : Icons.block),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    UserAvatar(user: other),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            other.displayName,
+                            style: AppTextStyles.cardTitle,
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(subtitle, style: AppTextStyles.bodySecondary),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                IconButton.outlined(
-                  tooltip: reportedByMe ? 'Already reported' : 'Report',
-                  onPressed: reportedByMe || actioning
-                      ? null
-                      : () => showReportConnectionDialog(
-                          context,
-                          connection,
-                          other,
-                          onReportConnection: onReportConnection,
-                        ),
-                  icon: Icon(reportedByMe ? Icons.flag : Icons.flag_outlined),
-                ),
+                const SizedBox(height: AppSpacing.sm),
+                actionWrap,
               ],
             ),
+          );
+        }
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: UserAvatar(user: other),
+          title: Text(other.displayName),
+          subtitle: Text(subtitle),
+          trailing: compact
+              ? StatusPill(
+                  label: enumLabel(connection.status),
+                  tone: Tone.neutral,
+                )
+              : actionWrap,
+        );
+      },
     );
   }
 }
@@ -2267,21 +2611,25 @@ class _GroupsScreenState extends State<GroupsScreen> {
       builder: (context, constraints) {
         final tabSelector = Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: SegmentedButton<GroupKind>(
-            segments: const [
-              ButtonSegment(
-                value: GroupKind.expense,
-                icon: Icon(Icons.receipt_long_outlined),
-                label: Text('Expense Groups'),
-              ),
-              ButtonSegment(
-                value: GroupKind.dhukuti,
-                icon: Icon(Icons.account_balance_wallet_outlined),
-                label: Text('Community Savings'),
-              ),
-            ],
-            selected: {_tab},
-            onSelectionChanged: (value) => setState(() => _tab = value.first),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<GroupKind>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: GroupKind.expense,
+                  icon: Icon(Icons.receipt_long_outlined),
+                  label: Text('Expense Groups'),
+                ),
+                ButtonSegment(
+                  value: GroupKind.dhukuti,
+                  icon: Icon(Icons.account_balance_wallet_outlined),
+                  label: Text('Community Savings'),
+                ),
+              ],
+              selected: {_tab},
+              onSelectionChanged: (value) => setState(() => _tab = value.first),
+            ),
           ),
         );
 
@@ -2712,10 +3060,14 @@ class _BalanceStatementLine extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: Text(label, style: AppTextStyles.body)),
-          Text(
-            value,
-            textAlign: TextAlign.right,
-            style: AppTextStyles.cardTitle.copyWith(color: color),
+          Flexible(
+            child: Text(
+              value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: AppTextStyles.cardTitle.copyWith(color: color),
+            ),
           ),
         ],
       ),
@@ -3686,9 +4038,11 @@ class _GiftsScreenState extends State<GiftsScreen> {
       amountMinor: amountMinor,
       message: giftMessage,
     );
-    final result = await openTransactionConfirmation(context, data, () {
+    final result = await openTransactionConfirmation(context, data, (
+      paymentContext,
+    ) {
       return confirmWithEsewa(
-        context: context,
+        context: paymentContext,
         data: data,
         onSuccess: (receipt) async {
           final backendApi = BackendApi();
@@ -4200,8 +4554,24 @@ class GiftCardVisual extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('From $fromName', style: _footerStyle),
-                      Text('To $toName', style: _footerStyle),
+                      Expanded(
+                        child: Text(
+                          'From $fromName',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _footerStyle,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'To $toName',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: _footerStyle,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -4528,6 +4898,7 @@ class DhukutiDetail extends StatelessWidget {
     final cycles = store.dhukutiCycles
         .where((cycle) => cycle.poolId == pool.id)
         .toList();
+    final currentCycle = cycles.isEmpty ? null : cycles.first;
     final contributions = store.contributionsForPool(pool.id);
     final myMember = members
         .where((member) => member.userId == store.currentUserId)
@@ -4588,10 +4959,14 @@ class DhukutiDetail extends StatelessWidget {
             ),
             StatTile(
               label: 'Current month',
-              value: enumLabel(cycles.first.status),
+              value: currentCycle == null
+                  ? 'Not scheduled'
+                  : enumLabel(currentCycle.status),
               icon: Icons.event_repeat,
-              tone: cycles.first.status == DhukutiCycleStatus.atRisk
+              tone: currentCycle?.status == DhukutiCycleStatus.atRisk
                   ? Tone.warning
+                  : currentCycle == null
+                  ? Tone.neutral
                   : Tone.success,
             ),
             StatTile(
@@ -4889,7 +5264,11 @@ class ScreenHeader extends StatelessWidget {
                 children: [
                   Text(title, style: AppTextStyles.screenTitle),
                   const SizedBox(height: AppSpacing.xs),
-                  Text(subtitle, style: AppTextStyles.bodySecondary),
+                  Text(
+                    subtitle,
+                    style: AppTextStyles.bodySecondary,
+                    softWrap: true,
+                  ),
                 ],
               ),
             ),
@@ -4937,20 +5316,43 @@ class SectionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ds.AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 420;
+        final header = action == null
+            ? Text(title, style: AppTextStyles.sectionTitle)
+            : compact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTextStyles.sectionTitle),
+                  const SizedBox(height: AppSpacing.sm),
+                  Align(alignment: Alignment.centerLeft, child: action!),
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(title, style: AppTextStyles.sectionTitle),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Flexible(
+                    child: Align(alignment: Alignment.topRight, child: action!),
+                  ),
+                ],
+              );
+        return ds.AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: Text(title, style: AppTextStyles.sectionTitle)),
-              ?action,
+              header,
+              const SizedBox(height: AppSpacing.md),
+              child,
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          child,
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -5031,9 +5433,16 @@ class StatTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: AppTextStyles.caption),
+                Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption,
+                ),
                 Text(
                   value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.amount.copyWith(
                     color: tintValue && tone != Tone.neutral ? color : null,
                     fontSize: 20,
@@ -7347,7 +7756,9 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
           ],
         ],
       );
-      final result = await openTransactionConfirmation(context, data, () async {
+      final result = await openTransactionConfirmation(context, data, (
+        _,
+      ) async {
         final backendApi = BackendApi();
         try {
           final token = await _requireBackendAccessToken(
@@ -8722,15 +9133,16 @@ Future<void> showCreateGroupDialog(
   BuildContext context, {
   ValueChanged<GroupKind>? onCreated,
 }) async {
-  final store = StoreScope.of(context);
+  final rootContext = context;
+  final store = StoreScope.read(rootContext);
   final name = TextEditingController();
   var category = GroupCategory.custom;
   final selected = <String>{};
   await showDialog<void>(
-    context: context,
+    context: rootContext,
     builder: (dialogContext) {
       return StatefulBuilder(
-        builder: (context, setState) {
+        builder: (builderContext, setState) {
           final connections = store.activeConnectionUsers();
           return AlertDialog(
             title: const Text('Create Expense Group'),
@@ -8781,7 +9193,7 @@ Future<void> showCreateGroupDialog(
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'Members',
-                        style: Theme.of(context).textTheme.labelLarge,
+                        style: Theme.of(builderContext).textTheme.labelLarge,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -8789,7 +9201,7 @@ Future<void> showCreateGroupDialog(
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'You will be added automatically as admin. Select only the people you want to invite.',
-                        style: Theme.of(context).textTheme.bodySmall,
+                        style: Theme.of(builderContext).textTheme.bodySmall,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -8829,7 +9241,7 @@ Future<void> showCreateGroupDialog(
                       : name.text.trim();
                   try {
                     final token = await _requireBackendAccessToken(
-                      context,
+                      rootContext,
                       api: backendApi,
                     );
                     final response = await backendApi.createGroup(
@@ -8846,19 +9258,21 @@ Future<void> showCreateGroupDialog(
                                 '')
                             .toString();
                     await _reloadBackendProjection(
-                      context,
+                      rootContext,
                       api: backendApi,
                       accessToken: token,
                     );
                     store.selectedGroupId = groupId.isEmpty ? null : groupId;
-                    if (context.mounted) {
+                    if (dialogContext.mounted) {
                       Navigator.pop(dialogContext);
+                    }
+                    if (rootContext.mounted) {
                       onCreated?.call(GroupKind.expense);
-                      showSnack(context, '$groupName created.');
+                      showSnack(rootContext, '$groupName created.');
                     }
                   } on BackendApiException catch (error) {
-                    if (context.mounted) {
-                      showSnack(context, error.message);
+                    if (rootContext.mounted) {
+                      showSnack(rootContext, error.message);
                     }
                   }
                 },
@@ -8877,17 +9291,18 @@ Future<void> showCreateDhukutiGroupDialog(
   BuildContext context, {
   ValueChanged<GroupKind>? onCreated,
 }) async {
-  final store = StoreScope.of(context);
+  final rootContext = context;
+  final store = StoreScope.read(rootContext);
   final name = TextEditingController(text: 'Family Community Fund');
   final contribution = TextEditingController(text: '5000');
   var frequency = 'monthly';
   final selected = <String>{};
   var agreementAccepted = false;
   await showDialog<void>(
-    context: context,
+    context: rootContext,
     builder: (dialogContext) {
       return StatefulBuilder(
-        builder: (context, setState) {
+        builder: (builderContext, setState) {
           final connections = store.activeConnectionUsers();
           final amount = parseMoneyToMinor(contribution.text);
           final memberCount = selected.length + 1;
@@ -8977,7 +9392,7 @@ Future<void> showCreateDhukutiGroupDialog(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Theme.of(
-                          context,
+                          builderContext,
                         ).colorScheme.primaryContainer.withValues(alpha: 0.35),
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -9021,7 +9436,7 @@ Future<void> showCreateDhukutiGroupDialog(
                             : name.text.trim();
                         try {
                           final token = await _requireBackendAccessToken(
-                            context,
+                            rootContext,
                             api: backendApi,
                           );
                           final response = await backendApi.createGroup(
@@ -9055,7 +9470,7 @@ Future<void> showCreateDhukutiGroupDialog(
                                       '')
                                   .toString();
                           await _reloadBackendProjection(
-                            context,
+                            rootContext,
                             api: backendApi,
                             accessToken: token,
                           );
@@ -9064,14 +9479,19 @@ Future<void> showCreateDhukutiGroupDialog(
                                 ? null
                                 : savingsId
                             ..selectedGroupId = null;
-                          if (context.mounted) {
+                          if (dialogContext.mounted) {
                             Navigator.pop(dialogContext);
+                          }
+                          if (rootContext.mounted) {
                             onCreated?.call(GroupKind.dhukuti);
-                            showSnack(context, '$groupName tracker created.');
+                            showSnack(
+                              rootContext,
+                              '$groupName tracker created.',
+                            );
                           }
                         } on BackendApiException catch (error) {
-                          if (context.mounted) {
-                            showSnack(context, error.message);
+                          if (rootContext.mounted) {
+                            showSnack(rootContext, error.message);
                           }
                         }
                       }
@@ -10147,7 +10567,9 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
                           );
                           Navigator.pop(dialogContext);
                           unawaited(
-                            openTransactionConfirmation(context, data, () async {
+                            openTransactionConfirmation(context, data, (
+                              _,
+                            ) async {
                               final backendApi = BackendApi();
                               try {
                                 final token = await _requireBackendAccessToken(
@@ -11137,7 +11559,7 @@ Future<void> showAdjustmentDialog(
                     );
                     Navigator.pop(dialogContext);
                     unawaited(
-                      openTransactionConfirmation(context, data, () async {
+                      openTransactionConfirmation(context, data, (_) async {
                         final backendApi = BackendApi();
                         try {
                           final token = await _requireBackendAccessToken(
@@ -12346,9 +12768,11 @@ Future<void> showContributeToGiftPoolDialog(
                         );
                         Navigator.pop(dialogContext);
                         unawaited(
-                          openTransactionConfirmation(context, data, () {
+                          openTransactionConfirmation(context, data, (
+                            paymentContext,
+                          ) {
                             return confirmWithEsewa(
-                              context: context,
+                              context: paymentContext,
                               data: data,
                               onSuccess: (receipt) async {
                                 final backendApi = BackendApi();

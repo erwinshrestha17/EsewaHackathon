@@ -140,7 +140,7 @@ class _TransactionConfirmationScreenState
     setState(() => _processing = true);
     final result = await TransactionConfirmationController.submit(
       widget.data,
-      widget.onConfirm,
+      () => widget.onConfirm(context),
     );
     if (!mounted) {
       return;

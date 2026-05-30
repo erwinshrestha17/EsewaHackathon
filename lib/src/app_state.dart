@@ -98,6 +98,59 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  void upsertUser(AppUser user, {bool notify = true}) {
+    final index = users.indexWhere((item) => item.id == user.id);
+    var changed = false;
+    if (index == -1) {
+      users.add(user);
+      changed = true;
+    } else {
+      final existing = users[index];
+      changed =
+          existing.displayName != user.displayName ||
+          existing.phone != user.phone ||
+          existing.avatar != user.avatar ||
+          existing.district != user.district ||
+          existing.createdAt != user.createdAt ||
+          existing.privacyMode != user.privacyMode;
+      if (changed) {
+        users[index] = user;
+      }
+    }
+    if (changed && notify) {
+      notifyListeners();
+    }
+  }
+
+  void upsertUsers(Iterable<AppUser> nextUsers, {bool notify = true}) {
+    var changed = false;
+    for (final user in nextUsers) {
+      final before = users.length;
+      final index = users.indexWhere((item) => item.id == user.id);
+      if (index == -1) {
+        users.add(user);
+        changed = true;
+        continue;
+      }
+      final existing = users[index];
+      final userChanged =
+          existing.displayName != user.displayName ||
+          existing.phone != user.phone ||
+          existing.avatar != user.avatar ||
+          existing.district != user.district ||
+          existing.createdAt != user.createdAt ||
+          existing.privacyMode != user.privacyMode;
+      if (userChanged) {
+        users[index] = user;
+        changed = true;
+      }
+      changed = changed || users.length != before;
+    }
+    if (changed && notify) {
+      notifyListeners();
+    }
+  }
+
   Group groupById(String id) => groups.firstWhere((group) => group.id == id);
 
   Group? groupByIdOrNull(String? id) {
@@ -897,6 +950,7 @@ class AppStore extends ChangeNotifier {
 
   List<AppUser> searchUsers(String query) {
     final normalized = query.trim().toLowerCase();
+    final phoneQuery = _phoneDigits(query);
     if (normalized.isEmpty) {
       return users.where((user) => user.id != currentUserId).where((user) {
         final connection = connectionBetween(currentUserId, user.id);
@@ -905,14 +959,26 @@ class AppStore extends ChangeNotifier {
       }).toList()..sort((a, b) => a.displayName.compareTo(b.displayName));
     }
     return users
-        .where(
-          (user) =>
-              user.id != currentUserId &&
-              (user.displayName.toLowerCase().contains(normalized) ||
-                  user.phone.contains(normalized)),
-        )
-        .toList();
+        .where((user) => _matchesUserSearch(user, normalized, phoneQuery))
+        .toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
   }
+
+  bool _matchesUserSearch(AppUser user, String normalized, String phoneQuery) {
+    if (user.id == currentUserId) {
+      return false;
+    }
+    final name = user.displayName.toLowerCase();
+    final district = user.district.toLowerCase();
+    final phone = user.phone.toLowerCase();
+    final phoneDigits = _phoneDigits(user.phone);
+    return name.contains(normalized) ||
+        district.contains(normalized) ||
+        phone.contains(normalized) ||
+        (phoneQuery.isNotEmpty && phoneDigits.contains(phoneQuery));
+  }
+
+  String _phoneDigits(String value) => value.replaceAll(RegExp(r'\D'), '');
 
   String sendConnectionRequest(String targetUserId, {bool viaQr = false}) {
     if (targetUserId == currentUserId) {

@@ -26,6 +26,14 @@ const List<String> _paymentMethods = [
   'Other',
 ];
 
+String _safePaymentMethod(String? value) {
+  final method = value?.trim();
+  if (method != null && _paymentMethods.contains(method)) {
+    return method;
+  }
+  return _paymentMethods.first;
+}
+
 const List<String> _expenseCategories = [
   'Food',
   'Event',
@@ -394,12 +402,13 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
   }
 
   Future<void> _showMemberPaidSheet([_ContributionRecord? record]) async {
-    final target =
-        record ??
-        _contributions.firstWhere(
-          (item) => item.memberId == widget.store.currentUserId,
-          orElse: () => _contributions.first,
-        );
+    final target = record ?? _currentUserContribution();
+    if (target == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No payable contribution found.')),
+      );
+      return;
+    }
     final submitted = await showModalBottomSheet<_ContributionRecord>(
       context: context,
       isScrollControlled: true,
@@ -434,9 +443,11 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
         TransactionDetail('Month', _monthLabel(DateTime.now())),
       ],
     );
-    final result = await openTransactionConfirmation(context, data, () {
+    final result = await openTransactionConfirmation(context, data, (
+      paymentContext,
+    ) {
       return confirmWithEsewa(
-        context: context,
+        context: paymentContext,
         data: data,
         onSuccess: (receipt) async {
           await _api.submitContribution(
@@ -475,6 +486,12 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
   }
 
   Future<void> _showAdminConfirmSheet([_ContributionRecord? record]) async {
+    if (_contributions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No contribution records to confirm.')),
+      );
+      return;
+    }
     final pending = _contributions
         .where((item) => item.status != _ContributionUiStatus.confirmedReceived)
         .toList();
@@ -506,6 +523,15 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
       accessToken: await _accessToken(),
     );
     await _loadDashboard();
+  }
+
+  _ContributionRecord? _currentUserContribution() {
+    for (final item in _contributions) {
+      if (item.memberId == widget.store.currentUserId) {
+        return item;
+      }
+    }
+    return null;
   }
 
   Future<void> _showRecordExpenseSheet() async {
@@ -908,18 +934,21 @@ class _HistoryView extends StatelessWidget {
   Widget build(BuildContext context) {
     return DhukutiSection(
       title: 'History / Ledger',
-      action: SegmentedButton<_LedgerTab>(
-        selected: {selected},
-        showSelectedIcon: false,
-        segments: const [
-          ButtonSegment(value: _LedgerTab.all, label: Text('All')),
-          ButtonSegment(
-            value: _LedgerTab.contributions,
-            label: Text('Contributions'),
-          ),
-          ButtonSegment(value: _LedgerTab.expenses, label: Text('Expenses')),
-        ],
-        onSelectionChanged: (value) => onChanged(value.first),
+      action: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SegmentedButton<_LedgerTab>(
+          selected: {selected},
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: _LedgerTab.all, label: Text('All')),
+            ButtonSegment(
+              value: _LedgerTab.contributions,
+              label: Text('Contributions'),
+            ),
+            ButtonSegment(value: _LedgerTab.expenses, label: Text('Expenses')),
+          ],
+          onSelectionChanged: (value) => onChanged(value.first),
+        ),
       ),
       child: ledger.isEmpty
           ? DhukutiEmptyState(
@@ -1146,7 +1175,7 @@ class _AdminConfirmSheetState extends State<_AdminConfirmSheet> {
                   100)
               .toString(),
     );
-    _method = _selected.paymentMethod;
+    _method = _safePaymentMethod(_selected.paymentMethod);
     _note.text = _selected.note;
     _reference.text = _selected.referenceNumber;
   }
@@ -1190,7 +1219,7 @@ class _AdminConfirmSheetState extends State<_AdminConfirmSheet> {
                                 : next.expectedAmount) ~/
                             100)
                         .toString();
-                _method = next.paymentMethod;
+                _method = _safePaymentMethod(next.paymentMethod);
                 _note.text = next.note;
                 _reference.text = next.referenceNumber;
               });
@@ -1502,27 +1531,30 @@ class _Tabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SegmentedButton<_TrackerTab>(
-      selected: {selected},
-      showSelectedIcon: false,
-      segments: const [
-        ButtonSegment(
-          value: _TrackerTab.dashboard,
-          icon: Icon(Icons.dashboard_outlined),
-          label: Text('Dashboard'),
-        ),
-        ButtonSegment(
-          value: _TrackerTab.monthlyTracker,
-          icon: Icon(Icons.fact_check_outlined),
-          label: Text('Tracker'),
-        ),
-        ButtonSegment(
-          value: _TrackerTab.history,
-          icon: Icon(Icons.history_outlined),
-          label: Text('History'),
-        ),
-      ],
-      onSelectionChanged: (value) => onChanged(value.first),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SegmentedButton<_TrackerTab>(
+        selected: {selected},
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(
+            value: _TrackerTab.dashboard,
+            icon: Icon(Icons.dashboard_outlined),
+            label: Text('Dashboard'),
+          ),
+          ButtonSegment(
+            value: _TrackerTab.monthlyTracker,
+            icon: Icon(Icons.fact_check_outlined),
+            label: Text('Tracker'),
+          ),
+          ButtonSegment(
+            value: _TrackerTab.history,
+            icon: Icon(Icons.history_outlined),
+            label: Text('History'),
+          ),
+        ],
+        onSelectionChanged: (value) => onChanged(value.first),
+      ),
     );
   }
 }

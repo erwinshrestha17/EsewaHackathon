@@ -6,7 +6,9 @@ import 'transaction_failure_screen.dart';
 import 'transaction_status.dart';
 import 'transaction_success_screen.dart';
 
-typedef TransactionConfirmCallback = Future<TransactionResult> Function();
+typedef TransactionConfirmCallback =
+    Future<TransactionResult> Function(BuildContext context);
+typedef TransactionSubmitCallback = Future<TransactionResult> Function();
 
 class TransactionConfirmationController {
   TransactionConfirmationController._();
@@ -17,7 +19,7 @@ class TransactionConfirmationController {
 
   static Future<TransactionResult> submit(
     TransactionConfirmationData data,
-    TransactionConfirmCallback onConfirm,
+    TransactionSubmitCallback onConfirm,
   ) async {
     final existing = _completed[data.idempotencyKey];
     if (existing != null) {
@@ -56,7 +58,7 @@ class TransactionConfirmationController {
 Future<TransactionResult?> openTransactionConfirmation(
   BuildContext context,
   TransactionConfirmationData data,
-  Future<TransactionResult> Function() onConfirm,
+  TransactionConfirmCallback onConfirm,
 ) {
   return Navigator.of(context).push<TransactionResult>(
     MaterialPageRoute<TransactionResult>(
