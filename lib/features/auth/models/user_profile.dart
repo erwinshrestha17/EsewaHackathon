@@ -12,38 +12,24 @@ class UserProfile {
     this.avatarUrl,
   });
 
-  factory UserProfile.demo() {
-    return UserProfile(
-      id: activeUserId,
-      displayName: 'Erwin Shrestha',
-      phone: '98XXXXXXXX',
-      esewaId: 'erwin@esewa',
-      district: 'Bharatpur',
-      createdAt: DateTime(2026, 5, 1, 10),
-      dateOfBirth: DateTime(1998, 1, 1),
-    );
-  }
-
   factory UserProfile.fromJson(Map<String, Object?> json) {
     return UserProfile(
-      id: json['id'] as String? ?? activeUserId,
-      displayName: json['displayName'] as String? ?? 'Erwin Shrestha',
-      phone: json['phone'] as String? ?? '98XXXXXXXX',
-      esewaId: json['esewaId'] as String? ?? 'erwin@esewa',
-      district: json['district'] as String? ?? 'Bharatpur',
+      id: json['id'] as String? ?? '',
+      displayName: json['displayName'] as String? ?? 'Sajha Member',
+      phone: json['phone'] as String? ?? '',
+      esewaId: json['esewaId'] as String? ?? '',
+      district: json['district'] as String? ?? '',
       avatarUrl: json['avatarUrl'] as String?,
       dateOfBirth: DateTime.tryParse(json['dateOfBirth'] as String? ?? ''),
       createdAt:
           DateTime.tryParse(json['createdAt'] as String? ?? '') ??
-          DateTime(2026, 5, 1, 10),
+          DateTime.now(),
     );
   }
 
   factory UserProfile.fromJsonString(String source) {
     return UserProfile.fromJson(jsonDecode(source) as Map<String, Object?>);
   }
-
-  static const activeUserId = 'u-sita';
 
   final String id;
   final String displayName;

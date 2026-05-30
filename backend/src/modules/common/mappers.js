@@ -9,6 +9,8 @@ export function profileDto(row) {
     avatarUrl: row.avatar_url,
     avatarInitials: row.avatar_initials,
     district: row.district,
+    dateOfBirth: row.date_of_birth,
+    phoneVerifiedAt: row.phone_verified_at,
     privacyMode: row.privacy_mode,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

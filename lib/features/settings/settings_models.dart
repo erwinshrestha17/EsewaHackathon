@@ -50,13 +50,13 @@ class SettingsState {
     required this.notifications,
   });
 
-  factory SettingsState.seeded() {
+  factory SettingsState.defaults() {
     return SettingsState(
-      displayName: 'Erwin Shrestha',
-      phone: '98XXXXXXXX',
-      esewaId: 'erwin@esewa',
-      district: 'Bharatpur',
-      avatarInitials: 'ES',
+      displayName: '',
+      phone: '',
+      esewaId: '',
+      district: '',
+      avatarInitials: 'S',
       connectionRequestPreference: ConnectionRequestPreference.everyone,
       defaultSplitMode: DefaultSplitMode.equal,
       reminderFrequency: ReminderFrequency.everyTwoDays,

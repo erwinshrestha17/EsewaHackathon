@@ -926,7 +926,8 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
                 const EmptyState(
                   icon: Icons.contacts_outlined,
                   title: 'No contacts found',
-                  body: 'Try a seeded mobile number such as 9800000008.',
+                  body:
+                      'Search by a verified mobile number to add a connection.',
                 )
               else
                 for (final user in results)

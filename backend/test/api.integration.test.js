@@ -5,6 +5,9 @@ import { app } from '../src/app.js';
 import { env } from '../src/config/env.js';
 
 const runRemoteTests = process.env.RUN_REMOTE_API_TESTS === 'true';
+const remoteAuthPhone = process.env.REMOTE_AUTH_PHONE;
+const remoteAuthMpin = process.env.REMOTE_AUTH_MPIN;
+const remoteSavingsGroupId = process.env.REMOTE_SAVINGS_GROUP_ID;
 
 async function withServer(fn) {
   const server = app.listen(0, '127.0.0.1');
@@ -27,46 +30,54 @@ async function json(response) {
 
 test(
   'remote API smoke: login, profile, groups, community savings balance',
-  { skip: !runRemoteTests || !env.hasSupabaseConfig },
+  {
+    skip:
+      !runRemoteTests ||
+      !env.hasSupabaseConfig ||
+      !remoteAuthPhone ||
+      !remoteAuthMpin ||
+      !remoteSavingsGroupId,
+  },
   async () => {
     await withServer(async (baseUrl) => {
-      const login = await fetch(`${baseUrl}/api/auth/mpin/login`, {
+      const login = await fetch(`${baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: '9800000001', mPin: '1234' }),
+        body: JSON.stringify({ phone: remoteAuthPhone, mPin: remoteAuthMpin }),
       });
       assert.equal(login.status, 200);
       const session = await json(login);
-      assert.match(session.accessToken, /^sajha_/);
+      assert.equal(typeof session.accessToken, 'string');
+      assert.match(session.refreshToken, /^sr_/);
 
       const authHeaders = { Authorization: `Bearer ${session.accessToken}` };
       const me = await fetch(`${baseUrl}/api/me`, { headers: authHeaders });
       assert.equal(me.status, 200);
-      assert.equal((await json(me)).profile.phone, '9800000001');
+      assert.equal((await json(me)).profile.phone, remoteAuthPhone);
 
       const groups = await fetch(`${baseUrl}/api/groups`, { headers: authHeaders });
       assert.equal(groups.status, 200);
       assert.ok((await json(groups)).groups.length >= 1);
 
       const balance = await fetch(
-        `${baseUrl}/api/community-savings/d-family-dashain/balance`,
+        `${baseUrl}/api/community-savings/${remoteSavingsGroupId}/balance`,
         { headers: authHeaders },
       );
       assert.equal(balance.status, 200);
-      assert.equal((await json(balance)).balance, 380000);
+      assert.equal(typeof (await json(balance)).balance, 'number');
     });
   },
 );
 
 test(
   'remote API auth rejects incorrect M-PIN',
-  { skip: !runRemoteTests || !env.hasSupabaseConfig },
+  { skip: !runRemoteTests || !env.hasSupabaseConfig || !remoteAuthPhone },
   async () => {
     await withServer(async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/api/auth/mpin/login`, {
+      const response = await fetch(`${baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: '9800000001', mPin: '9999' }),
+        body: JSON.stringify({ phone: remoteAuthPhone, mPin: '9999' }),
       });
       assert.equal(response.status, 401);
     });
@@ -75,20 +86,27 @@ test(
 
 test(
   'remote API community savings admin flow: submit, confirm, waive, expense',
-  { skip: !runRemoteTests || !env.hasSupabaseConfig },
+  {
+    skip:
+      !runRemoteTests ||
+      !env.hasSupabaseConfig ||
+      !remoteAuthPhone ||
+      !remoteAuthMpin ||
+      !remoteSavingsGroupId,
+  },
   async () => {
     await withServer(async (baseUrl) => {
-      const login = await fetch(`${baseUrl}/api/auth/mpin/login`, {
+      const login = await fetch(`${baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: '9800000001', mPin: '1234' }),
+        body: JSON.stringify({ phone: remoteAuthPhone, mPin: remoteAuthMpin }),
       });
       const session = await json(login);
       const authHeaders = {
         Authorization: `Bearer ${session.accessToken}`,
         'Content-Type': 'application/json',
       };
-      const savingsGroupId = 'd-family-dashain';
+      const savingsGroupId = remoteSavingsGroupId;
 
       const submitted = await fetch(
         `${baseUrl}/api/community-savings/${savingsGroupId}/contributions/submit`,

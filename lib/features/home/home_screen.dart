@@ -158,6 +158,10 @@ class _HomeScreenState extends State<HomeScreen> {
         widget.onOpenDhukuti();
       case 'connect_friend':
         widget.onOpenFriends();
+      case 'create_group':
+        widget.onCreateGroup();
+      case 'add_expense':
+        widget.onNavigate(1);
       default:
         widget.onNavigate(0);
     }

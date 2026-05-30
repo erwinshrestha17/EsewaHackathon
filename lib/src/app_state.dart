@@ -36,7 +36,7 @@ class AppStore extends ChangeNotifier {
   final List<ActivityLog> activity = <ActivityLog>[];
   final List<NotificationItem> notifications = <NotificationItem>[];
 
-  var currentUserId = 'u-sita';
+  var currentUserId = '';
   String? selectedGroupId;
   String? selectedDhukutiPoolId;
   var pushPreviewEnabled = true;
@@ -1129,7 +1129,7 @@ class AppStore extends ChangeNotifier {
         category: 'festival',
         splitMode: SplitMode.equal,
         participantIds: members.followedBy(<String>[currentUserId]).toList(),
-        note: 'Template split prepared for the demo.',
+        note: 'Template split prepared from your group members.',
       );
     }
     if (template == 'Tihar Gift Pool' && members.isNotEmpty) {
@@ -2962,10 +2962,9 @@ class AppStore extends ChangeNotifier {
       actorType: 'system',
       eventType: 'cache_refreshed',
       entityType: 'local_cache',
-      entityId: 'demo-cache',
+      entityId: 'local-cache',
       title: 'Local cache refreshed',
-      body:
-          'Frontend cache projection refreshed for offline demo responsiveness.',
+      body: 'Frontend cache projection refreshed for offline responsiveness.',
     );
     notifyListeners();
   }
@@ -3253,6 +3252,7 @@ class AppStore extends ChangeNotifier {
   int maxInt(int a, int b) => a > b ? a : b;
 
   void _seed() {
+    currentUserId = 'u-sita';
     final created = DateTime(2026, 5, 1, 10);
     users.addAll(<AppUser>[
       AppUser(

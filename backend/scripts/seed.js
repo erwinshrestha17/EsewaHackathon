@@ -1,6 +1,6 @@
 console.log(
   [
-    'Seed data now lives in supabase/seed.sql.',
-    'Apply it with `supabase db seed`, or run the SQL file in the Supabase SQL editor.',
+    'Seed data is intentionally empty.',
+    'Production signup creates real users through the OTP + M-PIN flow.',
   ].join('\n'),
 );

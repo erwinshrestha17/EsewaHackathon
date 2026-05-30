@@ -4,7 +4,7 @@ import 'settings_models.dart';
 
 class SettingsController extends ChangeNotifier {
   SettingsController({SettingsState? initialState})
-    : _state = initialState ?? SettingsState.seeded();
+    : _state = initialState ?? SettingsState.defaults();
 
   SettingsState _state;
 

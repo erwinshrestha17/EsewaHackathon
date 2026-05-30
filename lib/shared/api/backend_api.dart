@@ -14,21 +14,49 @@ class BackendApiException implements Exception {
 class BackendAuthSession {
   const BackendAuthSession({
     required this.accessToken,
-    required this.expiresAt,
+    required this.refreshToken,
+    required this.accessTokenExpiresAt,
+    required this.refreshTokenExpiresAt,
     required this.profile,
   });
 
   factory BackendAuthSession.fromJson(Map<String, dynamic> json) {
     return BackendAuthSession(
       accessToken: json['accessToken'].toString(),
-      expiresAt: json['expiresAt'].toString(),
+      refreshToken: json['refreshToken'].toString(),
+      accessTokenExpiresAt: json['accessTokenExpiresAt'].toString(),
+      refreshTokenExpiresAt: json['refreshTokenExpiresAt'].toString(),
       profile: (json['profile'] as Map<String, dynamic>?) ?? {},
     );
   }
 
   final String accessToken;
-  final String expiresAt;
+  final String refreshToken;
+  final String accessTokenExpiresAt;
+  final String refreshTokenExpiresAt;
   final Map<String, dynamic> profile;
+}
+
+class BackendOtpChallenge {
+  const BackendOtpChallenge({
+    required this.message,
+    required this.expiresInSeconds,
+    required this.resendAfterSeconds,
+  });
+
+  factory BackendOtpChallenge.fromJson(Map<String, dynamic> json) {
+    return BackendOtpChallenge(
+      message: json['message']?.toString() ?? 'OTP sent for verification.',
+      expiresInSeconds:
+          int.tryParse(json['expiresInSeconds']?.toString() ?? '') ?? 300,
+      resendAfterSeconds:
+          int.tryParse(json['resendAfterSeconds']?.toString() ?? '') ?? 60,
+    );
+  }
+
+  final String message;
+  final int expiresInSeconds;
+  final int resendAfterSeconds;
 }
 
 class BackendApi {
@@ -46,30 +74,53 @@ class BackendApi {
 
   bool get isConfigured => _baseUrl.trim().isNotEmpty;
 
-  Future<BackendAuthSession> loginWithMpin({
+  Future<BackendOtpChallenge> requestSignupOtp({required String phone}) async {
+    final data = await _post('/api/auth/signup/otp', {'phone': phone});
+    return BackendOtpChallenge.fromJson(data);
+  }
+
+  Future<BackendAuthSession> signup({
     required String phone,
+    required String otp,
     required String mPin,
+    required String fullName,
+    required String dateOfBirth,
+    String? district,
   }) async {
-    final data = await _post('/api/auth/mpin/login', {
+    final data = await _post('/api/auth/signup', {
       'phone': phone,
+      'otp': otp,
       'mPin': mPin,
+      'fullName': fullName,
+      'dateOfBirth': dateOfBirth,
+      'district': district,
     });
     return BackendAuthSession.fromJson(data);
   }
 
-  Future<BackendAuthSession> registerWithMpin({
+  Future<BackendAuthSession> login({
     required String phone,
     required String mPin,
-    required String fullName,
-    String? district,
   }) async {
-    final data = await _post('/api/auth/mpin/register', {
-      'phone': phone,
-      'mPin': mPin,
-      'fullName': fullName,
-      'district': district,
+    final data = await _post('/api/auth/login', {'phone': phone, 'mPin': mPin});
+    return BackendAuthSession.fromJson(data);
+  }
+
+  Future<BackendAuthSession> refresh({required String refreshToken}) async {
+    final data = await _post('/api/auth/refresh', {
+      'refreshToken': refreshToken,
     });
     return BackendAuthSession.fromJson(data);
+  }
+
+  Future<void> logout({String? accessToken, String? refreshToken}) async {
+    await _post('/api/auth/logout', {
+      'refreshToken': ?refreshToken,
+    }, accessToken: accessToken);
+  }
+
+  Future<void> logoutAll({required String accessToken}) async {
+    await _post('/api/auth/logout-all', {}, accessToken: accessToken);
   }
 
   Future<Map<String, dynamic>> currentProfile({required String accessToken}) {
