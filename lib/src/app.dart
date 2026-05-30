@@ -478,6 +478,10 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   var _loadingBackendSnapshot = false;
   var _initializingAuth = false;
   String? _loadedBackendSnapshotToken;
+  StreamSubscription<BackendRealtimeEvent>? _backendRealtimeSubscription;
+  Timer? _backendRealtimeReconnectTimer;
+  String? _backendRealtimeToken;
+  var _startingBackendRealtime = false;
   static const _incomingConnectionBannerTimeout = Duration(seconds: 8);
   Timer? _incomingConnectionBannerTimer;
   String? _visibleIncomingConnectionId;
@@ -515,6 +519,8 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   @override
   void dispose() {
     _incomingConnectionBannerTimer?.cancel();
+    _backendRealtimeReconnectTimer?.cancel();
+    unawaited(_backendRealtimeSubscription?.cancel());
     _authController?.removeListener(_handleAuthChanged);
     _settingsController.removeListener(_handleSettingsChanged);
     super.dispose();
@@ -757,6 +763,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     _syncActiveProfile();
     final state = _authController?.state;
     if (state?.initialized == true && state?.isLoggedIn != true && mounted) {
+      unawaited(_stopBackendRealtime());
       Navigator.of(
         context,
       ).pushReplacementNamed(state?.hasSeenIntro == true ? '/auth' : '/intro');
@@ -801,6 +808,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     if (activeUser != null && store != null) {
       store.applyActiveUserProfile(activeUser, notify: false);
       unawaited(_loadBackendSnapshot());
+      unawaited(_startBackendRealtime());
     }
   }
 
@@ -830,6 +838,71 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     } finally {
       _loadingBackendSnapshot = false;
     }
+  }
+
+  Future<void> _startBackendRealtime({bool force = false}) async {
+    final authController = _authController;
+    if (!_backendApi.isConfigured ||
+        authController == null ||
+        _startingBackendRealtime) {
+      return;
+    }
+    _startingBackendRealtime = true;
+    try {
+      final token = await authController.backendAccessToken();
+      if (token == null || !mounted) {
+        return;
+      }
+      if (!force &&
+          _backendRealtimeToken == token &&
+          _backendRealtimeSubscription != null) {
+        return;
+      }
+      await _backendRealtimeSubscription?.cancel();
+      _backendRealtimeReconnectTimer?.cancel();
+      _backendRealtimeToken = token;
+      _backendRealtimeSubscription = _backendApi
+          .appEvents(accessToken: token)
+          .listen(
+            _handleBackendRealtimeEvent,
+            onError: (Object error) {
+              debugPrint('Backend realtime stream failed: $error');
+              _scheduleBackendRealtimeReconnect();
+            },
+            onDone: _scheduleBackendRealtimeReconnect,
+          );
+    } finally {
+      _startingBackendRealtime = false;
+    }
+  }
+
+  Future<void> _stopBackendRealtime() async {
+    _backendRealtimeReconnectTimer?.cancel();
+    _backendRealtimeReconnectTimer = null;
+    _backendRealtimeToken = null;
+    final subscription = _backendRealtimeSubscription;
+    _backendRealtimeSubscription = null;
+    await subscription?.cancel();
+  }
+
+  void _handleBackendRealtimeEvent(BackendRealtimeEvent event) {
+    if (!mounted || event.type == 'connected') {
+      return;
+    }
+    if (event.type == 'connection_changed') {
+      unawaited(_loadBackendSnapshot(force: true));
+    }
+  }
+
+  void _scheduleBackendRealtimeReconnect() {
+    if (!mounted || !_backendApi.isConfigured) {
+      return;
+    }
+    _backendRealtimeSubscription = null;
+    _backendRealtimeReconnectTimer?.cancel();
+    _backendRealtimeReconnectTimer = Timer(const Duration(seconds: 2), () {
+      unawaited(_startBackendRealtime(force: true));
+    });
   }
 
   Future<String> _requestConnection(String targetUserId) async {

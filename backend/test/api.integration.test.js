@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import test from 'node:test';
 
 import { app, isAllowedCorsOrigin } from '../src/app.js';
 import { env } from '../src/config/env.js';
 import { db } from '../src/modules/common/db.js';
+import {
+  publishAppEvent,
+  subscribeAppEvents,
+} from '../src/modules/realtime/realtime.service.js';
 import { ApiError } from '../src/utils/ApiError.js';
 
 const runRemoteTests = process.env.RUN_REMOTE_API_TESTS === 'true';
@@ -78,6 +83,42 @@ test('database config failure is reported as a setup error', () => {
   } finally {
     env.hasSupabaseConfig = previous;
   }
+});
+
+test('realtime app events deliver only to subscribed users', () => {
+  const req = new EventEmitter();
+  const chunks = [];
+  const res = {
+    set(headers) {
+      this.headers = headers;
+    },
+    flushHeaders() {},
+    write(chunk) {
+      chunks.push(chunk);
+    },
+  };
+
+  subscribeAppEvents('u-recipient', req, res);
+  publishAppEvent(['u-other'], {
+    type: 'connection_changed',
+    payload: { connectionId: 'conn-1' },
+  });
+  assert.equal(chunks.some((chunk) => chunk.includes('conn-1')), false);
+
+  publishAppEvent(['u-recipient'], {
+    type: 'connection_changed',
+    payload: { connectionId: 'conn-1' },
+  });
+  assert.equal(chunks.some((chunk) => chunk.includes('event: connection_changed')), true);
+  assert.equal(chunks.some((chunk) => chunk.includes('"connectionId":"conn-1"')), true);
+
+  req.emit('close');
+  const afterClose = chunks.length;
+  publishAppEvent(['u-recipient'], {
+    type: 'connection_changed',
+    payload: { connectionId: 'conn-2' },
+  });
+  assert.equal(chunks.length, afterClose);
 });
 
 test(

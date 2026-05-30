@@ -124,6 +124,7 @@ is `false`, copy `backend/.env.example` to `backend/.env` and fill
 - `POST /api/connections/:connectionId/approve`
 - `POST /api/connections/:connectionId/decline`
 - `DELETE /api/connections/:connectionId`
+- `GET /api/app/events` (server-sent realtime app updates)
 - `GET /api/expenses/group/:groupId`
 - `POST /api/expenses/group/:groupId`
 - `GET /api/settlements`

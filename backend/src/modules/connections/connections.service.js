@@ -3,6 +3,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import { createNotification, logActivity } from '../common/audit.js';
 import { db, assertDb, isUuid, maybeSingle, single } from '../common/db.js';
 import { profileDto } from '../common/mappers.js';
+import { publishAppEvent } from '../realtime/realtime.service.js';
 
 const statuses = ['pending', 'approved', 'declined', 'expired', 'removed'];
 const connectionSelect =
@@ -104,6 +105,14 @@ export async function requestConnection(userId, body) {
     title: 'Connection request sent',
     body: `Connection request sent to ${target.full_name}.`,
   });
+  publishAppEvent([userId, target.id], {
+    type: 'connection_changed',
+    payload: {
+      connectionId: data.id,
+      status: data.status,
+      actorId: userId,
+    },
+  });
   return connectionDto(data);
 }
 
@@ -142,6 +151,26 @@ export async function updateConnection(userId, connectionId, status) {
     entityId: data.id,
     title: 'Connection updated',
     body: `Connection marked ${status}.`,
+  });
+  if (status === 'approved' || status === 'declined') {
+    await createNotification({
+      userId: current.requester_id,
+      title: status === 'approved' ? 'Connection approved' : 'Connection declined',
+      body:
+        status === 'approved'
+          ? `${data.recipient.full_name} accepted your connection request.`
+          : `${data.recipient.full_name} declined your connection request.`,
+      type: `connection_${status}`,
+      metadata: { connectionId: data.id },
+    });
+  }
+  publishAppEvent([data.requester.id, data.recipient.id], {
+    type: 'connection_changed',
+    payload: {
+      connectionId: data.id,
+      status: data.status,
+      actorId: userId,
+    },
   });
   return connectionDto(data);
 }

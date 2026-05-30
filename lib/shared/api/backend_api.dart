@@ -60,6 +60,13 @@ class BackendOtpChallenge {
   final int resendAfterSeconds;
 }
 
+class BackendRealtimeEvent {
+  const BackendRealtimeEvent({required this.type, required this.data});
+
+  final String type;
+  final Map<String, dynamic> data;
+}
+
 class BackendApi {
   BackendApi({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
@@ -179,6 +186,58 @@ class BackendApi {
     return get('/api/app/bootstrap', accessToken: accessToken);
   }
 
+  Stream<BackendRealtimeEvent> appEvents({required String accessToken}) async* {
+    final request = http.Request('GET', _uri('/api/app/events'));
+    request.headers.addAll({
+      'Accept': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Authorization': 'Bearer $accessToken',
+    });
+
+    final response = await _sendStream(request);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = await response.stream.bytesToString();
+      final decoded = _decodeBodyOrEmpty(body);
+      throw BackendApiException(
+        decoded['error']?.toString() ??
+            'Backend stream failed (${response.statusCode}).',
+      );
+    }
+
+    var eventType = 'message';
+    final dataLines = <String>[];
+    await for (final line
+        in response.stream
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())) {
+      if (line.isEmpty) {
+        if (dataLines.isNotEmpty) {
+          final rawData = dataLines.join('\n');
+          final decoded = jsonDecode(rawData);
+          yield BackendRealtimeEvent(
+            type: eventType,
+            data: decoded is Map<String, dynamic>
+                ? decoded
+                : <String, dynamic>{'value': decoded},
+          );
+          eventType = 'message';
+          dataLines.clear();
+        }
+        continue;
+      }
+      if (line.startsWith(':')) {
+        continue;
+      }
+      if (line.startsWith('event:')) {
+        eventType = line.substring(6).trim();
+        continue;
+      }
+      if (line.startsWith('data:')) {
+        dataLines.add(line.substring(5).trimLeft());
+      }
+    }
+  }
+
   Future<Map<String, dynamic>> communitySavingsDashboard({
     required String accessToken,
     required String savingsGroupId,
@@ -249,13 +308,26 @@ class BackendApi {
     }
   }
 
+  Future<http.StreamedResponse> _sendStream(http.BaseRequest request) async {
+    try {
+      return await _client.send(request).timeout(_requestTimeout);
+    } on TimeoutException {
+      throw const BackendApiException(
+        'Backend is taking too long to respond. Check that the API server is running.',
+      );
+    } on BackendApiException {
+      rethrow;
+    } on Object {
+      throw const BackendApiException(
+        'Unable to reach backend. Check BACKEND_API_BASE_URL and the API server.',
+      );
+    }
+  }
+
   Map<String, dynamic> _decode(http.Response response) {
     final Map<String, dynamic> decoded;
     try {
-      final parsed = response.body.isEmpty
-          ? <String, dynamic>{}
-          : jsonDecode(response.body);
-      decoded = parsed is Map<String, dynamic> ? parsed : <String, dynamic>{};
+      decoded = _decodeBodyOrEmpty(response.body);
     } on FormatException {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw BackendApiException(
@@ -271,5 +343,10 @@ class BackendApi {
       );
     }
     return decoded;
+  }
+
+  Map<String, dynamic> _decodeBodyOrEmpty(String body) {
+    final parsed = body.isEmpty ? <String, dynamic>{} : jsonDecode(body);
+    return parsed is Map<String, dynamic> ? parsed : <String, dynamic>{};
   }
 }
