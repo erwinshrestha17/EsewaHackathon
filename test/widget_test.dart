@@ -1087,10 +1087,17 @@ void main() {
     expect(connection.reports, hasLength(1));
   });
 
-  testWidgets('gift pool dialog switches between equal and threshold amounts', (
+  testWidgets('gift pool dialog starts with empty amount inputs', (
     tester,
   ) async {
     final store = AppStore.seeded();
+
+    String fieldValue(String label) {
+      final field = tester.widget<TextField>(
+        find.widgetWithText(TextField, label),
+      );
+      return field.controller?.text ?? '';
+    }
 
     await tester.pumpWidget(
       StoreScope(
@@ -1119,6 +1126,15 @@ void main() {
     expect(find.text('Equal amount per contributor'), findsOneWidget);
     expect(find.text('Allow contributions above goal'), findsOneWidget);
     expect(find.text('Target amount'), findsNothing);
+    expect(fieldValue('Title'), isEmpty);
+    expect(fieldValue('Equal amount per contributor'), isEmpty);
+    expect(fieldValue('Message'), isEmpty);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Create'))
+          .onPressed,
+      isNull,
+    );
 
     await tester.tap(find.text('Min / max'));
     await tester.pumpAndSettle();
@@ -1127,17 +1143,15 @@ void main() {
     expect(find.text('Minimum contribution'), findsOneWidget);
     expect(find.text('Maximum contribution'), findsOneWidget);
     expect(find.text('Equal amount per contributor'), findsNothing);
-
-    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
-    await tester.pumpAndSettle();
-
+    expect(fieldValue('Target amount'), isEmpty);
+    expect(fieldValue('Minimum contribution'), isEmpty);
+    expect(fieldValue('Maximum contribution'), isEmpty);
     expect(
-      store.giftPools.last.contributionRule,
-      GiftPoolContributionRule.threshold,
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Create'))
+          .onPressed,
+      isNull,
     );
-    expect(store.giftPools.last.allowOverTarget, isFalse);
-    expect(store.giftPools.last.minContributionAmountMinor, npr(250));
-    expect(store.giftPools.last.maxContributionAmountMinor, npr(1100));
     expect(tester.takeException(), isNull);
   });
 

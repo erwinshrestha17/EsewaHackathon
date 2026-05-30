@@ -12328,12 +12328,12 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
   String? recipientId = store.activeConnectionUsers().isEmpty
       ? null
       : store.activeConnectionUsers().first.id;
-  final title = TextEditingController(text: 'Group gift pool');
-  final target = TextEditingController(text: '5000');
-  final equalAmount = TextEditingController(text: '500');
-  final minAmount = TextEditingController(text: '250');
-  final maxAmount = TextEditingController(text: '1100');
-  final message = TextEditingController(text: 'Together from Sajha Kharcha.');
+  final title = TextEditingController();
+  final target = TextEditingController();
+  final equalAmount = TextEditingController();
+  final minAmount = TextEditingController();
+  final maxAmount = TextEditingController();
+  final message = TextEditingController();
   var contributionRule = GiftPoolContributionRule.equal;
   var allowOverTarget = false;
   await showDialog<void>(
