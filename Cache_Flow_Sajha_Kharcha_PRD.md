@@ -1,15 +1,15 @@
-# Sangai PRD
+# Sajha Kharcha PRD
 
 Team: Cache Flow
 Challenge: Challenge 10 - Enabling Smart Group Expense Management for Shared Financial Activities
-App name: Sangai
+App name: Sajha Kharcha
 Tagline: Connect, split, gift, and settle together inside eSewa.
 Version: 1.0
 Date: 2026-05-28
 
 ## 1. Executive Summary
 
-Sangai is a mobile-first social finance module for eSewa that helps users manage shared spending with people they know. It lets users connect with friends, family, and colleagues, create expense groups, split bills, view transparent balances, settle dues through eSewa P2P payments, and send gift cards with money.
+Sajha Kharcha is a mobile-first social finance module for eSewa that helps users manage shared spending with people they know. It lets users connect with friends, family, and colleagues, create expense groups, split bills, view transparent balances, settle dues through eSewa P2P payments, and send gift cards with money.
 
 The current selected idea, Digital Dhukuti, is strong because it is culturally native to Nepal. The refined product keeps Digital Dhukuti as a flagship differentiator, but expands the core product around the full Challenge 10 requirement set: social connections, group expenses, balance transparency, settlement, and gifting.
 
@@ -17,28 +17,28 @@ For the hackathon, the recommended build is a responsive React web app with a No
 
 ## 2. Product Name
 
-Recommended app name: Sangai
+Recommended app name: Sajha Kharcha
 
 Why this name works:
 
-- It means "together" in a Nepali cultural context.
+- It directly signals shared expenses in a Nepali cultural context.
 - It covers all use cases: friends splitting food, colleagues running a fund, families sending gifts, and groups managing recurring contributions.
 - It is broader than Digital Dhukuti, so the product does not feel limited to rotating savings pools.
 - It can be positioned as an eSewa-native social settlement layer.
 
 Feature naming:
 
-- Sangai Groups: group expense management
-- Sangai Settle: one-tap settlement and debt simplification
-- Sangai Gifts: gift cards and group gifting
-- Digital Dhukuti: rotating contribution ledger inside Sangai
+- Sajha Kharcha Groups: group expense management
+- Sajha Kharcha Settle: one-tap settlement and debt simplification
+- Sajha Kharcha Gifts: gift cards and group gifting
+- Digital Dhukuti: rotating contribution ledger inside Sajha Kharcha
 - Festival Mode: Dashain, Tihar, trek, bhoj, picnic, and apartment templates
 
 ## 3. Source Requirement Review
 
 ### 3.1 Challenge 10 Requirements Coverage
 
-| Challenge requirement | Sangai product response | MVP priority |
+| Challenge requirement | Sajha Kharcha product response | MVP priority |
 | --- | --- | --- |
 | User connection mechanisms for financial interactions | Users connect by eSewa ID or phone number in MVP; QR invitation is a P1 enhancement. | P0 |
 | Connection request approval and decline | Incoming requests support approve, decline, block, and report. | P0 |
@@ -60,7 +60,7 @@ Feature naming:
 | Team name | Cache Flow |
 | Challenge | Challenge 10 |
 | Problem understanding | PRD and deck should clearly explain current reliance on messaging apps, manual calculation, forgotten dues, and social discomfort around asking for money. |
-| Proposed solution | Sangai: social connections, groups, expense splitting, balance tracking, settlement, gifts, and Digital Dhukuti. |
+| Proposed solution | Sajha Kharcha: social connections, groups, expense splitting, balance tracking, settlement, gifts, and Digital Dhukuti. |
 | In-scope and out-of-scope | Defined in this PRD and should be added to the final deck. |
 | User journey or flow | Dashain Khasi split journey is recommended for the demo story. |
 | Technology stack | React.js, Node.js/Express, PostgreSQL, optional Python/scikit-learn, GitHub, local payment simulation. |
@@ -72,7 +72,7 @@ Feature naming:
 
 ### 3.3 Evaluation Criteria Alignment
 
-| Criteria | Weight | How Sangai should score |
+| Criteria | Weight | How Sajha Kharcha should score |
 | --- | ---: | --- |
 | Problem Understanding | 10% | Shows Nepal-specific shared expense behavior, festival spending, trekking, office bhoj, apartment expenses, and Dhukuti coordination. |
 | Innovation and Creativity | 20% | Digital Dhukuti, Festival Mode, group gifting, receipt-assisted split, and culturally native templates. |
@@ -92,7 +92,7 @@ Feature naming:
 
 ### 4.2 Refinements Needed
 
-1. Make Sangai the main product and Digital Dhukuti a flagship module.
+1. Make Sajha Kharcha the main product and Digital Dhukuti a flagship module.
    - Challenge 10 is primarily about group expenses, connections, balances, settlement, and gifts.
    - Digital Dhukuti is a differentiator, but it should not make the product feel like only a savings pool app.
 
@@ -256,7 +256,7 @@ P2 stretch features:
 
 ### 8.1 Connection Journey
 
-1. User opens Sangai.
+1. User opens Sajha Kharcha.
 2. User searches by eSewa ID or phone number.
 3. User sends a connection request.
 4. Recipient sees incoming request with requester name and mutual group context where available.
@@ -296,7 +296,7 @@ Acceptance criteria:
 
 ### 8.3 Group Gift Journey
 
-1. User selects Sangai Gifts.
+1. User selects Sajha Kharcha Gifts.
 2. User chooses a festival or occasion template.
 3. User selects recipient from connections.
 4. User enters gift amount and message.
@@ -1628,14 +1628,14 @@ Recommended 3-minute story:
    - Show a seeded monthly contribution pool, cycle status, payout recipient, and transparent ledger.
 
 9. Close:
-   - "Sangai brings shared expenses, gifts, and Digital Dhukuti into eSewa, where the money already moves."
+   - "Sajha Kharcha brings shared expenses, gifts, and Digital Dhukuti into eSewa, where the money already moves."
 
 ## 23. Deck Update Recommendations
 
 Update the existing deck as follows:
 
 - Replace placeholder team name with Cache Flow.
-- Rename the product from Digital Dhukuti to Sangai, with Digital Dhukuti as the flagship module.
+- Rename the product from Digital Dhukuti to Sajha Kharcha, with Digital Dhukuti as the flagship module.
 - Replace "minimum spanning tree algorithm" with "net-balance settlement simplification algorithm."
 - Mark Flutter, Redis, advanced OCR, ML, item-level split, and interactive Dhukuti creation as stretch or phase 2 unless the team is confident.
 - Show Digital Dhukuti as a seeded ledger in the core demo, then mention interactive creation as the next build milestone.
@@ -1657,10 +1657,10 @@ Update the existing deck as follows:
 
 ## 25. Final Recommendation
 
-Cache Flow should build Sangai as a focused, working social expense prototype, not a broad concept deck. The winning path is:
+Cache Flow should build Sajha Kharcha as a focused, working social expense prototype, not a broad concept deck. The winning path is:
 
 1. Nail the required Challenge 10 flows: connect, group, split, balance, settle, gift.
 2. Use Digital Dhukuti as the memorable Nepal-specific differentiator.
 3. Keep the MVP technically honest and demo-ready.
 4. Show how every settlement and gift becomes an eSewa transaction in MVP, with Dhukuti contributions as the next expansion.
-5. Pitch Sangai as a product eSewa could realistically pilot after the hackathon.
+5. Pitch Sajha Kharcha as a product eSewa could realistically pilot after the hackathon.

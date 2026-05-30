@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.cacheflow.sangai"
+    namespace = "com.cacheflow.sajhakharcha"
     compileSdk = flutter.compileSdkVersion
     // Use the highest NDK required by the plugin set so camera, JNI, and OCR
     // native artifacts resolve consistently.
@@ -18,7 +18,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.cacheflow.sangai"
+        applicationId = "com.cacheflow.sajhakharcha"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // flutter_paddle_ocr requires SDK 24+ and ships native libs for
