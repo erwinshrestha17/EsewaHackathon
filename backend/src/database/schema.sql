@@ -1,0 +1,7 @@
+-- Canonical schema for the Node/Express API.
+-- Apply this through the Supabase migration:
+-- supabase/migrations/20260530120000_create_full_app_backend.sql
+--
+-- The migration is kept in the Supabase folder so `supabase db push` can apply
+-- it with migration history. This file exists to mirror the backend structure
+-- and point API developers to the source-of-truth schema.

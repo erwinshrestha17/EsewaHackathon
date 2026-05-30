@@ -44,6 +44,12 @@ void main() {
       expect(controller.state.isLoggedIn, isTrue);
       expect(controller.state.activeUser?.displayName, 'Erwin Shrestha');
       expect(controller.state.activeUser?.phone, '9800000001');
+
+      await controller.loginWithMpin(
+        phone: '+977 9800000001',
+        mPin: AuthController.demoMpin,
+      );
+      expect(controller.state.activeUser?.phone, '9800000001');
     },
   );
 
@@ -99,6 +105,16 @@ void main() {
     );
     expect(phoneField.controller?.text, '9800000001');
     expect(pinField.controller?.text, '1234');
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Nepal mobile number'),
+      '+977 9800000001',
+    );
+    await tester.pump();
+    final pastedPhoneField = tester.widget<TextFormField>(
+      find.widgetWithText(TextFormField, 'Nepal mobile number'),
+    );
+    expect(pastedPhoneField.controller?.text, '9800000001');
   });
 
   testWidgets('sign up requires mobile number dob M-PIN then verifies OTP', (
@@ -233,7 +249,10 @@ void main() {
     await tester.pumpWidget(
       AuthScope(
         notifier: AuthController(),
-        child: StoreScope(notifier: AppStore(), child: const SajhaKharchaApp()),
+        child: StoreScope(
+          notifier: AppStore.seeded(),
+          child: const SajhaKharchaApp(),
+        ),
       ),
     );
     await tester.pump(const Duration(seconds: 1));
@@ -273,7 +292,10 @@ void main() {
     await tester.pumpWidget(
       AuthScope(
         notifier: AuthController(),
-        child: StoreScope(notifier: AppStore(), child: const SajhaKharchaApp()),
+        child: StoreScope(
+          notifier: AppStore.seeded(),
+          child: const SajhaKharchaApp(),
+        ),
       ),
     );
     await tester.pump(const Duration(seconds: 1));
@@ -329,7 +351,7 @@ void main() {
   });
 
   test('upcoming savings tracker card skips paid past months', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final now = DateTime.now();
     final pool = DhukutiPool(
       id: 'd-test-upcoming',
@@ -462,7 +484,10 @@ void main() {
     await tester.pumpWidget(
       AuthScope(
         notifier: AuthController(),
-        child: StoreScope(notifier: AppStore(), child: const SajhaKharchaApp()),
+        child: StoreScope(
+          notifier: AppStore.seeded(),
+          child: const SajhaKharchaApp(),
+        ),
       ),
     );
     await tester.pump(const Duration(seconds: 1));
@@ -499,7 +524,7 @@ void main() {
   testWidgets('connection report dialog requires note and blocks duplicates', (
     tester,
   ) async {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final connection = store.connectionBetween('u-sita', 'u-maya')!;
     final reportedUser = store.userById('u-maya');
 
@@ -575,7 +600,7 @@ void main() {
   testWidgets('gift pool dialog switches between equal and threshold amounts', (
     tester,
   ) async {
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     await tester.pumpWidget(
       StoreScope(
@@ -645,7 +670,7 @@ void main() {
         AuthScope(
           notifier: AuthController(),
           child: StoreScope(
-            notifier: AppStore(),
+            notifier: AppStore.seeded(),
             child: const SajhaKharchaApp(),
           ),
         ),
@@ -669,7 +694,7 @@ void main() {
   );
 
   testWidgets('Groups screen tolerates a stale selected group', (tester) async {
-    final store = AppStore()..selectedGroupId = 'missing-group';
+    final store = AppStore.seeded()..selectedGroupId = 'missing-group';
 
     await tester.pumpWidget(
       StoreScope(
@@ -687,7 +712,7 @@ void main() {
   testWidgets('Groups screen does not open an expense group by default', (
     tester,
   ) async {
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     await tester.pumpWidget(
       StoreScope(
@@ -748,7 +773,7 @@ void main() {
   testWidgets('create group dialog starts with members unselected', (
     tester,
   ) async {
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     await tester.pumpWidget(
       StoreScope(
@@ -787,7 +812,7 @@ void main() {
   testWidgets('Community Savings create flow uses tracker-specific setup', (
     tester,
   ) async {
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     await tester.pumpWidget(
       StoreScope(
@@ -829,7 +854,7 @@ void main() {
   testWidgets('Groups screen separates expense and community savings groups', (
     tester,
   ) async {
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     await tester.pumpWidget(
       StoreScope(
@@ -865,7 +890,7 @@ void main() {
   testWidgets('inactive current member no longer sees group detail', (
     tester,
   ) async {
-    final store = AppStore()
+    final store = AppStore.seeded()
       ..switchUser('u-rina')
       ..removeGroupMember('g-dashain', 'u-rina')
       ..selectedGroupId = 'g-dashain';
@@ -885,7 +910,7 @@ void main() {
   testWidgets('Groups screen uses general flow and table statement', (
     tester,
   ) async {
-    final store = AppStore()..selectedGroupId = 'g-dashain';
+    final store = AppStore.seeded()..selectedGroupId = 'g-dashain';
 
     await tester.pumpWidget(
       StoreScope(
@@ -976,7 +1001,7 @@ void main() {
   testWidgets('active expense member sees rename action in group detail', (
     tester,
   ) async {
-    final store = AppStore()..selectedGroupId = 'g-apartment';
+    final store = AppStore.seeded()..selectedGroupId = 'g-apartment';
 
     await tester.pumpWidget(
       StoreScope(
@@ -997,7 +1022,7 @@ void main() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
     });
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     await tester.pumpWidget(
       StoreScope(
@@ -1029,7 +1054,7 @@ void main() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
     });
-    final store = AppStore();
+    final store = AppStore.seeded();
     final groupId = store.createGroup(
       name: 'Offline Lunch',
       category: GroupCategory.custom,
@@ -1094,12 +1119,19 @@ void main() {
   testWidgets('Add expense starts with participants and supports payer rows', (
     tester,
   ) async {
-    final store = AppStore()..selectedGroupId = 'g-dashain';
+    final store = AppStore.seeded()..selectedGroupId = 'g-dashain';
 
     await pumpGroupsForAddExpense(tester, store);
     await openManualEntry(tester);
 
-    // Select all participants to make split ready
+    final totalAmountField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == 'Total amount',
+    );
+    await tester.enterText(totalAmountField, '1200');
+    await tester.pump();
+
+    // Select all participants after entering a real amount to make split ready.
     final participantCards = find.byType(ParticipantSelectorCard);
     final cardCount = participantCards.evaluate().length;
     for (var index = 0; index < cardCount; index++) {
@@ -1146,7 +1178,7 @@ void main() {
   testWidgets('Manual entry places split mode before item list', (
     tester,
   ) async {
-    final store = AppStore()..selectedGroupId = 'g-dashain';
+    final store = AppStore.seeded()..selectedGroupId = 'g-dashain';
 
     await pumpGroupsForAddExpense(tester, store);
     await openManualEntry(tester);
@@ -1160,10 +1192,39 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Manual entry opens without hardcoded receipt data', (
+    tester,
+  ) async {
+    final store = AppStore.seeded()..selectedGroupId = 'g-dashain';
+
+    await pumpGroupsForAddExpense(tester, store);
+    await openManualEntry(tester);
+
+    expect(find.text('Chicken momo'), findsNothing);
+    expect(find.text('Veg chowmein'), findsNothing);
+    expect(find.text('Cold drinks'), findsNothing);
+    expect(find.text('Office Bhoj'), findsNothing);
+
+    final titleField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == 'Title',
+    );
+    final totalAmountField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == 'Total amount',
+    );
+    expect(tester.widget<TextField>(titleField).controller?.text, isEmpty);
+    expect(
+      tester.widget<TextField>(totalAmountField).controller?.text,
+      isEmpty,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'Manual entry defaults who paid to current user and remains editable',
     (tester) async {
-      final store = AppStore()
+      final store = AppStore.seeded()
         ..switchUser('u-arjun')
         ..selectedGroupId = 'g-dashain';
 
@@ -1201,7 +1262,7 @@ void main() {
   testWidgets('Add expense participant cards toggle split preview', (
     tester,
   ) async {
-    final store = AppStore()..selectedGroupId = 'g-dashain';
+    final store = AppStore.seeded()..selectedGroupId = 'g-dashain';
 
     await pumpGroupsForAddExpense(tester, store);
     await openManualEntry(tester);
@@ -1248,7 +1309,7 @@ void main() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
     });
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     await tester.pumpWidget(
       StoreScope(
@@ -1279,7 +1340,7 @@ void main() {
   testWidgets('Add expense item list row has only Name and Amount fields', (
     tester,
   ) async {
-    final store = AppStore()..selectedGroupId = 'g-dashain';
+    final store = AppStore.seeded()..selectedGroupId = 'g-dashain';
 
     await pumpGroupsForAddExpense(tester, store);
     await openManualEntry(tester);
@@ -1349,7 +1410,7 @@ void main() {
   testWidgets('Manual entry includes service charge in bill total', (
     tester,
   ) async {
-    final store = AppStore()..selectedGroupId = 'g-dashain';
+    final store = AppStore.seeded()..selectedGroupId = 'g-dashain';
 
     await pumpGroupsForAddExpense(tester, store);
     await openManualEntry(tester);
@@ -1395,7 +1456,7 @@ void main() {
   testWidgets(
     'Add expense total amount and paid fields are editable in item split mode',
     (tester) async {
-      final store = AppStore()..selectedGroupId = 'g-dashain';
+      final store = AppStore.seeded()..selectedGroupId = 'g-dashain';
 
       await pumpGroupsForAddExpense(tester, store);
       await openManualEntry(tester);

@@ -4,6 +4,73 @@ import 'package:sajha_kharcha/src/finance.dart';
 import 'package:sajha_kharcha/src/models.dart';
 
 void main() {
+  test('production AppStore starts without local dummy data', () {
+    final store = AppStore();
+
+    expect(store.users, isEmpty);
+    expect(store.groups, isEmpty);
+    expect(store.expenses, isEmpty);
+  });
+
+  test('AppStore hydrates visible data from backend snapshot', () {
+    final store = AppStore()
+      ..loadBackendSnapshot({
+        'currentUserId': 'u-sita',
+        'users': [
+          {
+            'id': 'u-sita',
+            'displayName': 'Sita Shrestha',
+            'phone': '9800000001',
+            'avatar': 'SS',
+            'district': 'Kathmandu',
+            'privacyMode': 'everyone',
+            'createdAt': '2026-05-01T00:00:00Z',
+          },
+        ],
+        'groups': [
+          {
+            'id': 'g-dashain',
+            'name': 'Dashain Khasi Split',
+            'category': 'festival',
+            'template': 'Dashain Khasi Split',
+            'kind': 'expense',
+            'createdBy': 'u-sita',
+            'createdAt': '2026-05-10T00:00:00Z',
+          },
+        ],
+        'groupMembers': [
+          {
+            'id': 'gm-1',
+            'groupId': 'g-dashain',
+            'userId': 'u-sita',
+            'role': 'admin',
+            'status': 'active',
+            'joinedAt': '2026-05-10T00:00:00Z',
+          },
+        ],
+        'expenses': [
+          {
+            'id': 'expense-1',
+            'groupId': 'g-dashain',
+            'title': 'Khasi purchase',
+            'subtotalMinor': 600000,
+            'totalMinor': 600000,
+            'payerId': 'u-sita',
+            'category': 'festival',
+            'splitMode': 'equal',
+            'status': 'active',
+            'expenseDate': '2026-05-18',
+            'createdBy': 'u-sita',
+            'createdAt': '2026-05-18T10:00:00Z',
+          },
+        ],
+      });
+
+    expect(store.currentUser.displayName, 'Sita Shrestha');
+    expect(store.visibleExpenseGroups.single.name, 'Dashain Khasi Split');
+    expect(store.expenses.single.title, 'Khasi purchase');
+  });
+
   test('equal shares keep integer paisa totals exact', () {
     final shares = equalShares(npr(100), const ['a', 'b', 'c']);
 
@@ -30,7 +97,7 @@ void main() {
   });
 
   test('multiple payer amounts must match total and affect balances', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final groupId = store.createGroup(
       name: 'Multi payer test',
       category: GroupCategory.custom,
@@ -68,7 +135,7 @@ void main() {
   });
 
   test('service charge is stored and included in total math', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final groupId = store.createGroup(
       name: 'Service charge test',
       category: GroupCategory.custom,
@@ -100,7 +167,7 @@ void main() {
   test(
     'multiple payer equal split gives rounding to largest included payer',
     () {
-      final store = AppStore();
+      final store = AppStore.seeded();
       final groupId = store.createGroup(
         name: 'Rounding payer test',
         category: GroupCategory.custom,
@@ -130,7 +197,7 @@ void main() {
   test(
     're-adding a removed member creates a new period only for future use',
     () {
-      final store = AppStore();
+      final store = AppStore.seeded();
       final historical = store.expenses.firstWhere(
         (expense) => expense.groupId == 'g-dashain',
       );
@@ -176,7 +243,7 @@ void main() {
   );
 
   test('members can leave active groups without deleting history', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final groupId = store.createGroup(
       name: 'Leave test',
       category: GroupCategory.custom,
@@ -196,7 +263,7 @@ void main() {
   });
 
   test('members who owe money are blocked from leaving until settled', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final groupId = store.createGroup(
       name: 'Leave balance test',
       category: GroupCategory.custom,
@@ -224,7 +291,7 @@ void main() {
   });
 
   test('members who are owed can leave with receivables active', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final groupId = store.createGroup(
       name: 'Receivable leave test',
       category: GroupCategory.custom,
@@ -249,7 +316,7 @@ void main() {
   });
 
   test('admins can disband groups and deactivate all members', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final groupId = store.createGroup(
       name: 'Disband test',
       category: GroupCategory.custom,
@@ -267,7 +334,7 @@ void main() {
   });
 
   test('admins can rename groups after creation', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final groupId = store.createGroup(
       name: 'Old trip name',
       category: GroupCategory.custom,
@@ -284,7 +351,7 @@ void main() {
   });
 
   test('active expense group members can rename groups', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final groupId = store.createGroup(
       name: 'Member editable name',
       category: GroupCategory.custom,
@@ -298,7 +365,7 @@ void main() {
   });
 
   test('Community Savings Tracker admins can rename groups', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     expect(
       store.renameDhukutiPool('d-family-dashain', 'Family Community Fund'),
@@ -313,7 +380,7 @@ void main() {
   });
 
   test('non-admin members cannot rename Community Savings Tracker groups', () {
-    final store = AppStore()..switchUser('u-arjun');
+    final store = AppStore.seeded()..switchUser('u-arjun');
 
     expect(
       store.renameDhukutiPool('d-family-dashain', 'Member Community Fund Name'),
@@ -327,7 +394,7 @@ void main() {
   });
 
   test('seeded store keeps group balances zero-sum after settlement', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final balances = store.balancesForGroup('g-dashain');
 
     expect(balances.values.fold<int>(0, (sum, item) => sum + item), 0);
@@ -342,7 +409,7 @@ void main() {
   test(
     'external settlements update balances only after recipient approval',
     () {
-      final store = AppStore();
+      final store = AppStore.seeded();
       final groupId = store.createGroup(
         name: 'Cash settlement test',
         category: GroupCategory.custom,
@@ -390,7 +457,7 @@ void main() {
   );
 
   test('item receipt expenses create auditable item shares', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final expenseId = store.addExpense(
       groupId: 'g-dashain',
       title: 'Receipt test',
@@ -418,7 +485,7 @@ void main() {
   });
 
   test('item receipt expenses support item-level share units', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final expenseId = store.addExpense(
       groupId: 'g-dashain',
       title: 'Momo shares',
@@ -450,7 +517,7 @@ void main() {
   });
 
   test('item receipt bill adjustments can be allocated equally', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final expenseId = store.addExpense(
       groupId: 'g-dashain',
       title: 'Momo with VAT',
@@ -481,7 +548,7 @@ void main() {
   test(
     'community savings exit decisions distinguish before-start and obligations',
     () {
-      final store = AppStore();
+      final store = AppStore.seeded();
       final groupId = store.createGroup(
         name: 'Family Community Fund group',
         category: GroupCategory.custom,
@@ -531,7 +598,7 @@ void main() {
   );
 
   test('mid-month community savings exit requires all remaining records', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final groupId = store.createGroup(
       name: 'Six member Community Fund group',
       category: GroupCategory.custom,
@@ -595,7 +662,7 @@ void main() {
   });
 
   test('gifts require active unblocked connections', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     expect(
       store.sendGift(
@@ -609,7 +676,7 @@ void main() {
   });
 
   test('connection reports require a note and block duplicate reports', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     final connection = store.connectionBetween('u-sita', 'u-maya')!;
 
     expect(
@@ -648,7 +715,7 @@ void main() {
   });
 
   test('zero-value gifts are rejected', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     expect(
       store.sendGift(
@@ -663,7 +730,7 @@ void main() {
   });
 
   test('a sent gift is final and can only be opened by the recipient', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
     store.sendGift(
       recipientId: 'u-maya',
       template: 'Birthday',
@@ -685,7 +752,7 @@ void main() {
   });
 
   test('gift pools enforce equal amount or min max contribution rules', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     final equalPoolId = store.createGiftPool(
       groupId: 'g-dashain',
@@ -767,7 +834,7 @@ void main() {
   });
 
   test('QR invites preserve hyphenated user IDs', () {
-    final store = AppStore()..switchUser('u-arjun');
+    final store = AppStore.seeded()..switchUser('u-arjun');
     final code = store.qrInviteCodeFor(
       store.userById('u-kabir'),
       issuedAt: DateTime.now().subtract(const Duration(minutes: 4)),
@@ -792,7 +859,7 @@ void main() {
   });
 
   test('account deletion is blocked by unsettled balances', () {
-    final store = AppStore();
+    final store = AppStore.seeded();
 
     expect(store.canDeleteCurrentAccount, isFalse);
     expect(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../auth_controller.dart';
+import '../nepal_mobile.dart';
 import '../widgets/auth_text_field.dart';
 
 class RegisterForm extends StatefulWidget {
@@ -44,10 +45,7 @@ class _RegisterFormState extends State<RegisterForm> {
             keyboardType: TextInputType.phone,
             textInputAction: TextInputAction.next,
             prefixText: '+977 ',
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(10),
-            ],
+            inputFormatters: const [NepalMobileInputFormatter()],
             validator: _nepalMobileValidator,
           ),
           const SizedBox(height: 12),
@@ -124,13 +122,12 @@ class _RegisterFormState extends State<RegisterForm> {
     if (value == null || value.trim().isEmpty) {
       return 'Enter your phone number';
     }
-    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length != 10) {
+    final mobile = normalizeNepalMobile(value);
+    if (mobile == null &&
+        value.replaceAll(RegExp(r'[^0-9]'), '').length != 10) {
       return 'Enter exactly 10 digits after +977.';
     }
-    return RegExp(r'^9[678]\d{8}$').hasMatch(digits)
-        ? null
-        : 'Enter a valid Nepal mobile number.';
+    return mobile != null ? null : 'Enter a valid Nepal mobile number.';
   }
 
   String? _dateOfBirthValidator(String? value) {

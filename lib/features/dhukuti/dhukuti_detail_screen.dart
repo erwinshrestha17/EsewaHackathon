@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../auth/auth_controller.dart';
 import '../../shared/design_system/app_components.dart' as ds;
 import '../../shared/design_system/app_spacing.dart';
 import '../../shared/design_system/app_text_styles.dart';
 import '../../src/app_state.dart';
 import '../../src/finance.dart';
 import '../../src/models.dart';
+import 'community_savings_api.dart';
 import 'widgets/dhukuti_status_badge.dart';
 import 'widgets/dhukuti_tokens.dart';
 
@@ -126,22 +128,23 @@ class DhukutiDetailScreen extends StatefulWidget {
 
 class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
   final bool isAdmin = true;
+  final _api = CommunitySavingsApi();
   var _tab = _TrackerTab.dashboard;
   var _ledgerTab = _LedgerTab.all;
-  late final _CommunitySavingsGroup _communityGroup;
-  late final List<_CommunitySavingsMember> _members;
-  late final List<_ContributionRecord> _contributions;
-  late final List<_CommunityExpense> _expenses;
-  late final List<_LedgerRecord> _ledger;
+  late _CommunitySavingsGroup _communityGroup;
+  var _members = <_CommunitySavingsMember>[];
+  var _contributions = <_ContributionRecord>[];
+  var _expenses = <_CommunityExpense>[];
+  var _ledger = <_LedgerRecord>[];
+  var _isLoading = true;
+  String? _error;
+  String? _month;
 
   @override
   void initState() {
     super.initState();
     final store = widget.store;
     final group = store.groupById(widget.pool.groupId);
-    final currentMonth = _monthLabel(DateTime.now());
-    final adminName = store.nameOf(widget.pool.createdBy);
-    final members = store.membersForPool(widget.pool.id);
     _communityGroup = _CommunitySavingsGroup(
       id: widget.pool.id,
       name: group.name,
@@ -149,55 +152,65 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
       currency: 'Rs.',
       currentBalance: 0,
     );
-    _members = [
-      for (final member in members)
-        _CommunitySavingsMember(
-          id: member.userId,
-          name: store.nameOf(member.userId),
-          role: member.userId == widget.pool.createdBy ? 'Admin' : 'Member',
-          avatarInitials: store.userById(member.userId).avatar,
-        ),
-    ];
-    _contributions = [
-      for (var index = 0; index < _members.length; index++)
-        _ContributionRecord.seed(
-          id: 'contribution-${widget.pool.id}-${_members[index].id}',
-          memberId: _members[index].id,
-          memberName: _members[index].name,
-          month: currentMonth,
-          initials: _members[index].avatarInitials,
-          expectedAmount: widget.pool.contributionAmountMinor,
-          status: switch (index) {
-            0 => _ContributionUiStatus.confirmedReceived,
-            1 => _ContributionUiStatus.submitted,
-            2 => _ContributionUiStatus.waived,
-            _ => _ContributionUiStatus.pending,
-          },
-          confirmedBy: adminName,
-        ),
-    ];
-    _expenses = [
-      _CommunityExpense(
-        id: 'expense-snacks',
-        title: 'Meeting snacks',
-        amount: npr(1200),
-        expenseDate: DateTime.now().subtract(const Duration(days: 4)),
-        category: 'Food',
-        recordedBy: store.nameOf(store.currentUserId),
-        description: 'Monthly member meeting.',
-        receiptReference: 'SNK-204',
-      ),
-    ];
-    _ledger = [
-      for (final item in _contributions)
-        if (item.status == _ContributionUiStatus.confirmedReceived)
-          _LedgerRecord.contribution(
-            item,
-            item.confirmedAt ??
-                DateTime.now().subtract(const Duration(days: 8)),
-          ),
-      _LedgerRecord.expense(_expenses.first),
-    ]..sort((a, b) => b.date.compareTo(a.date));
+    _loadDashboard();
+  }
+
+  Future<void> _loadDashboard() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final data = await _api.dashboard(
+        widget.pool.id,
+        accessToken: await _accessToken(),
+      );
+      if (!mounted) {
+        return;
+      }
+      final group = data['group'] as Map<String, dynamic>;
+      final summary = data['summary'] as Map<String, dynamic>;
+      final members = (data['members'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+      final contributions = (data['contributions'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+      final expenses = (data['expenses'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+      setState(() {
+        _month = data['month']?.toString();
+        _communityGroup = _CommunitySavingsGroup.fromJson(
+          group,
+          currentBalance: _readInt(summary, 'fundBalance'),
+        );
+        _members = [
+          for (final item in members) _CommunitySavingsMember.fromJson(item),
+        ];
+        _contributions = [
+          for (final item in contributions) _ContributionRecord.fromJson(item),
+        ];
+        _expenses = [
+          for (final item in expenses) _CommunityExpense.fromJson(item),
+        ];
+        _ledger = [
+          for (final item in _contributions)
+            if (item.status == _ContributionUiStatus.confirmedReceived)
+              _LedgerRecord.contribution(
+                item,
+                item.confirmedAt ?? DateTime.now(),
+              ),
+          for (final item in _expenses) _LedgerRecord.expense(item),
+        ]..sort((a, b) => b.date.compareTo(a.date));
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = error.toString();
+        _isLoading = false;
+      });
+    }
   }
 
   int get _totalConfirmedContributions => _contributions
@@ -271,43 +284,66 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
           selected: _tab,
           onChanged: (value) => setState(() => _tab = value),
         ),
-        switch (_tab) {
-          _TrackerTab.dashboard => _DashboardView(
-            groupName: _communityGroup.name,
-            currentMonth: currentMonth,
-            monthlyContribution: widget.pool.contributionAmountMinor,
-            fundBalance: _fundBalance,
-            receivedThisMonth: _receivedThisMonth,
-            pendingContributions: _pendingCount,
-            expensesThisMonth: _expensesThisMonth,
-            totalExpectedThisMonth: _totalExpectedThisMonth,
-            hasActivity:
-                _totalConfirmedContributions > 0 || _expenses.isNotEmpty,
-            isAdmin: isAdmin,
-            onConfirmContribution: () => _showAdminConfirmSheet(),
-            onRecordExpense: () => _showRecordExpenseSheet(),
-            onViewHistory: () => setState(() => _tab = _TrackerTab.history),
-            onManageMembers: () =>
-                setState(() => _tab = _TrackerTab.monthlyTracker),
-            onHavePaid: () => _showMemberPaidSheet(),
-            onViewStatus: () =>
-                setState(() => _tab = _TrackerTab.monthlyTracker),
-          ),
-          _TrackerTab.monthlyTracker => _MonthlyTrackerView(
-            contributions: _contributions,
-            isAdmin: isAdmin,
-            currentUserId: widget.store.currentUserId,
-            onConfirm: _showAdminConfirmSheet,
-            onEdit: _showAdminConfirmSheet,
-            onWaive: _waiveContribution,
-            onHavePaid: _showMemberPaidSheet,
-          ),
-          _TrackerTab.history => _HistoryView(
-            selected: _ledgerTab,
-            onChanged: (value) => setState(() => _ledgerTab = value),
-            ledger: _filteredLedger,
-          ),
-        },
+        if (_isLoading)
+          const DhukutiSection(
+            title: 'Loading tracker',
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_error != null)
+          DhukutiSection(
+            title: 'Community Savings API unavailable',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_error!, style: AppTextStyles.bodySecondary),
+                const SizedBox(height: AppSpacing.md),
+                OutlinedButton.icon(
+                  onPressed: _loadDashboard,
+                  icon: const Icon(Icons.refresh_outlined),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
+          )
+        else
+          switch (_tab) {
+            _TrackerTab.dashboard => _DashboardView(
+              groupName: _communityGroup.name,
+              currentMonth: _monthLabel(_parseDate(_month) ?? DateTime.now()),
+              monthlyContribution: _communityGroup.monthlyContributionAmount,
+              fundBalance: _fundBalance,
+              receivedThisMonth: _receivedThisMonth,
+              pendingContributions: _pendingCount,
+              expensesThisMonth: _expensesThisMonth,
+              totalExpectedThisMonth: _totalExpectedThisMonth,
+              memberCount: _members.length,
+              hasActivity:
+                  _totalConfirmedContributions > 0 || _expenses.isNotEmpty,
+              isAdmin: isAdmin,
+              onConfirmContribution: () => _showAdminConfirmSheet(),
+              onRecordExpense: () => _showRecordExpenseSheet(),
+              onViewHistory: () => setState(() => _tab = _TrackerTab.history),
+              onManageMembers: () =>
+                  setState(() => _tab = _TrackerTab.monthlyTracker),
+              onHavePaid: () => _showMemberPaidSheet(),
+              onViewStatus: () =>
+                  setState(() => _tab = _TrackerTab.monthlyTracker),
+            ),
+            _TrackerTab.monthlyTracker => _MonthlyTrackerView(
+              contributions: _contributions,
+              isAdmin: isAdmin,
+              currentUserId: widget.store.currentUserId,
+              onConfirm: _showAdminConfirmSheet,
+              onEdit: _showAdminConfirmSheet,
+              onWaive: _waiveContribution,
+              onHavePaid: _showMemberPaidSheet,
+            ),
+            _TrackerTab.history => _HistoryView(
+              selected: _ledgerTab,
+              onChanged: (value) => setState(() => _ledgerTab = value),
+              ledger: _filteredLedger,
+            ),
+          },
       ],
     );
   }
@@ -341,18 +377,16 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
     if (submitted == null) {
       return;
     }
-    setState(() {
-      target
-        ..status = _ContributionUiStatus.submitted
-        ..submittedAmount = submitted.submittedAmount
-        ..paymentMethod = submitted.paymentMethod
-        ..submittedAt = DateTime.now()
-        ..confirmedAt = null
-        ..confirmedBy = ''
-        ..receivedAmount = 0
-        ..note = submitted.note
-        ..referenceNumber = submitted.referenceNumber;
-    });
+    await _api.submitContribution(
+      groupId: widget.pool.id,
+      contributionId: target.id,
+      amountPaid: submitted.submittedAmount,
+      paymentMethod: submitted.paymentMethod,
+      note: submitted.note,
+      referenceNumber: submitted.referenceNumber,
+      accessToken: await _accessToken(),
+    );
+    await _loadDashboard();
     if (!mounted) {
       return;
     }
@@ -385,28 +419,18 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
     if (confirmed == null) {
       return;
     }
-    setState(() {
-      final item = _contributions.firstWhere(
-        (entry) => entry.memberId == confirmed.memberId,
-      );
-      item
-        ..status = _ContributionUiStatus.confirmedReceived
-        ..receivedAmount = confirmed.receivedAmount
-        ..paymentMethod = confirmed.paymentMethod
-        ..confirmedAt = confirmed.confirmedAt
-        ..confirmedBy = confirmed.confirmedBy
-        ..note = confirmed.note
-        ..referenceNumber = confirmed.referenceNumber;
-      _ledger.removeWhere(
-        (entry) =>
-            entry.type == _LedgerItemType.contribution &&
-            entry.sourceId == item.id,
-      );
-      _ledger.insert(
-        0,
-        _LedgerRecord.contribution(item, item.confirmedAt ?? DateTime.now()),
-      );
-    });
+    await _api.confirmContribution(
+      groupId: widget.pool.id,
+      contributionId: confirmed.id,
+      amountReceived: confirmed.receivedAmount,
+      paymentMethod: confirmed.paymentMethod,
+      dateReceived: _dateInput(confirmed.confirmedAt ?? DateTime.now()),
+      confirmedBy: confirmed.confirmedBy,
+      note: confirmed.note,
+      referenceNumber: confirmed.referenceNumber,
+      accessToken: await _accessToken(),
+    );
+    await _loadDashboard();
   }
 
   Future<void> _showRecordExpenseSheet() async {
@@ -422,21 +446,37 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
     if (expense == null) {
       return;
     }
-    setState(() {
-      _expenses.add(expense);
-      _ledger.insert(0, _LedgerRecord.expense(expense));
-    });
+    await _api.recordExpense(
+      groupId: widget.pool.id,
+      title: expense.title,
+      amountSpent: expense.amount,
+      expenseDate: _dateInput(expense.expenseDate),
+      category: expense.category,
+      recordedBy: expense.recordedBy,
+      description: expense.description,
+      receiptReference: expense.receiptReference,
+      accessToken: await _accessToken(),
+    );
+    await _loadDashboard();
   }
 
-  void _waiveContribution(_ContributionRecord record) {
-    setState(() {
-      record
-        ..status = _ContributionUiStatus.waived
-        ..receivedAmount = 0
-        ..submittedAmount = 0
-        ..confirmedAt = null
-        ..confirmedBy = '';
-    });
+  Future<void> _waiveContribution(_ContributionRecord record) async {
+    await _api.waiveContribution(
+      groupId: widget.pool.id,
+      contributionId: record.id,
+      accessToken: await _accessToken(),
+    );
+    await _loadDashboard();
+  }
+
+  Future<String> _accessToken() async {
+    final token = await AuthScope.of(context).backendAccessToken();
+    if (token == null || token.isEmpty) {
+      throw const CommunitySavingsApiException(
+        'Start the app with BACKEND_API_BASE_URL and log in again.',
+      );
+    }
+    return token;
   }
 }
 
@@ -450,6 +490,7 @@ class _DashboardView extends StatelessWidget {
     required this.pendingContributions,
     required this.expensesThisMonth,
     required this.totalExpectedThisMonth,
+    required this.memberCount,
     required this.hasActivity,
     required this.isAdmin,
     required this.onConfirmContribution,
@@ -468,6 +509,7 @@ class _DashboardView extends StatelessWidget {
   final int pendingContributions;
   final int expensesThisMonth;
   final int totalExpectedThisMonth;
+  final int memberCount;
   final bool hasActivity;
   final bool isAdmin;
   final VoidCallback onConfirmContribution;
@@ -534,6 +576,12 @@ class _DashboardView extends StatelessWidget {
               value: _rs(totalExpectedThisMonth),
               icon: Icons.summarize_outlined,
               tone: DhukutiTone.info,
+            ),
+            DhukutiMetricCard(
+              label: 'Members',
+              value: '$memberCount',
+              icon: Icons.groups_outlined,
+              tone: DhukutiTone.neutral,
             ),
           ],
         ),
@@ -1512,6 +1560,19 @@ class _CommunitySavingsGroup {
     required this.currentBalance,
   });
 
+  factory _CommunitySavingsGroup.fromJson(
+    Map<String, dynamic> json, {
+    required int currentBalance,
+  }) {
+    return _CommunitySavingsGroup(
+      id: json['id'].toString(),
+      name: json['name'].toString(),
+      monthlyContributionAmount: _readInt(json, 'monthlyContributionAmount'),
+      currency: json['currency']?.toString() ?? 'Rs.',
+      currentBalance: currentBalance,
+    );
+  }
+
   final String id;
   final String name;
   final int monthlyContributionAmount;
@@ -1526,6 +1587,15 @@ class _CommunitySavingsMember {
     required this.role,
     required this.avatarInitials,
   });
+
+  factory _CommunitySavingsMember.fromJson(Map<String, dynamic> json) {
+    return _CommunitySavingsMember(
+      id: json['id'].toString(),
+      name: json['name'].toString(),
+      role: json['role']?.toString() ?? 'member',
+      avatarInitials: json['avatarInitials']?.toString() ?? '?',
+    );
+  }
 
   final String id;
   final String name;
@@ -1552,57 +1622,29 @@ class _ContributionRecord {
     required this.referenceNumber,
   });
 
-  factory _ContributionRecord.seed({
-    required String id,
-    required String memberId,
-    required String memberName,
-    required String month,
-    required String initials,
-    required int expectedAmount,
-    required _ContributionUiStatus status,
-    required String confirmedBy,
-  }) {
-    final now = DateTime.now();
+  factory _ContributionRecord.fromJson(Map<String, dynamic> json) {
+    final status = switch (json['status']?.toString()) {
+      'submitted' => _ContributionUiStatus.submitted,
+      'confirmed_received' => _ContributionUiStatus.confirmedReceived,
+      'waived' => _ContributionUiStatus.waived,
+      _ => _ContributionUiStatus.pending,
+    };
     return _ContributionRecord(
-      id: id,
-      memberId: memberId,
-      memberName: memberName,
-      month: month,
-      initials: initials,
-      expectedAmount: expectedAmount,
-      receivedAmount: status == _ContributionUiStatus.confirmedReceived
-          ? expectedAmount
-          : 0,
-      submittedAmount: status == _ContributionUiStatus.submitted
-          ? expectedAmount
-          : 0,
+      id: json['id'].toString(),
+      memberId: json['memberId'].toString(),
+      memberName: json['memberName'].toString(),
+      month: json['month']?.toString() ?? _dateInput(DateTime.now()),
+      initials: _initials(json['memberName']?.toString() ?? '?'),
+      expectedAmount: _readInt(json, 'expectedAmount'),
+      receivedAmount: _readInt(json, 'receivedAmount'),
+      submittedAmount: _readInt(json, 'submittedAmount'),
       status: status,
-      paymentMethod:
-          status == _ContributionUiStatus.pending ||
-              status == _ContributionUiStatus.waived
-          ? ''
-          : switch (status) {
-              _ContributionUiStatus.confirmedReceived => 'Cash',
-              _ContributionUiStatus.submitted => 'eSewa',
-              _ => '',
-            },
-      submittedAt: switch (status) {
-        _ContributionUiStatus.confirmedReceived => now.subtract(
-          const Duration(days: 9),
-        ),
-        _ContributionUiStatus.submitted => now.subtract(
-          const Duration(days: 2),
-        ),
-        _ => null,
-      },
-      confirmedAt: status == _ContributionUiStatus.confirmedReceived
-          ? now.subtract(const Duration(days: 8))
-          : null,
-      confirmedBy: status == _ContributionUiStatus.confirmedReceived
-          ? confirmedBy
-          : '',
-      note: '',
-      referenceNumber: '',
+      paymentMethod: json['paymentMethod']?.toString() ?? '',
+      submittedAt: _parseDate(json['submittedAt']?.toString()),
+      confirmedAt: _parseDate(json['confirmedAt']?.toString()),
+      confirmedBy: json['confirmedBy']?.toString() ?? '',
+      note: json['note']?.toString() ?? '',
+      referenceNumber: json['referenceNumber']?.toString() ?? '',
     );
   }
 
@@ -1664,6 +1706,20 @@ class _CommunityExpense {
     required this.description,
     required this.receiptReference,
   });
+
+  factory _CommunityExpense.fromJson(Map<String, dynamic> json) {
+    return _CommunityExpense(
+      id: json['id'].toString(),
+      title: json['title'].toString(),
+      amount: _readInt(json, 'amount'),
+      expenseDate:
+          _parseDate(json['expenseDate']?.toString()) ?? DateTime.now(),
+      category: json['category']?.toString() ?? 'Other',
+      recordedBy: json['recordedBy']?.toString() ?? 'Admin',
+      description: json['description']?.toString() ?? '',
+      receiptReference: json['receiptReference']?.toString() ?? '',
+    );
+  }
 
   final String id;
   final String title;
@@ -1768,6 +1824,42 @@ DhukutiTone _statusTone(_ContributionUiStatus status) {
 }
 
 String _rs(int minor) => money(minor).replaceFirst('NPR', 'Rs.');
+
+int _readInt(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.round();
+  }
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+DateTime? _parseDate(String? value) {
+  if (value == null || value.isEmpty || value == 'null') {
+    return null;
+  }
+  return DateTime.tryParse(value);
+}
+
+String _dateInput(DateTime date) {
+  return '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+}
+
+String _initials(String name) {
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) {
+    return '?';
+  }
+  return parts.take(2).map((part) => part[0].toUpperCase()).join();
+}
 
 String _monthLabel(DateTime date) {
   const months = [

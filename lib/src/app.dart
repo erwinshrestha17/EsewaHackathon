@@ -17,6 +17,7 @@ import '../features/home/home_screen.dart';
 import '../features/settings/settings_controller.dart';
 import '../features/settings/settings_models.dart';
 import '../features/settings/settings_screen.dart';
+import '../shared/api/backend_api.dart';
 import '../shared/design_system/app_colors.dart';
 import '../shared/design_system/app_components.dart' as ds;
 import '../shared/design_system/app_spacing.dart';
@@ -407,6 +408,9 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   var _groupsInitialTab = GroupKind.expense;
   AuthController? _authController;
   AppStore? _store;
+  final _backendApi = BackendApi();
+  var _loadingBackendSnapshot = false;
+  String? _loadedBackendSnapshotToken;
 
   SettingsController get _settingsController => widget.settingsController;
 
@@ -658,11 +662,36 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     final activeUser = _authController?.state.activeUser;
     final store = _store;
     if (activeUser != null && store != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          store.applyActiveUserProfile(activeUser);
-        }
-      });
+      store.applyActiveUserProfile(activeUser, notify: false);
+      unawaited(_loadBackendSnapshot());
+    }
+  }
+
+  Future<void> _loadBackendSnapshot() async {
+    final authController = _authController;
+    final store = _store;
+    if (!_backendApi.isConfigured ||
+        authController == null ||
+        store == null ||
+        _loadingBackendSnapshot) {
+      return;
+    }
+    final token = await authController.backendAccessToken();
+    if (token == null || token == _loadedBackendSnapshotToken) {
+      return;
+    }
+    _loadingBackendSnapshot = true;
+    try {
+      final snapshot = await _backendApi.appBootstrap(accessToken: token);
+      if (!mounted) {
+        return;
+      }
+      store.loadBackendSnapshot(snapshot);
+      _loadedBackendSnapshotToken = token;
+    } on BackendApiException catch (error) {
+      debugPrint('Backend bootstrap failed: ${error.message}');
+    } finally {
+      _loadingBackendSnapshot = false;
     }
   }
 
@@ -4928,12 +4957,12 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
       for (final item in _scannedItems) {
         item.dispose();
       }
-      _scannedItems = _demoScannedBillItems();
+      _scannedItems = <_ExpenseItemDraft>[];
       setState(() {
         _runningOcr = false;
         _scanVersion += 1;
         _scanMessage =
-            'Some items may need correction. Please review before continuing.';
+            'No bill items were detected. Use Manual Entry to add real items.';
       });
       await _sheetController.animateTo(
         0.92,
@@ -5377,40 +5406,6 @@ class _ExpenseItemDraft {
   }
 }
 
-List<_ExpenseItemDraft> _demoScannedBillItems() {
-  return <_ExpenseItemDraft>[
-    _ExpenseItemDraft(
-      name: 'Chicken momo',
-      amountMinor: npr(300),
-      confidence: 0.96,
-    ),
-    _ExpenseItemDraft(
-      name: 'Veg chowmein',
-      amountMinor: npr(180),
-      confidence: 0.94,
-    ),
-    _ExpenseItemDraft(
-      name: 'Cold drinks',
-      amountMinor: npr(240),
-      quantity: 3,
-      unitAmountMinor: npr(80),
-      confidence: 0.92,
-    ),
-    _ExpenseItemDraft(
-      name: 'Service charge',
-      amountMinor: npr(72),
-      kind: _BillLineKind.serviceCharge,
-      confidence: 0.86,
-    ),
-    _ExpenseItemDraft(
-      name: 'VAT',
-      amountMinor: npr(93.60),
-      kind: _BillLineKind.tax,
-      confidence: 0.72,
-    ),
-  ];
-}
-
 class _ManualEntrySheet extends StatefulWidget {
   const _ManualEntrySheet({
     required this.groupId,
@@ -5438,8 +5433,8 @@ class _ManualEntrySheet extends StatefulWidget {
 }
 
 class _ManualEntrySheetState extends State<_ManualEntrySheet> {
-  final _title = TextEditingController(text: 'Shared expense');
-  final _amount = TextEditingController(text: '1200.00');
+  final _title = TextEditingController();
+  final _amount = TextEditingController();
   final _note = TextEditingController();
   final _payerRows = <_PayerDraft>[];
   final _participants = <String>{};
@@ -7226,8 +7221,8 @@ Future<void> showCreateGroupDialog(
   ValueChanged<GroupKind>? onCreated,
 }) async {
   final store = StoreScope.of(context);
-  final name = TextEditingController(text: 'Office Bhoj');
-  var category = GroupCategory.bhoj;
+  final name = TextEditingController();
+  var category = GroupCategory.custom;
   final selected = <String>{};
   await showDialog<void>(
     context: context,
@@ -7970,8 +7965,8 @@ Future<void> showAddExpenseDialog(BuildContext context, String groupId) async {
     return;
   }
 
-  final title = TextEditingController(text: 'Shared expense');
-  final amount = TextEditingController(text: '1200');
+  final title = TextEditingController();
+  final amount = TextEditingController();
   final note = TextEditingController();
   final receipt = TextEditingController();
   var splitMode = SplitMode.equal;

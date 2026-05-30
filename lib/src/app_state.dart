@@ -5,9 +5,13 @@ import 'finance.dart';
 import 'models.dart';
 
 class AppStore extends ChangeNotifier {
-  AppStore() {
-    _seed();
+  AppStore({bool seedLocalData = false}) {
+    if (seedLocalData) {
+      _seed();
+    }
   }
+
+  factory AppStore.seeded() => AppStore(seedLocalData: true);
 
   final List<AppUser> users = <AppUser>[];
   final List<Connection> connections = <Connection>[];
@@ -44,7 +48,7 @@ class AppStore extends ChangeNotifier {
 
   AppUser userById(String id) => users.firstWhere((user) => user.id == id);
 
-  void applyActiveUserProfile(UserProfile profile) {
+  void applyActiveUserProfile(UserProfile profile, {bool notify = true}) {
     final index = users.indexWhere((user) => user.id == profile.id);
     final existing = index == -1 ? null : users[index];
     final updated = AppUser(
@@ -76,7 +80,9 @@ class AppStore extends ChangeNotifier {
     selectedDhukutiPoolId = visibleDhukutiPools.isEmpty
         ? null
         : visibleDhukutiPools.first.id;
-    notifyListeners();
+    if (notify) {
+      notifyListeners();
+    }
   }
 
   Group groupById(String id) => groups.firstWhere((group) => group.id == id);
@@ -113,6 +119,575 @@ class AppStore extends ChangeNotifier {
   String _id(String prefix) => '$prefix-${_sequence++}';
 
   DateTime get _now => DateTime.now();
+
+  void loadBackendSnapshot(Map<String, dynamic> snapshot) {
+    _clearBackendBackedState();
+
+    for (final row in _rows(snapshot, 'users')) {
+      users.add(
+        AppUser(
+          id: _string(row, 'id'),
+          displayName: _string(row, 'displayName'),
+          phone: _string(row, 'phone'),
+          avatar: _string(row, 'avatar', fallback: 'S'),
+          district: _string(row, 'district'),
+          createdAt: _date(row['createdAt']),
+          privacyMode: _enumValue(
+            PrivacyMode.values,
+            row['privacyMode'],
+            PrivacyMode.everyone,
+          ),
+        ),
+      );
+    }
+
+    final snapshotUserId = _string(snapshot, 'currentUserId');
+    if (snapshotUserId.isNotEmpty &&
+        users.any((user) => user.id == snapshotUserId)) {
+      currentUserId = snapshotUserId;
+    } else if (users.isNotEmpty) {
+      currentUserId = users.first.id;
+    }
+
+    for (final row in _rows(snapshot, 'connections')) {
+      connections.add(
+        Connection(
+          id: _string(row, 'id'),
+          requesterId: _string(row, 'requesterId'),
+          recipientId: _string(row, 'recipientId'),
+          userLowId: _string(row, 'userLowId'),
+          userHighId: _string(row, 'userHighId'),
+          status: _enumValue(
+            ConnectionStatus.values,
+            row['status'],
+            ConnectionStatus.pending,
+          ),
+          createdAt: _date(row['createdAt']),
+          updatedAt: _date(row['updatedAt']),
+          expiresAt: _date(row['expiresAt']),
+        ),
+      );
+    }
+
+    for (final row in _rows(snapshot, 'groups')) {
+      groups.add(
+        Group(
+          id: _string(row, 'id'),
+          name: _string(row, 'name'),
+          category: _enumValue(
+            GroupCategory.values,
+            row['category'],
+            GroupCategory.custom,
+          ),
+          template: _string(row, 'template'),
+          kind: _enumValue(GroupKind.values, row['kind'], GroupKind.expense),
+          createdBy: _string(row, 'createdBy'),
+          createdAt: _date(row['createdAt']),
+          latestSettlementLockAt: _optionalDate(row['latestSettlementLockAt']),
+          disbandedAt: _optionalDate(row['disbandedAt']),
+          disbandedBy: _nullableString(row['disbandedBy']),
+        ),
+      );
+    }
+
+    for (final row in _rows(snapshot, 'groupMembers')) {
+      groupMembers.add(
+        GroupMember(
+          id: _string(row, 'id'),
+          groupId: _string(row, 'groupId'),
+          userId: _string(row, 'userId'),
+          role: _enumValue(MemberRole.values, row['role'], MemberRole.member),
+          status: _memberStatus(row['status']),
+          joinedAt: _date(row['joinedAt']),
+          removedAt: _optionalDate(row['removedAt']),
+        ),
+      );
+    }
+
+    final payersByExpense = <String, List<ExpensePayer>>{};
+    for (final row in _rows(snapshot, 'expensePayers')) {
+      final payer = ExpensePayer(
+        id: _string(row, 'id'),
+        expenseId: _string(row, 'expenseId'),
+        userId: _string(row, 'userId'),
+        amountMinor: _int(row, 'amountMinor'),
+      );
+      payersByExpense.putIfAbsent(payer.expenseId, () => []).add(payer);
+    }
+    final sharesByExpense = <String, List<ExpenseShare>>{};
+    for (final row in _rows(snapshot, 'expenseShares')) {
+      final share = ExpenseShare(
+        id: _string(row, 'id'),
+        expenseId: _string(row, 'expenseId'),
+        userId: _string(row, 'userId'),
+        amountMinor: _int(row, 'amountMinor'),
+        percentage: _doubleOrNull(row['percentage']),
+        shareUnits: _intOrNull(row['shareUnits']),
+        sourceType: _string(row, 'sourceType', fallback: 'manual'),
+        sourceId: _nullableString(row['sourceId']),
+      );
+      sharesByExpense.putIfAbsent(share.expenseId, () => []).add(share);
+    }
+    final assignmentsByItem = <String, List<ExpenseItemAssignment>>{};
+    for (final row in _rows(snapshot, 'expenseItemAssignments')) {
+      final assignment = ExpenseItemAssignment(
+        id: _string(row, 'id'),
+        expenseItemId: _string(row, 'expenseItemId'),
+        userId: _string(row, 'userId'),
+        assignedAmountMinor: _int(row, 'assignedAmountMinor'),
+        splitUnits: _int(row, 'splitUnits', fallback: 1),
+      );
+      assignmentsByItem
+          .putIfAbsent(assignment.expenseItemId, () => [])
+          .add(assignment);
+    }
+    final itemsByExpense = <String, List<ExpenseItem>>{};
+    for (final row in _rows(snapshot, 'expenseItems')) {
+      final item = ExpenseItem(
+        id: _string(row, 'id'),
+        expenseId: _string(row, 'expenseId'),
+        label: _string(row, 'label'),
+        quantity: _int(row, 'quantity', fallback: 1),
+        unitAmountMinor: _int(row, 'unitAmountMinor'),
+        totalAmountMinor: _int(row, 'totalAmountMinor'),
+        taxMinor: _int(row, 'taxMinor'),
+        serviceChargeMinor: _int(row, 'serviceChargeMinor'),
+        discountMinor: _int(row, 'discountMinor'),
+        ocrConfidence: _double(row, 'ocrConfidence', fallback: 1),
+        sortOrder: _int(row, 'sortOrder'),
+        assignments: assignmentsByItem[_string(row, 'id')] ?? [],
+      );
+      itemsByExpense.putIfAbsent(item.expenseId, () => []).add(item);
+    }
+    for (final row in _rows(snapshot, 'expenses')) {
+      final expenseId = _string(row, 'id');
+      expenses.add(
+        Expense(
+          id: expenseId,
+          groupId: _string(row, 'groupId'),
+          title: _string(row, 'title'),
+          subtotalMinor: _int(row, 'subtotalMinor'),
+          totalMinor: _int(row, 'totalMinor'),
+          payerId: _string(row, 'payerId'),
+          category: _string(row, 'category'),
+          splitMode: _enumValue(
+            SplitMode.values,
+            row['splitMode'],
+            SplitMode.equal,
+          ),
+          status: _enumValue(
+            ExpenseStatus.values,
+            row['status'],
+            ExpenseStatus.active,
+          ),
+          expenseDate: _date(row['expenseDate']),
+          createdBy: _string(row, 'createdBy'),
+          createdAt: _date(row['createdAt']),
+          note: _string(row, 'note'),
+          receiptUrl: _nullableString(row['receiptUrl']),
+          billTaxMinor: _int(row, 'billTaxMinor'),
+          billServiceChargeMinor: _int(row, 'billServiceChargeMinor'),
+          billDiscountMinor: _int(row, 'billDiscountMinor'),
+          billTipMinor: _int(row, 'billTipMinor'),
+          billRoundingAdjustmentMinor: _int(row, 'billRoundingAdjustmentMinor'),
+          lockedAt: _optionalDate(row['lockedAt']),
+          voidedAt: _optionalDate(row['voidedAt']),
+          voidedBy: _nullableString(row['voidedBy']),
+          voidReason: _nullableString(row['voidReason']),
+          payers: payersByExpense[expenseId] ?? [],
+          shares: sharesByExpense[expenseId] ?? [],
+          items: itemsByExpense[expenseId] ?? [],
+        ),
+      );
+    }
+
+    for (final row in _rows(snapshot, 'payments')) {
+      payments.add(
+        PaymentTransaction(
+          id: _string(row, 'id'),
+          paymentProvider: _string(row, 'paymentProvider'),
+          paymentReference: _string(row, 'paymentReference'),
+          operationType: _string(row, 'operationType'),
+          entityType: _string(row, 'entityType'),
+          entityId: _string(row, 'entityId'),
+          actorId: _string(row, 'actorId'),
+          amountMinor: _int(row, 'amountMinor'),
+          status: _enumValue(
+            PaymentStatus.values,
+            row['status'],
+            PaymentStatus.pending,
+          ),
+          rawPayload: _string(row, 'rawPayload'),
+          createdAt: _date(row['createdAt']),
+          updatedAt: _date(row['updatedAt']),
+          confirmedAt: _optionalDate(row['confirmedAt']),
+          failedAt: _optionalDate(row['failedAt']),
+          expiredAt: _optionalDate(row['expiredAt']),
+          cancelledAt: _optionalDate(row['cancelledAt']),
+          refundedAt: _optionalDate(row['refundedAt']),
+        ),
+      );
+    }
+
+    for (final row in _rows(snapshot, 'settlements')) {
+      settlements.add(
+        Settlement(
+          id: _string(row, 'id'),
+          groupId: _string(row, 'groupId'),
+          payerId: _string(row, 'payerId'),
+          payeeId: _string(row, 'payeeId'),
+          amountMinor: _int(row, 'amountMinor'),
+          status: _enumValue(
+            PaymentStatus.values,
+            row['status'],
+            PaymentStatus.pending,
+          ),
+          idempotencyKey: _string(row, 'idempotencyKey'),
+          idempotencyScope: _string(row, 'idempotencyScope'),
+          operationType: _string(row, 'operationType'),
+          expiresAt: _date(row['expiresAt']),
+          balanceSnapshotHash: _string(row, 'balanceSnapshotHash'),
+          createdAt: _date(row['createdAt']),
+          paymentTransactionId: _nullableString(row['paymentTransactionId']),
+          failureReason: _nullableString(row['failureReason']),
+          paidAt: _optionalDate(row['paidAt']),
+        ),
+      );
+    }
+
+    for (final row in _rows(snapshot, 'gifts')) {
+      gifts.add(
+        GiftCard(
+          id: _string(row, 'id'),
+          senderId: _string(row, 'senderId'),
+          recipientId: _string(row, 'recipientId'),
+          template: _string(row, 'template'),
+          amountMinor: _int(row, 'amountMinor'),
+          message: _string(row, 'message'),
+          status: _enumValue(GiftStatus.values, row['status'], GiftStatus.sent),
+          idempotencyKey: _string(row, 'idempotencyKey'),
+          idempotencyScope: _string(row, 'idempotencyScope'),
+          operationType: _string(row, 'operationType'),
+          createdAt: _date(row['createdAt']),
+          groupId: _nullableString(row['groupId']),
+          paymentTransactionId: _nullableString(row['paymentTransactionId']),
+          openedAt: _optionalDate(row['openedAt']),
+          refundedAt: _optionalDate(row['refundedAt']),
+        ),
+      );
+    }
+
+    for (final row in _rows(snapshot, 'giftPools')) {
+      giftPools.add(
+        GiftPool(
+          id: _string(row, 'id'),
+          groupId: _string(row, 'groupId'),
+          createdBy: _string(row, 'createdBy'),
+          recipientId: _string(row, 'recipientId'),
+          title: _string(row, 'title'),
+          template: _string(row, 'template'),
+          targetAmountMinor: _int(row, 'targetAmountMinor'),
+          contributionRule: _enumValue(
+            GiftPoolContributionRule.values,
+            row['contributionRule'],
+            GiftPoolContributionRule.equal,
+          ),
+          allowOverTarget: _bool(row, 'allowOverTarget'),
+          message: _string(row, 'message'),
+          status: _enumValue(
+            GiftPoolStatus.values,
+            row['status'],
+            GiftPoolStatus.open,
+          ),
+          createdAt: _date(row['createdAt']),
+          equalContributionAmountMinor: _intOrNull(
+            row['equalContributionAmountMinor'],
+          ),
+          minContributionAmountMinor: _intOrNull(
+            row['minContributionAmountMinor'],
+          ),
+          maxContributionAmountMinor: _intOrNull(
+            row['maxContributionAmountMinor'],
+          ),
+        ),
+      );
+    }
+
+    for (final row in _rows(snapshot, 'giftPoolContributions')) {
+      giftPoolContributions.add(
+        GiftPoolContribution(
+          id: _string(row, 'id'),
+          giftPoolId: _string(row, 'giftPoolId'),
+          contributorId: _string(row, 'contributorId'),
+          amountMinor: _int(row, 'amountMinor'),
+          status: _enumValue(
+            PaymentStatus.values,
+            row['status'],
+            PaymentStatus.paid,
+          ),
+          idempotencyKey: _string(row, 'idempotencyKey'),
+          idempotencyScope: _string(row, 'idempotencyScope'),
+          operationType: _string(row, 'operationType'),
+          createdAt: _date(row['createdAt']),
+          paymentTransactionId: _nullableString(row['paymentTransactionId']),
+          paidAt: _optionalDate(row['paidAt']),
+        ),
+      );
+    }
+
+    for (final row in _rows(snapshot, 'communitySavingsGroups')) {
+      dhukutiPools.add(
+        DhukutiPool(
+          id: _string(row, 'id'),
+          groupId: _string(row, 'groupId'),
+          name: _string(row, 'name'),
+          contributionAmountMinor: _int(row, 'monthlyContributionAmount'),
+          frequency: 'monthly',
+          startDate: _date(row['currentMonth']),
+          createdBy: _string(row, 'createdBy'),
+          status: DhukutiPoolStatus.active,
+          createdAt: _date(row['createdAt']),
+        ),
+      );
+    }
+    _loadDhukutiMembersFromGroupMemberships();
+    for (final pool in dhukutiPools) {
+      _generateDhukutiSchedule(pool.id);
+    }
+    _applyContributionRecords(_rows(snapshot, 'contributionRecords'));
+
+    for (final row in _rows(snapshot, 'activity')) {
+      activity.add(
+        ActivityLog(
+          id: _string(row, 'id'),
+          actorId: _nullableString(row['actorId']),
+          actorType: _string(row, 'actorType', fallback: 'user'),
+          eventType: _string(row, 'eventType'),
+          entityType: _string(row, 'entityType'),
+          entityId: _string(row, 'entityId'),
+          title: _string(row, 'title'),
+          body: _string(row, 'body'),
+          createdAt: _date(row['createdAt']),
+          groupId: _nullableString(row['groupId']),
+        ),
+      );
+    }
+
+    for (final row in _rows(snapshot, 'notifications')) {
+      notifications.add(
+        NotificationItem(
+          id: _string(row, 'id'),
+          userId: _string(row, 'userId'),
+          type: _string(row, 'type'),
+          title: _string(row, 'title'),
+          body: _string(row, 'body'),
+          createdAt: _date(row['createdAt']),
+          read: _bool(row, 'read'),
+        ),
+      );
+    }
+
+    selectedGroupId = null;
+    selectedDhukutiPoolId = visibleDhukutiPools.isEmpty
+        ? null
+        : visibleDhukutiPools.first.id;
+    notifyListeners();
+  }
+
+  void _clearBackendBackedState() {
+    users.clear();
+    connections.clear();
+    groups.clear();
+    groupMembers.clear();
+    expenses.clear();
+    settlements.clear();
+    adjustments.clear();
+    payments.clear();
+    gifts.clear();
+    giftPools.clear();
+    giftPoolContributions.clear();
+    dhukutiPools.clear();
+    dhukutiMembers.clear();
+    dhukutiCycles.clear();
+    dhukutiContributions.clear();
+    dhukutiPayouts.clear();
+    emergencyExitRequests.clear();
+    activity.clear();
+    notifications.clear();
+    selectedGroupId = null;
+    selectedDhukutiPoolId = null;
+  }
+
+  void _loadDhukutiMembersFromGroupMemberships() {
+    for (final pool in dhukutiPools) {
+      final members =
+          groupMembers
+              .where(
+                (member) =>
+                    member.groupId == pool.groupId &&
+                    member.status == MemberStatus.active,
+              )
+              .toList()
+            ..sort((a, b) => a.joinedAt.compareTo(b.joinedAt));
+      for (var i = 0; i < members.length; i++) {
+        dhukutiMembers.add(
+          DhukutiMember(
+            id: 'dhukuti-member-${members[i].id}',
+            poolId: pool.id,
+            userId: members[i].userId,
+            payoutOrder: i + 1,
+            status: DhukutiMemberStatus.active,
+          ),
+        );
+      }
+    }
+  }
+
+  void _applyContributionRecords(List<Map<String, dynamic>> records) {
+    for (final row in records) {
+      final poolId = _string(row, 'savingsGroupId');
+      final userId = _string(row, 'userId');
+      final month = _date(row['month']);
+      final contribution = dhukutiContributions.where(
+        (item) =>
+            item.poolId == poolId &&
+            item.userId == userId &&
+            item.dueDate.year == month.year &&
+            item.dueDate.month == month.month,
+      );
+      if (contribution.isEmpty) {
+        continue;
+      }
+      final item = contribution.first;
+      item.amountMinor = _int(
+        row,
+        'expectedAmount',
+        fallback: item.amountMinor,
+      );
+      item.status = switch (_string(row, 'status')) {
+        'confirmed' => ContributionStatus.paid,
+        'submitted' => ContributionStatus.due,
+        'waived' => ContributionStatus.missed,
+        _ => ContributionStatus.pending,
+      };
+      item.paidAt =
+          _optionalDate(row['confirmedAt']) ??
+          _optionalDate(row['submittedAt']);
+    }
+    for (final pool in dhukutiPools) {
+      _refreshDhukutiCycles(pool.id);
+    }
+  }
+
+  List<Map<String, dynamic>> _rows(Map<String, dynamic> source, String key) {
+    final value = source[key];
+    if (value is! List) {
+      return const <Map<String, dynamic>>[];
+    }
+    return [
+      for (final item in value)
+        if (item is Map<String, dynamic>) item,
+    ];
+  }
+
+  String _string(
+    Map<String, dynamic> source,
+    String key, {
+    String fallback = '',
+  }) {
+    final value = source[key];
+    if (value == null) {
+      return fallback;
+    }
+    return value.toString();
+  }
+
+  String? _nullableString(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    final text = value.toString();
+    return text.isEmpty ? null : text;
+  }
+
+  int _int(Map<String, dynamic> source, String key, {int fallback = 0}) =>
+      _intOrNull(source[key]) ?? fallback;
+
+  int? _intOrNull(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.round();
+    }
+    return int.tryParse(value.toString());
+  }
+
+  double _double(
+    Map<String, dynamic> source,
+    String key, {
+    double fallback = 0,
+  }) => _doubleOrNull(source[key]) ?? fallback;
+
+  double? _doubleOrNull(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is num) {
+      return value.toDouble();
+    }
+    return double.tryParse(value.toString());
+  }
+
+  bool _bool(Map<String, dynamic> source, String key, {bool fallback = false}) {
+    final value = source[key];
+    if (value is bool) {
+      return value;
+    }
+    if (value == null) {
+      return fallback;
+    }
+    return value.toString().toLowerCase() == 'true';
+  }
+
+  DateTime _date(Object? value, {DateTime? fallback}) {
+    return DateTime.tryParse(value?.toString() ?? '') ??
+        fallback ??
+        DateTime.now();
+  }
+
+  DateTime? _optionalDate(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    return DateTime.tryParse(value.toString());
+  }
+
+  T _enumValue<T extends Enum>(List<T> values, Object? value, T fallback) {
+    final text = _canonicalEnum(value?.toString() ?? '');
+    if (text.isEmpty) {
+      return fallback;
+    }
+    for (final item in values) {
+      if (_canonicalEnum(item.name) == text) {
+        return item;
+      }
+    }
+    return fallback;
+  }
+
+  MemberStatus _memberStatus(Object? value) {
+    return _canonicalEnum(value?.toString() ?? '') == 'removed'
+        ? MemberStatus.removed
+        : MemberStatus.active;
+  }
+
+  String _canonicalEnum(String value) {
+    return value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
 
   void switchUser(String userId) {
     currentUserId = userId;
