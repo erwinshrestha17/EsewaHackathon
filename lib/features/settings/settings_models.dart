@@ -2,12 +2,6 @@ enum ConnectionRequestPreference { everyone, contactsOnly, qrInviteOnly }
 
 enum DefaultSplitMode { equal, exactAmount }
 
-enum TaxAllocationMode { proportionalByItem, equalAmongIncluded }
-
-enum AmountFormatMode { rs, nepaliRupee }
-
-enum DateFormatMode { ad, bs }
-
 enum ReminderFrequency { none, daily, everyTwoDays, weekly }
 
 enum OcrReviewPreference { alwaysReview, reviewLowConfidence, autoAccept }
@@ -16,7 +10,7 @@ enum ActivityTimelineLimit { latest5, latest10, latest20 }
 
 enum AppThemeMode { system, light, dark }
 
-enum AppLanguage { english, nepaliComingSoon }
+enum AppLanguage { english, nepali }
 
 enum NotificationPreference {
   connectionRequests,
@@ -30,7 +24,7 @@ enum NotificationPreference {
 }
 
 const dhukutiSafetyNoteText =
-    'Digital Dhukuti in this prototype is a transparent contribution ledger '
+    'Digital Dhukuti is a transparent contribution ledger '
     'and payment scheduler. It does not provide credit, interest, investment '
     'return, or guaranteed payout.';
 
@@ -43,16 +37,12 @@ class SettingsState {
     required this.avatarInitials,
     required this.connectionRequestPreference,
     required this.defaultSplitMode,
-    required this.taxAllocationMode,
-    required this.amountFormatMode,
-    required this.dateFormatMode,
     required this.reminderFrequency,
     required this.ocrReviewPreference,
     required this.activityTimelineLimit,
     required this.showRoundingNote,
     required this.confirmBeforePayment,
     required this.settlementNudges,
-    required this.mockEsewaMode,
     required this.dhukutiContributionReminders,
     required this.dhukutiAtRiskAlerts,
     required this.themeMode,
@@ -69,16 +59,12 @@ class SettingsState {
       avatarInitials: 'ES',
       connectionRequestPreference: ConnectionRequestPreference.everyone,
       defaultSplitMode: DefaultSplitMode.equal,
-      taxAllocationMode: TaxAllocationMode.proportionalByItem,
-      amountFormatMode: AmountFormatMode.rs,
-      dateFormatMode: DateFormatMode.ad,
       reminderFrequency: ReminderFrequency.everyTwoDays,
       ocrReviewPreference: OcrReviewPreference.alwaysReview,
       activityTimelineLimit: ActivityTimelineLimit.latest5,
       showRoundingNote: true,
       confirmBeforePayment: true,
       settlementNudges: true,
-      mockEsewaMode: true,
       dhukutiContributionReminders: true,
       dhukutiAtRiskAlerts: true,
       themeMode: AppThemeMode.system,
@@ -97,16 +83,12 @@ class SettingsState {
   final String avatarInitials;
   final ConnectionRequestPreference connectionRequestPreference;
   final DefaultSplitMode defaultSplitMode;
-  final TaxAllocationMode taxAllocationMode;
-  final AmountFormatMode amountFormatMode;
-  final DateFormatMode dateFormatMode;
   final ReminderFrequency reminderFrequency;
   final OcrReviewPreference ocrReviewPreference;
   final ActivityTimelineLimit activityTimelineLimit;
   final bool showRoundingNote;
   final bool confirmBeforePayment;
   final bool settlementNudges;
-  final bool mockEsewaMode;
   final bool dhukutiContributionReminders;
   final bool dhukutiAtRiskAlerts;
   final AppThemeMode themeMode;
@@ -121,16 +103,12 @@ class SettingsState {
     String? avatarInitials,
     ConnectionRequestPreference? connectionRequestPreference,
     DefaultSplitMode? defaultSplitMode,
-    TaxAllocationMode? taxAllocationMode,
-    AmountFormatMode? amountFormatMode,
-    DateFormatMode? dateFormatMode,
     ReminderFrequency? reminderFrequency,
     OcrReviewPreference? ocrReviewPreference,
     ActivityTimelineLimit? activityTimelineLimit,
     bool? showRoundingNote,
     bool? confirmBeforePayment,
     bool? settlementNudges,
-    bool? mockEsewaMode,
     bool? dhukutiContributionReminders,
     bool? dhukutiAtRiskAlerts,
     AppThemeMode? themeMode,
@@ -146,9 +124,6 @@ class SettingsState {
       connectionRequestPreference:
           connectionRequestPreference ?? this.connectionRequestPreference,
       defaultSplitMode: defaultSplitMode ?? this.defaultSplitMode,
-      taxAllocationMode: taxAllocationMode ?? this.taxAllocationMode,
-      amountFormatMode: amountFormatMode ?? this.amountFormatMode,
-      dateFormatMode: dateFormatMode ?? this.dateFormatMode,
       reminderFrequency: reminderFrequency ?? this.reminderFrequency,
       ocrReviewPreference: ocrReviewPreference ?? this.ocrReviewPreference,
       activityTimelineLimit:
@@ -156,7 +131,6 @@ class SettingsState {
       showRoundingNote: showRoundingNote ?? this.showRoundingNote,
       confirmBeforePayment: confirmBeforePayment ?? this.confirmBeforePayment,
       settlementNudges: settlementNudges ?? this.settlementNudges,
-      mockEsewaMode: mockEsewaMode ?? this.mockEsewaMode,
       dhukutiContributionReminders:
           dhukutiContributionReminders ?? this.dhukutiContributionReminders,
       dhukutiAtRiskAlerts: dhukutiAtRiskAlerts ?? this.dhukutiAtRiskAlerts,
@@ -182,33 +156,6 @@ extension DefaultSplitModeLabel on DefaultSplitMode {
     return switch (this) {
       DefaultSplitMode.equal => 'Equal Split',
       DefaultSplitMode.exactAmount => 'Exact Amount',
-    };
-  }
-}
-
-extension TaxAllocationModeLabel on TaxAllocationMode {
-  String get label {
-    return switch (this) {
-      TaxAllocationMode.proportionalByItem => 'Proportional by item',
-      TaxAllocationMode.equalAmongIncluded => 'Equal among included',
-    };
-  }
-}
-
-extension AmountFormatModeLabel on AmountFormatMode {
-  String get label {
-    return switch (this) {
-      AmountFormatMode.rs => 'Rs',
-      AmountFormatMode.nepaliRupee => 'रु',
-    };
-  }
-}
-
-extension DateFormatModeLabel on DateFormatMode {
-  String get label {
-    return switch (this) {
-      DateFormatMode.ad => 'AD',
-      DateFormatMode.bs => 'BS',
     };
   }
 }
@@ -266,14 +213,7 @@ extension AppLanguageLabel on AppLanguage {
   String get label {
     return switch (this) {
       AppLanguage.english => 'English',
-      AppLanguage.nepaliComingSoon => 'Nepali',
-    };
-  }
-
-  String? get helper {
-    return switch (this) {
-      AppLanguage.english => null,
-      AppLanguage.nepaliComingSoon => 'Coming Soon',
+      AppLanguage.nepali => 'नेपाली',
     };
   }
 }

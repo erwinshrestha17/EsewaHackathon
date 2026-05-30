@@ -13,7 +13,7 @@ class RegisterForm extends StatefulWidget {
 
 class _RegisterFormState extends State<RegisterForm> {
   final _formKey = GlobalKey<FormState>();
-  final _userName = TextEditingController();
+  final _mobileNumber = TextEditingController();
   final _dateOfBirth = TextEditingController();
   final _mPin = TextEditingController();
   final _otp = TextEditingController(text: AuthController.demoOtp);
@@ -23,7 +23,7 @@ class _RegisterFormState extends State<RegisterForm> {
 
   @override
   void dispose() {
-    _userName.dispose();
+    _mobileNumber.dispose();
     _dateOfBirth.dispose();
     _mPin.dispose();
     _otp.dispose();
@@ -38,11 +38,17 @@ class _RegisterFormState extends State<RegisterForm> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AuthTextField(
-            controller: _userName,
-            label: 'User name',
-            icon: Icons.person_outline,
+            controller: _mobileNumber,
+            label: 'Nepal mobile number',
+            icon: Icons.phone_iphone_outlined,
+            keyboardType: TextInputType.phone,
             textInputAction: TextInputAction.next,
-            validator: _required,
+            prefixText: '+977 ',
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10),
+            ],
+            validator: _nepalMobileValidator,
           ),
           const SizedBox(height: 12),
           AuthTextField(
@@ -82,7 +88,7 @@ class _RegisterFormState extends State<RegisterForm> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'OTP sent for verification. Use 123456 in this prototype.',
+              'OTP sent for verification. Use 123456 for this build.',
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
@@ -112,6 +118,19 @@ class _RegisterFormState extends State<RegisterForm> {
 
   String? _required(String? value) {
     return value == null || value.trim().isEmpty ? 'Required' : null;
+  }
+
+  String? _nepalMobileValidator(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Enter your phone number';
+    }
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length != 10) {
+      return 'Enter exactly 10 digits after +977.';
+    }
+    return RegExp(r'^9[678]\d{8}$').hasMatch(digits)
+        ? null
+        : 'Enter a valid Nepal mobile number.';
   }
 
   String? _dateOfBirthValidator(String? value) {
@@ -164,7 +183,7 @@ class _RegisterFormState extends State<RegisterForm> {
     setState(() => _submitting = true);
     try {
       await AuthScope.of(context).register(
-        userName: _userName.text,
+        mobileNumber: _mobileNumber.text,
         dateOfBirth: DateTime.parse(_dateOfBirth.text.trim()),
         mPin: _mPin.text,
         otp: _otp.text,

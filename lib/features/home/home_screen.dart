@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../src/app_state.dart';
 import '../../src/finance.dart';
+import '../../shared/spending/spending_habits.dart';
 import '../dhukuti/widgets/dhukuti_payment_bottom_sheet.dart';
 import 'home_controller.dart';
 import 'home_models.dart';
@@ -15,7 +16,6 @@ import 'widgets/home_error_state.dart';
 import 'widgets/home_header.dart';
 import 'widgets/home_loading_skeleton.dart';
 import 'widgets/pending_settlement_card.dart';
-import 'widgets/prototype_mode_banner.dart';
 import 'widgets/quick_action_grid.dart';
 import 'widgets/recent_activity_list.dart';
 import 'widgets/upcoming_dhukuti_card.dart';
@@ -86,8 +86,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       onNotifications: widget.onOpenNotifications,
                     ),
                     const SizedBox(height: 14),
-                    const PrototypeModeBanner(),
-                    const SizedBox(height: 14),
                     BalanceSummaryCard(
                       summary: data.balanceSummary,
                       groupCount: data.activeGroups.length,
@@ -97,6 +95,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     QuickActionGrid(
                       actions: data.suggestedActions,
                       onAction: _handleQuickAction,
+                    ),
+                    const SizedBox(height: 18),
+                    SpendingHabitsPanel(
+                      title: 'Personal spending habits',
+                      subtitle:
+                          'Your share across all active Sajha Kharcha groups.',
+                      expenses: widget.store.expenses,
+                      userId: widget.store.currentUserId,
+                      scope: SpendingInsightScope.personal,
                     ),
                     if (data.isEmpty) ...[
                       const SizedBox(height: 18),

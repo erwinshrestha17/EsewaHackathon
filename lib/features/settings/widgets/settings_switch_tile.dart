@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../shared/design_system/app_colors.dart';
 import '../../../shared/design_system/app_text_styles.dart';
 
 class SettingsSwitchTile extends StatelessWidget {
@@ -23,7 +22,8 @@ class SettingsSwitchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = enabled ? AppColors.primaryGreen : AppColors.textMuted;
+    final scheme = Theme.of(context).colorScheme;
+    final iconColor = enabled ? scheme.primary : scheme.onSurfaceVariant;
     return SwitchListTile(
       minTileHeight: 56,
       contentPadding: const EdgeInsetsDirectional.only(start: 16, end: 16),

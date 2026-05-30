@@ -20,21 +20,6 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setTaxAllocationMode(TaxAllocationMode value) {
-    _state = _state.copyWith(taxAllocationMode: value);
-    notifyListeners();
-  }
-
-  void setAmountFormatMode(AmountFormatMode value) {
-    _state = _state.copyWith(amountFormatMode: value);
-    notifyListeners();
-  }
-
-  void setDateFormatMode(DateFormatMode value) {
-    _state = _state.copyWith(dateFormatMode: value);
-    notifyListeners();
-  }
-
   void setReminderFrequency(ReminderFrequency value) {
     _state = _state.copyWith(reminderFrequency: value);
     notifyListeners();
@@ -81,9 +66,6 @@ class SettingsController extends ChangeNotifier {
   }
 
   void setLanguage(AppLanguage value) {
-    if (value == AppLanguage.nepaliComingSoon) {
-      return;
-    }
     _state = _state.copyWith(language: value);
     notifyListeners();
   }

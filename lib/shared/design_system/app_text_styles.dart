@@ -7,49 +7,42 @@ abstract final class AppTextStyles {
     fontSize: 30,
     height: 1.12,
     fontWeight: FontWeight.w900,
-    color: AppColors.textPrimary,
   );
 
   static const screenTitle = TextStyle(
     fontSize: 24,
     height: 1.16,
     fontWeight: FontWeight.w900,
-    color: AppColors.textPrimary,
   );
 
   static const sectionTitle = TextStyle(
     fontSize: 17,
     height: 1.25,
     fontWeight: FontWeight.w800,
-    color: AppColors.textPrimary,
   );
 
   static const cardTitle = TextStyle(
     fontSize: 15,
     height: 1.3,
     fontWeight: FontWeight.w800,
-    color: AppColors.textPrimary,
   );
 
   static const body = TextStyle(
     fontSize: 14,
     height: 1.42,
     fontWeight: FontWeight.w500,
-    color: AppColors.textPrimary,
   );
 
   static const bodySecondary = TextStyle(
     fontSize: 13,
     height: 1.38,
     fontWeight: FontWeight.w500,
-    color: AppColors.textSecondary,
   );
 
   static const caption = TextStyle(
     fontSize: 12,
     height: 1.28,
     fontWeight: FontWeight.w600,
-    color: AppColors.textMuted,
   );
 
   static const button = TextStyle(
@@ -62,7 +55,6 @@ abstract final class AppTextStyles {
     fontSize: 24,
     height: 1.05,
     fontWeight: FontWeight.w900,
-    color: AppColors.textPrimary,
   );
 
   static const error = TextStyle(

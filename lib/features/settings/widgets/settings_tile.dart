@@ -28,13 +28,14 @@ class SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final activeColor = danger ? AppColors.error : AppColors.primaryGreen;
+    final scheme = Theme.of(context).colorScheme;
+    final activeColor = danger ? AppColors.error : scheme.primary;
     final foreground = enabled
         ? danger
               ? AppColors.error
-              : AppColors.textPrimary
-        : AppColors.textMuted;
-    final iconColor = enabled ? activeColor : AppColors.textMuted;
+              : scheme.onSurface
+        : scheme.onSurfaceVariant;
+    final iconColor = enabled ? activeColor : scheme.onSurfaceVariant;
     return ListTile(
       minTileHeight: 56,
       enabled: enabled,
@@ -75,7 +76,9 @@ class _SettingsTileTrailing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = enabled ? AppColors.textSecondary : AppColors.textMuted;
+    final color = enabled
+        ? Theme.of(context).colorScheme.onSurfaceVariant
+        : Theme.of(context).disabledColor;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

@@ -4,7 +4,7 @@ import '../../src/app_state.dart';
 import '../../src/finance.dart';
 import '../../src/models.dart';
 import 'home_models.dart';
-import 'mock_home_data.dart';
+import 'seeded_home_data.dart';
 
 class HomeController {
   const HomeController({required this.store});
@@ -24,10 +24,10 @@ class HomeController {
         upcomingDhukutiDues: _dhukutiDues(),
         activeGroups: _activeGroups(),
         recentActivities: _recentActivities(),
-        suggestedActions: mockHomeDashboardData().suggestedActions,
+        suggestedActions: seededHomeDashboardData().suggestedActions,
       );
     } catch (_) {
-      return mockHomeDashboardData();
+      return seededHomeDashboardData();
     }
   }
 

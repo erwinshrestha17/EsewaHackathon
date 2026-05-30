@@ -163,4 +163,183 @@ abstract final class AppTheme {
       ),
     );
   }
+
+  static ThemeData get dark {
+    const surface = Color(0xFF111817);
+    const surfaceSoft = Color(0xFF18221F);
+    const background = Color(0xFF0B1110);
+    const outline = Color(0xFF2B3A35);
+    final scheme = ColorScheme.fromSeed(
+      seedColor: AppColors.primaryGreen,
+      brightness: Brightness.dark,
+      primary: const Color(0xFF42D77A),
+      onPrimary: const Color(0xFF052E18),
+      primaryContainer: const Color(0xFF0F3D23),
+      onPrimaryContainer: const Color(0xFFC9F9D8),
+      secondary: const Color(0xFF8FD9A8),
+      tertiary: const Color(0xFF8AB4FF),
+      error: const Color(0xFFFF8A8A),
+      surface: surface,
+      onSurface: const Color(0xFFE8F0EC),
+      outline: outline,
+      outlineVariant: outline,
+      shadow: Colors.black,
+    );
+
+    final base = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: background,
+      fontFamily: 'Roboto',
+    );
+
+    return base.copyWith(
+      visualDensity: VisualDensity.standard,
+      appBarTheme: const AppBarTheme(
+        elevation: 0,
+        centerTitle: false,
+        backgroundColor: surface,
+        foregroundColor: Color(0xFFE8F0EC),
+        surfaceTintColor: Colors.transparent,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+        ),
+        showDragHandle: true,
+      ),
+      cardTheme: const CardThemeData(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        surfaceTintColor: Colors.transparent,
+        color: surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(AppRadius.lg)),
+          side: BorderSide(color: outline),
+        ),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: outline,
+        thickness: 1,
+        space: 1,
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surface,
+        indicatorColor: scheme.primaryContainer,
+        surfaceTintColor: Colors.transparent,
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => AppTextStyles.caption.copyWith(
+            color: states.contains(WidgetState.selected)
+                ? scheme.primary
+                : scheme.onSurfaceVariant,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w800
+                : FontWeight.w600,
+          ),
+        ),
+      ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: surface,
+        indicatorColor: scheme.primaryContainer,
+        selectedIconTheme: IconThemeData(color: scheme.primary),
+        unselectedIconTheme: IconThemeData(color: scheme.onSurfaceVariant),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surfaceSoft,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: 14,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: const BorderSide(color: outline),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: const BorderSide(color: outline),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: BorderSide(color: scheme.primary, width: 1.4),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: BorderSide(color: scheme.error),
+        ),
+        labelStyle: AppTextStyles.bodySecondary.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+        helperStyle: AppTextStyles.caption.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          textStyle: AppTextStyles.button,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          textStyle: AppTextStyles.button,
+          foregroundColor: scheme.primary,
+          side: const BorderSide(color: outline),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(textStyle: AppTextStyles.button),
+      ),
+      chipTheme: base.chipTheme.copyWith(
+        backgroundColor: surfaceSoft,
+        selectedColor: scheme.primaryContainer,
+        side: const BorderSide(color: outline),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+      ),
+      textTheme: base.textTheme.copyWith(
+        headlineMedium: AppTextStyles.largeScreenTitle.copyWith(
+          color: scheme.onSurface,
+        ),
+        headlineSmall: AppTextStyles.screenTitle.copyWith(
+          color: scheme.onSurface,
+        ),
+        titleLarge: AppTextStyles.sectionTitle.copyWith(
+          fontSize: 20,
+          color: scheme.onSurface,
+        ),
+        titleMedium: AppTextStyles.sectionTitle.copyWith(
+          color: scheme.onSurface,
+        ),
+        titleSmall: AppTextStyles.cardTitle.copyWith(color: scheme.onSurface),
+        bodyLarge: AppTextStyles.body.copyWith(
+          fontSize: 15,
+          color: scheme.onSurface,
+        ),
+        bodyMedium: AppTextStyles.body.copyWith(color: scheme.onSurface),
+        bodySmall: AppTextStyles.bodySecondary.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+        labelLarge: AppTextStyles.caption.copyWith(
+          fontSize: 13,
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
 }

@@ -116,13 +116,14 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> register({
-    required String userName,
+    required String mobileNumber,
     required DateTime dateOfBirth,
     required String mPin,
     required String otp,
     required bool biometricEnabled,
   }) async {
-    if (userName.trim().isEmpty || !_isValidMpin(mPin) || otp.trim().isEmpty) {
+    final mobile = _normalizeNepalMobile(mobileNumber);
+    if (mobile == null || !_isValidMpin(mPin) || otp.trim().isEmpty) {
       throw const AuthValidationException('Complete all required fields.');
     }
     if (otp.trim() != demoOtp) {
@@ -135,9 +136,9 @@ class AuthController extends ChangeNotifier {
 
     final profile = UserProfile(
       id: UserProfile.activeUserId,
-      displayName: userName.trim(),
-      phone: '',
-      esewaId: '',
+      displayName: 'Sajha Member',
+      phone: mobile,
+      esewaId: '$mobile@esewa',
       district: '',
       dateOfBirth: dateOfBirth,
       createdAt: now,
@@ -163,6 +164,21 @@ class AuthController extends ChangeNotifier {
     final preferences = await _prefs();
     await preferences.setBool(_isLoggedInKey, false);
     _state = _state.copyWith(isLoggedIn: false);
+    notifyListeners();
+  }
+
+  Future<void> deleteAccount() async {
+    final preferences = await _prefs();
+    await preferences.setBool(_hasSeenIntroKey, true);
+    await preferences.setBool(_isLoggedInKey, false);
+    await preferences.remove(_activeUserProfileKey);
+    await preferences.remove(_mPinKey);
+    await preferences.remove(_biometricEnabledKey);
+    _state = const AuthState(
+      initialized: true,
+      hasSeenIntro: true,
+      isLoggedIn: false,
+    );
     notifyListeners();
   }
 

@@ -96,7 +96,7 @@ class AuthScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Prototype eSewa authentication. OTP, PIN, and biometric checks are simulated.',
+                      'Sign in with your mobile number, M-PIN, or biometric unlock.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,

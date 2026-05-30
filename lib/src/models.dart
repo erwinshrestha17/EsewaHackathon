@@ -55,6 +55,8 @@ enum GiftStatus {
 
 enum GiftPoolStatus { open, completed, cancelled, refunded }
 
+enum GiftPoolContributionRule { equal, threshold }
+
 enum ContributionStatus {
   due,
   pending,
@@ -228,6 +230,14 @@ class Connection {
           block.active &&
           block.blockerId == blockerId &&
           block.blockedUserId == blockedUserId,
+    );
+  }
+
+  bool hasReportFrom(String reporterId, String reportedUserId) {
+    return reports.any(
+      (report) =>
+          report.reporterId == reporterId &&
+          report.reportedUserId == reportedUserId,
     );
   }
 }
@@ -637,9 +647,13 @@ class GiftPool {
     required this.title,
     required this.template,
     required this.targetAmountMinor,
+    required this.contributionRule,
     required this.message,
     required this.status,
     required this.createdAt,
+    this.equalContributionAmountMinor,
+    this.minContributionAmountMinor,
+    this.maxContributionAmountMinor,
   });
 
   final String id;
@@ -649,6 +663,10 @@ class GiftPool {
   String title;
   String template;
   int targetAmountMinor;
+  GiftPoolContributionRule contributionRule;
+  int? equalContributionAmountMinor;
+  int? minContributionAmountMinor;
+  int? maxContributionAmountMinor;
   String message;
   GiftPoolStatus status;
   final DateTime createdAt;

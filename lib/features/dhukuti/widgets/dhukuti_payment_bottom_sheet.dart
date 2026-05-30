@@ -105,9 +105,7 @@ class _DhukutiPaymentSheetState extends State<_DhukutiPaymentSheet> {
           ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 6),
-        const Text(
-          'Payment confirmation is simulated. No real money movement occurs.',
-        ),
+        const Text('Review the contribution details before confirming.'),
         const SizedBox(height: 16),
         _PaymentRow(
           label: 'Amount',

@@ -22,6 +22,8 @@ import '../shared/design_system/app_components.dart' as ds;
 import '../shared/design_system/app_spacing.dart';
 import '../shared/design_system/app_text_styles.dart';
 import '../shared/design_system/app_theme.dart';
+import '../shared/localization/app_localizations.dart';
+import '../shared/spending/spending_habits.dart';
 import '../shared/transactions/transaction_confirmation_controller.dart';
 import '../shared/transactions/transaction_confirmation_data.dart';
 import '../shared/transactions/transaction_status.dart';
@@ -44,13 +46,13 @@ class StoreScope extends InheritedNotifier<AppStore> {
   }
 }
 
-class SangaiApp extends StatelessWidget {
-  const SangaiApp({super.key});
+class SajhaKharchaApp extends StatelessWidget {
+  const SajhaKharchaApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sajha Kharcha by eSewa',
+      title: 'Sajha Kharcha',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       initialRoute: '/splash',
@@ -58,7 +60,7 @@ class SangaiApp extends StatelessWidget {
         '/splash': (_) => const SplashScreen(),
         '/intro': (_) => const OnboardingScreen(),
         '/auth': (_) => const AuthScreen(),
-        '/main': (_) => const SangaiShell(),
+        '/main': (_) => const SajhaKharchaShell(),
       },
     );
   }
@@ -285,14 +287,14 @@ Future<void> _openRemainingSettlementPicker(
   _openSettlementConfirmation(context, store, selected.suggestion);
 }
 
-class SangaiShell extends StatefulWidget {
-  const SangaiShell({super.key});
+class SajhaKharchaShell extends StatefulWidget {
+  const SajhaKharchaShell({super.key});
 
   @override
-  State<SangaiShell> createState() => _SangaiShellState();
+  State<SajhaKharchaShell> createState() => _SajhaKharchaShellState();
 }
 
-class _SangaiShellState extends State<SangaiShell> {
+class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   var _index = 0;
   var _visitSerial = 0;
   var _groupsInitialTab = GroupKind.expense;
@@ -369,6 +371,7 @@ class _SangaiShellState extends State<SangaiShell> {
       4 => SettingsScreen(
         controller: _settingsController,
         authController: AuthScope.of(context),
+        store: store,
       ),
       _ => HomeScreen(
         store: store,
@@ -387,103 +390,120 @@ class _SangaiShellState extends State<SangaiShell> {
       ),
     };
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 900;
-        return Scaffold(
-          appBar: _index == 0
-              ? null
-              : AppBar(
-                  title: Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'S',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
+    return SajhaLocalizationScope(
+      language: _settingsController.state.language,
+      child: Theme(
+        data: _themeForSettings(context),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 900;
+            return Scaffold(
+              appBar: _index == 0
+                  ? null
+                  : AppBar(
+                      title: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'S',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Flexible(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Sajha Kharcha'),
+                                Text(
+                                  'Scan. Split. Settle. Together.',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        IconButton(
+                          tooltip: 'Notifications',
+                          onPressed: _openNotifications,
+                          icon: Badge(
+                            isLabelVisible: store.currentNotifications
+                                .where((item) => !item.read)
+                                .isNotEmpty,
+                            child: const Icon(Icons.notifications_outlined),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Sajha Kharcha'),
-                            Text(
-                              'Scan. Split. Settle. Together.',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    IconButton(
-                      tooltip: 'Notifications',
-                      onPressed: _openNotifications,
-                      icon: Badge(
-                        isLabelVisible: store.currentNotifications
-                            .where((item) => !item.read)
-                            .isNotEmpty,
-                        child: const Icon(Icons.notifications_outlined),
-                      ),
+                        const SizedBox(width: 4),
+                        _CurrentUserBadge(store: store),
+                        const SizedBox(width: 12),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    _CurrentUserBadge(store: store),
-                    const SizedBox(width: 12),
-                  ],
-                ),
-          body: Row(
-            children: [
-              if (wide)
-                NavigationRail(
-                  selectedIndex: _index,
-                  onDestinationSelected: _handleDestinationSelected,
-                  labelType: NavigationRailLabelType.all,
-                  destinations: [
-                    for (final destination in _destinations)
-                      NavigationRailDestination(
-                        icon: Icon(destination.icon),
-                        selectedIcon: Icon(destination.selectedIcon),
-                        label: Text(destination.label),
-                      ),
-                  ],
-                ),
-              Expanded(
-                child: KeyedSubtree(
-                  key: ValueKey('shell-screen-$_index-$_visitSerial'),
-                  child: body,
-                ),
+              body: Row(
+                children: [
+                  if (wide)
+                    NavigationRail(
+                      selectedIndex: _index,
+                      onDestinationSelected: _handleDestinationSelected,
+                      labelType: NavigationRailLabelType.all,
+                      destinations: [
+                        for (final destination in _destinations)
+                          NavigationRailDestination(
+                            icon: Icon(destination.icon),
+                            selectedIcon: Icon(destination.selectedIcon),
+                            label: Text(context.t(destination.label)),
+                          ),
+                      ],
+                    ),
+                  Expanded(
+                    child: KeyedSubtree(
+                      key: ValueKey('shell-screen-$_index-$_visitSerial'),
+                      child: body,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          bottomNavigationBar: wide
-              ? null
-              : ds.AppBottomNavigationBar(
-                  selectedIndex: _index,
-                  onDestinationSelected: _handleDestinationSelected,
-                  destinations: [
-                    for (final destination in _destinations)
-                      NavigationDestination(
-                        icon: Icon(destination.icon),
-                        selectedIcon: Icon(destination.selectedIcon),
-                        label: destination.label,
-                      ),
-                  ],
-                ),
-        );
-      },
+              bottomNavigationBar: wide
+                  ? null
+                  : ds.AppBottomNavigationBar(
+                      selectedIndex: _index,
+                      onDestinationSelected: _handleDestinationSelected,
+                      destinations: [
+                        for (final destination in _destinations)
+                          NavigationDestination(
+                            icon: Icon(destination.icon),
+                            selectedIcon: Icon(destination.selectedIcon),
+                            label: context.t(destination.label),
+                          ),
+                      ],
+                    ),
+            );
+          },
+        ),
+      ),
     );
+  }
+
+  ThemeData _themeForSettings(BuildContext context) {
+    return switch (_settingsController.state.themeMode) {
+      AppThemeMode.light => AppTheme.light,
+      AppThemeMode.dark => AppTheme.dark,
+      AppThemeMode.system =>
+        MediaQuery.platformBrightnessOf(context) == Brightness.dark
+            ? AppTheme.dark
+            : AppTheme.light,
+    };
   }
 
   void _go(int index) {
@@ -849,7 +869,7 @@ class _InviteQrView extends StatelessWidget {
           backgroundColor: Colors.white,
           errorCorrectionLevel: QrErrorCorrectLevel.M,
           gapless: false,
-          semanticsLabel: 'Sangai QR invite for $label',
+          semanticsLabel: 'Sajha Kharcha QR invite for $label',
           eyeStyle: const QrEyeStyle(
             eyeShape: QrEyeShape.square,
             color: Colors.black,
@@ -875,13 +895,18 @@ class _ConnectionTile extends StatelessWidget {
     final store = StoreScope.of(context);
     final other = store.userById(connection.otherUserId(store.currentUserId));
     final blockedByMe = connection.isBlockedBy(store.currentUserId, other.id);
+    final reportedByMe = connection.hasReportFrom(
+      store.currentUserId,
+      other.id,
+    );
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: UserAvatar(user: other),
       title: Text(other.displayName),
       subtitle: Text(
         '${enumLabel(connection.status)} • ${connection.events.length} event(s)'
-        '${blockedByMe ? ' • blocked by you' : ''}',
+        '${blockedByMe ? ' • blocked by you' : ''}'
+        '${reportedByMe ? ' • reported by you' : ''}',
       ),
       trailing: compact
           ? StatusPill(label: enumLabel(connection.status), tone: Tone.neutral)
@@ -916,19 +941,126 @@ class _ConnectionTile extends StatelessWidget {
                   icon: Icon(blockedByMe ? Icons.lock_open : Icons.block),
                 ),
                 IconButton.outlined(
-                  tooltip: 'Report',
-                  onPressed: () {
-                    store.reportConnection(
-                      connection.id,
-                      other.id,
-                      'safety_review',
-                    );
-                    showSnack(context, 'Safety report opened for review.');
-                  },
-                  icon: const Icon(Icons.flag_outlined),
+                  tooltip: reportedByMe ? 'Already reported' : 'Report',
+                  onPressed: reportedByMe
+                      ? null
+                      : () => showReportConnectionDialog(
+                          context,
+                          connection,
+                          other,
+                        ),
+                  icon: Icon(reportedByMe ? Icons.flag : Icons.flag_outlined),
                 ),
               ],
             ),
+    );
+  }
+}
+
+Future<void> showReportConnectionDialog(
+  BuildContext context,
+  Connection connection,
+  AppUser reportedUser,
+) async {
+  final store = StoreScope.of(context);
+  if (connection.hasReportFrom(store.currentUserId, reportedUser.id)) {
+    showSnack(
+      context,
+      'You have already reported ${reportedUser.displayName}.',
+    );
+    return;
+  }
+
+  final message = await showDialog<String>(
+    context: context,
+    builder: (_) => _ReportConnectionDialog(
+      store: store,
+      connection: connection,
+      reportedUser: reportedUser,
+    ),
+  );
+  if (message != null && context.mounted) {
+    showSnack(context, message);
+  }
+}
+
+class _ReportConnectionDialog extends StatefulWidget {
+  const _ReportConnectionDialog({
+    required this.store,
+    required this.connection,
+    required this.reportedUser,
+  });
+
+  final AppStore store;
+  final Connection connection;
+  final AppUser reportedUser;
+
+  @override
+  State<_ReportConnectionDialog> createState() =>
+      _ReportConnectionDialogState();
+}
+
+class _ReportConnectionDialogState extends State<_ReportConnectionDialog> {
+  final _noteController = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final note = _noteController.text.trim();
+    return AlertDialog(
+      title: Text('Report ${widget.reportedUser.displayName}'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Add a short note so the report has useful context.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _noteController,
+              minLines: 3,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                labelText: 'Report note',
+                hintText: 'What happened?',
+                alignLabelWithHint: true,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: note.isEmpty
+              ? null
+              : () {
+                  final error = widget.store.reportConnection(
+                    widget.connection.id,
+                    widget.reportedUser.id,
+                    'safety_review',
+                    note: _noteController.text,
+                  );
+                  Navigator.pop(
+                    context,
+                    error ??
+                        'Report submitted for ${widget.reportedUser.displayName}.',
+                  );
+                },
+          icon: const Icon(Icons.flag_outlined),
+          label: const Text('Submit report'),
+        ),
+      ],
     );
   }
 }
@@ -1146,13 +1278,15 @@ class _ExpenseGroupsSnapshot extends StatelessWidget {
           label: 'You owe',
           value: money(store.totalOwedByCurrentUser),
           icon: Icons.call_made_outlined,
-          tone: store.totalOwedByCurrentUser == 0 ? Tone.neutral : Tone.warning,
+          tone: store.totalOwedByCurrentUser == 0 ? Tone.neutral : Tone.danger,
+          tintValue: store.totalOwedByCurrentUser > 0,
         ),
         StatTile(
           label: 'You are owed',
           value: money(store.totalOwedToCurrentUser),
           icon: Icons.call_received_outlined,
           tone: store.totalOwedToCurrentUser == 0 ? Tone.neutral : Tone.success,
+          tintValue: store.totalOwedToCurrentUser > 0,
         ),
         StatTile(
           label: 'Pending settlements',
@@ -1260,7 +1394,19 @@ class _ExpenseGroupsOverview extends StatelessWidget {
                         subtitle: Text(
                           '${store.membersForGroup(group.id, activeOnly: true).length} active members',
                         ),
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: Wrap(
+                          spacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            BalancePill(
+                              amountMinor: store.balanceForUserInGroup(
+                                group.id,
+                                store.currentUserId,
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
                         onTap: () => onSelectGroup(group.id),
                       ),
                   ],
@@ -1316,7 +1462,7 @@ class BalanceStatementCard extends StatelessWidget {
         : netMinor > 0
         ? Tone.success
         : netMinor < 0
-        ? Tone.warning
+        ? Tone.danger
         : Tone.neutral;
     final color = toneColor(context, tone);
 
@@ -1355,7 +1501,7 @@ class BalanceStatementCard extends StatelessWidget {
             _BalanceStatementLine(
               label: 'You owe',
               value: friendlyMoney(youOweMinor),
-              tone: Tone.warning,
+              tone: Tone.danger,
             ),
             _BalanceStatementLine(
               label: 'You are owed',
@@ -1368,7 +1514,7 @@ class BalanceStatementCard extends StatelessWidget {
               value: netMinor >= 0
                   ? 'You are owed ${friendlyMoney(netMinor)}'
                   : 'You owe ${friendlyMoney(netMinor.abs())}',
-              tone: netMinor >= 0 ? Tone.success : Tone.warning,
+              tone: netMinor >= 0 ? Tone.success : Tone.danger,
             ),
           ] else
             Text(
@@ -1471,12 +1617,12 @@ class SettlementStatementTile extends StatelessWidget {
     final payeeName = store.nameOf(suggestion.payeeId);
     final payerIsCurrent = suggestion.payerId == currentUserId;
     final payeeIsCurrent = suggestion.payeeId == currentUserId;
-    final tone = suggestion.hasPending
-        ? Tone.warning
-        : payerIsCurrent
-        ? Tone.warning
+    final tone = payerIsCurrent
+        ? Tone.danger
         : payeeIsCurrent
         ? Tone.success
+        : suggestion.hasPending
+        ? Tone.warning
         : Tone.info;
     final title = payerIsCurrent
         ? 'You need to pay'
@@ -1643,6 +1789,33 @@ class GroupDetail extends StatelessWidget {
         youAreOwedMinor: youAreOwedMinor,
         netMinor: netBalance,
       ),
+      SectionPanel(
+        title: 'Spending habits',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SpendingHabitsPanel(
+              title: 'Your spending in this group',
+              subtitle: 'Daily, weekly, and monthly view of your shares.',
+              expenses: store.expenses,
+              userId: store.currentUserId,
+              groupId: group.id,
+              scope: SpendingInsightScope.personal,
+              framed: false,
+            ),
+            const Divider(height: 28),
+            SpendingHabitsPanel(
+              title: 'Group spending',
+              subtitle: 'Total group expenses over time.',
+              expenses: store.expenses,
+              userId: store.currentUserId,
+              groupId: group.id,
+              scope: SpendingInsightScope.group,
+              framed: false,
+            ),
+          ],
+        ),
+      ),
       ResponsiveWrap(
         children: [
           StatTile(
@@ -1722,11 +1895,7 @@ class GroupDetail extends StatelessWidget {
                         entry.value,
                       ),
                       amountMinor: entry.value.abs(),
-                      tone: memberBalanceTone(
-                        store.currentUserId,
-                        entry.key,
-                        entry.value,
-                      ),
+                      tone: memberBalanceTone(entry.value),
                     ),
                 ],
               ),
@@ -2037,7 +2206,9 @@ class _GiftsScreenState extends State<GiftsScreen> {
                             ),
                             title: Text(pool.title),
                             subtitle: Text(
-                              '${store.groupById(pool.groupId).name} • ${money(store.giftPoolTotal(pool.id))} of ${money(pool.targetAmountMinor)}',
+                              '${store.groupById(pool.groupId).name} • '
+                              '${money(store.giftPoolTotal(pool.id))} of ${money(pool.targetAmountMinor)} • '
+                              '${giftPoolContributionRuleLabel(pool)}',
                             ),
                             trailing: Wrap(
                               spacing: 8,
@@ -3485,6 +3656,7 @@ class StatTile extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.tone,
+    this.tintValue = false,
     super.key,
   });
 
@@ -3492,6 +3664,7 @@ class StatTile extends StatelessWidget {
   final String value;
   final IconData icon;
   final Tone tone;
+  final bool tintValue;
 
   @override
   Widget build(BuildContext context) {
@@ -3511,7 +3684,13 @@ class StatTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label, style: AppTextStyles.caption),
-                Text(value, style: AppTextStyles.amount.copyWith(fontSize: 20)),
+                Text(
+                  value,
+                  style: AppTextStyles.amount.copyWith(
+                    color: tintValue && tone != Tone.neutral ? color : null,
+                    fontSize: 20,
+                  ),
+                ),
               ],
             ),
           ),
@@ -3574,7 +3753,7 @@ class BalancePill extends StatelessWidget {
           ? Tone.neutral
           : amountMinor > 0
           ? Tone.success
-          : Tone.warning,
+          : Tone.danger,
     );
   }
 }
@@ -4029,14 +4208,11 @@ String memberBalanceStatement(AppStore store, String userId, int amountMinor) {
       : '$name owes ${friendlyMoney(amountMinor.abs())}';
 }
 
-Tone memberBalanceTone(String currentUserId, String userId, int amountMinor) {
+Tone memberBalanceTone(int amountMinor) {
   if (amountMinor == 0) {
     return Tone.neutral;
   }
-  if (userId == currentUserId) {
-    return amountMinor > 0 ? Tone.success : Tone.warning;
-  }
-  return amountMinor > 0 ? Tone.success : Tone.warning;
+  return amountMinor > 0 ? Tone.success : Tone.danger;
 }
 
 int expensePaidByUser(Expense expense, String userId) {
@@ -4081,7 +4257,7 @@ Tone expenseImpactTone(Expense expense, String userId) {
     return Tone.success;
   }
   if (impact < 0) {
-    return Tone.warning;
+    return Tone.danger;
   }
   return Tone.neutral;
 }
@@ -6787,32 +6963,12 @@ String? _itemValidationMessage({
 
 Future<void> showMyQrDialog(BuildContext context) async {
   final store = StoreScope.of(context);
-  final code = store.qrInviteCodeFor(store.currentUser);
   await showDialog<void>(
     context: context,
     builder: (dialogContext) {
       return AlertDialog(
         title: const Text('My QR'),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _InviteQrView(
-                code: code,
-                label: store.currentUser.displayName,
-                size: 220,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                store.currentUser.displayName,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-        ),
+        content: SizedBox(width: 360, child: _MyQrDialogContent(store: store)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
@@ -6822,6 +6978,86 @@ Future<void> showMyQrDialog(BuildContext context) async {
       );
     },
   );
+}
+
+class _MyQrDialogContent extends StatefulWidget {
+  const _MyQrDialogContent({required this.store});
+
+  final AppStore store;
+
+  @override
+  State<_MyQrDialogContent> createState() => _MyQrDialogContentState();
+}
+
+class _MyQrDialogContentState extends State<_MyQrDialogContent> {
+  late DateTime _issuedAt;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _issuedAt = DateTime.now();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) {
+        return;
+      }
+      final expired =
+          DateTime.now().difference(_issuedAt) >= AppStore.qrInviteTtl;
+      setState(() {
+        if (expired) {
+          _issuedAt = DateTime.now();
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = widget.store.currentUser;
+    final code = widget.store.qrInviteCodeFor(user, issuedAt: _issuedAt);
+    final remaining =
+        AppStore.qrInviteTtl - DateTime.now().difference(_issuedAt);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _InviteQrView(code: code, label: user.displayName, size: 220),
+        const SizedBox(height: 16),
+        Text(
+          user.displayName,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Valid for ${_remainingLabel(remaining)}',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () => setState(() => _issuedAt = DateTime.now()),
+          icon: const Icon(Icons.refresh),
+          label: const Text('Refresh QR'),
+        ),
+      ],
+    );
+  }
+
+  String _remainingLabel(Duration remaining) {
+    final safe = remaining.isNegative ? Duration.zero : remaining;
+    final minutes = safe.inMinutes;
+    final seconds = safe.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
 }
 
 Future<void> showCreateGroupDialog(
@@ -7257,8 +7493,13 @@ Future<void> showAddMemberDialog(BuildContext context, String groupId) async {
                 onPressed: selected == null
                     ? null
                     : () {
-                        store.addGroupMember(groupId, selected!, role);
+                        final selectedUserId = selected!;
+                        store.addGroupMember(groupId, selectedUserId, role);
                         Navigator.pop(dialogContext);
+                        showSnack(
+                          context,
+                          '${store.nameOf(selectedUserId)} added to ${store.groupById(groupId).name}.',
+                        );
                       },
                 child: const Text('Add'),
               ),
@@ -8247,7 +8488,7 @@ class ParticipantSelectorCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                UserAvatar(user: user, small: true),
+                _ParticipantSelectionAvatar(user: user, selected: selected),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
@@ -8267,6 +8508,29 @@ class ParticipantSelectorCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ParticipantSelectionAvatar extends StatelessWidget {
+  const _ParticipantSelectionAvatar({
+    required this.user,
+    required this.selected,
+  });
+
+  final AppUser user;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      radius: 13,
+      backgroundColor: selected ? Colors.white : AppColors.lightGreen,
+      foregroundColor: selected ? AppColors.darkGreen : AppColors.darkGreen,
+      child: Text(
+        user.avatar,
+        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
       ),
     );
   }
@@ -9407,7 +9671,7 @@ class _StatementTotals extends StatelessWidget {
         statement.remainingBalance > 0
             ? Tone.success
             : statement.remainingBalance < 0
-            ? Tone.warning
+            ? Tone.danger
             : Tone.neutral,
       ),
     ];
@@ -9530,6 +9794,27 @@ String _csvCell(String value) {
   return '"$escaped"';
 }
 
+String giftPoolContributionRuleLabel(GiftPool pool) {
+  return switch (pool.contributionRule) {
+    GiftPoolContributionRule.equal =>
+      'Equal ${money(pool.equalContributionAmountMinor ?? 0)} each',
+    GiftPoolContributionRule.threshold =>
+      '${money(pool.minContributionAmountMinor ?? 0)} min · '
+          '${money(pool.maxContributionAmountMinor ?? pool.targetAmountMinor)} max',
+  };
+}
+
+String giftPoolContributionRuleHelp(GiftPool pool) {
+  return switch (pool.contributionRule) {
+    GiftPoolContributionRule.equal =>
+      'Each contributor pays exactly ${money(pool.equalContributionAmountMinor ?? 0)} once.',
+    GiftPoolContributionRule.threshold =>
+      'Each contribution should stay between '
+          '${money(pool.minContributionAmountMinor ?? 0)} and '
+          '${money(pool.maxContributionAmountMinor ?? pool.targetAmountMinor)}.',
+  };
+}
+
 Future<void> showCreateGiftPoolDialog(BuildContext context) async {
   final store = StoreScope.of(context);
   final groups = store.visibleExpenseGroups;
@@ -9539,13 +9824,44 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
       : store.activeConnectionUsers().first.id;
   final title = TextEditingController(text: 'Group gift pool');
   final target = TextEditingController(text: '5000');
+  final equalAmount = TextEditingController(text: '500');
+  final minAmount = TextEditingController(text: '250');
+  final maxAmount = TextEditingController(text: '1100');
   final message = TextEditingController(text: 'Together from Sajha Kharcha.');
   var template = 'Tihar';
+  var contributionRule = GiftPoolContributionRule.equal;
   await showDialog<void>(
     context: context,
     builder: (dialogContext) {
       return StatefulBuilder(
         builder: (context, setState) {
+          final eligibleContributorCount =
+              groupId == null || recipientId == null
+              ? 0
+              : store
+                    .giftPoolEligibleContributorIds(groupId!, recipientId!)
+                    .length;
+          final equalAmountMinor = parseMoneyToMinor(equalAmount.text);
+          final targetAmountMinor =
+              contributionRule == GiftPoolContributionRule.equal
+              ? equalAmountMinor * eligibleContributorCount
+              : parseMoneyToMinor(target.text);
+          final minAmountMinor = parseMoneyToMinor(minAmount.text);
+          final maxAmountMinor = parseMoneyToMinor(maxAmount.text);
+          final invalidThreshold =
+              contributionRule == GiftPoolContributionRule.threshold &&
+              minAmountMinor > 0 &&
+              maxAmountMinor > 0 &&
+              minAmountMinor > maxAmountMinor;
+          final canCreate =
+              groupId != null &&
+              recipientId != null &&
+              targetAmountMinor > 0 &&
+              (contributionRule == GiftPoolContributionRule.equal
+                  ? equalAmountMinor > 0 && eligibleContributorCount > 0
+                  : minAmountMinor > 0 &&
+                        maxAmountMinor > 0 &&
+                        !invalidThreshold);
           return AlertDialog(
             title: const Text('Create Gift Pool'),
             content: SizedBox(
@@ -9553,6 +9869,7 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     DropdownButtonFormField<String>(
                       initialValue: groupId,
@@ -9601,13 +9918,98 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                           setState(() => template = value ?? template),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
-                      controller: target,
-                      decoration: const InputDecoration(
-                        labelText: 'Target amount',
-                        prefixText: 'NPR ',
+                    Text(
+                      'Contribution rule',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<GiftPoolContributionRule>(
+                      segments: const [
+                        ButtonSegment(
+                          value: GiftPoolContributionRule.equal,
+                          icon: Icon(Icons.balance_outlined),
+                          label: Text('Equal amount'),
+                        ),
+                        ButtonSegment(
+                          value: GiftPoolContributionRule.threshold,
+                          icon: Icon(Icons.tune_outlined),
+                          label: Text('Min / max'),
+                        ),
+                      ],
+                      selected: {contributionRule},
+                      onSelectionChanged: (value) =>
+                          setState(() => contributionRule = value.first),
+                    ),
+                    const SizedBox(height: 12),
+                    if (contributionRule == GiftPoolContributionRule.equal) ...[
+                      TextField(
+                        controller: equalAmount,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          labelText: 'Equal amount per contributor',
+                          prefixText: 'NPR ',
+                          helperText: eligibleContributorCount == 0
+                              ? 'Choose a group and recipient with eligible contributors.'
+                              : 'Pool target: ${money(targetAmountMinor)} from $eligibleContributorCount contributor${eligibleContributorCount == 1 ? '' : 's'}.',
+                        ),
+                      ),
+                    ] else ...[
+                      TextField(
+                        controller: target,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        onChanged: (_) => setState(() {}),
+                        decoration: const InputDecoration(
+                          labelText: 'Target amount',
+                          prefixText: 'NPR ',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: minAmount,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                labelText: 'Minimum contribution',
+                                prefixText: 'NPR ',
+                                errorText: invalidThreshold
+                                    ? 'Must be below max'
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: maxAmount,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              onChanged: (_) => setState(() {}),
+                              decoration: const InputDecoration(
+                                labelText: 'Maximum contribution',
+                                prefixText: 'NPR ',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     TextField(
                       controller: message,
@@ -9623,7 +10025,7 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: groupId == null || recipientId == null
+                onPressed: !canCreate
                     ? null
                     : () {
                         store.createGiftPool(
@@ -9631,7 +10033,22 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                           recipientId: recipientId!,
                           title: title.text,
                           template: template,
-                          targetAmountMinor: parseMoneyToMinor(target.text),
+                          targetAmountMinor: targetAmountMinor,
+                          contributionRule: contributionRule,
+                          equalContributionAmountMinor:
+                              contributionRule == GiftPoolContributionRule.equal
+                              ? equalAmountMinor
+                              : null,
+                          minContributionAmountMinor:
+                              contributionRule ==
+                                  GiftPoolContributionRule.threshold
+                              ? minAmountMinor
+                              : null,
+                          maxContributionAmountMinor:
+                              contributionRule ==
+                                  GiftPoolContributionRule.threshold
+                              ? maxAmountMinor
+                              : null,
                           message: message.text,
                         );
                         Navigator.pop(dialogContext);
@@ -9646,6 +10063,9 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
   );
   title.dispose();
   target.dispose();
+  equalAmount.dispose();
+  minAmount.dispose();
+  maxAmount.dispose();
   message.dispose();
 }
 
@@ -9655,7 +10075,12 @@ Future<void> showContributeToGiftPoolDialog(
 ) async {
   final store = StoreScope.of(context);
   final messenger = ScaffoldMessenger.of(context);
-  final amount = TextEditingController(text: '500');
+  final startingAmount = pool.contributionRule == GiftPoolContributionRule.equal
+      ? pool.equalContributionAmountMinor ?? 0
+      : pool.minContributionAmountMinor ?? npr(500);
+  final amount = TextEditingController(
+    text: (startingAmount ~/ 100).toString(),
+  );
   await showDialog<void>(
     context: context,
     builder: (dialogContext) {
@@ -9664,9 +10089,16 @@ Future<void> showContributeToGiftPoolDialog(
           final raised = store.giftPoolTotal(pool.id);
           final remaining = pool.targetAmountMinor - raised;
           final amountMinor = parseMoneyToMinor(amount.text);
-          final exceedsRemaining = amountMinor > remaining;
+          final contributionError = amount.text.trim().isEmpty || remaining <= 0
+              ? null
+              : store.giftPoolContributionError(pool.id, amountMinor);
+          final alreadyContributed =
+              pool.contributionRule == GiftPoolContributionRule.equal &&
+              store.hasContributedToGiftPool(pool.id, store.currentUserId);
           final canContribute =
-              remaining > 0 && amountMinor > 0 && !exceedsRemaining;
+              amount.text.trim().isNotEmpty &&
+              contributionError == null &&
+              remaining > 0;
           return AlertDialog(
             title: const Text('Contribute to gift pool'),
             content: SizedBox(
@@ -9691,43 +10123,64 @@ Future<void> showContributeToGiftPoolDialog(
                           ).colorScheme.onSurfaceVariant,
                         ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    giftPoolContributionRuleHelp(pool),
+                    style: Theme.of(builderContext).textTheme.bodySmall
+                        ?.copyWith(
+                          color: Theme.of(
+                            builderContext,
+                          ).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: amount,
                     autofocus: true,
-                    enabled: remaining > 0,
+                    readOnly:
+                        pool.contributionRule == GiftPoolContributionRule.equal,
+                    enabled: remaining > 0 && !alreadyContributed,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
                       labelText: 'Amount',
                       prefixText: 'NPR ',
-                      errorText: exceedsRemaining
-                          ? 'Cannot exceed the ${money(remaining)} remaining.'
-                          : null,
+                      helperText:
+                          pool.contributionRule ==
+                              GiftPoolContributionRule.equal
+                          ? 'Fixed for this equal amount pool.'
+                          : 'Choose an amount within this pool threshold.',
+                      errorText: contributionError,
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final preset in const [251, 500, 1100])
-                        if (npr(preset) <= remaining)
-                          ActionChip(
-                            label: Text('Rs $preset'),
-                            onPressed: () =>
-                                setState(() => amount.text = preset.toString()),
-                          ),
-                      if (remaining > 0)
-                        ActionChip(
-                          label: Text('Remaining ${money(remaining)}'),
-                          onPressed: () => setState(
-                            () => amount.text = (remaining ~/ 100).toString(),
-                          ),
-                        ),
-                    ],
-                  ),
+                  if (pool.contributionRule ==
+                      GiftPoolContributionRule.threshold)
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final preset in <int>[
+                          pool.minContributionAmountMinor ?? 0,
+                          npr(500),
+                          pool.maxContributionAmountMinor ?? 0,
+                          remaining,
+                        ].where((item) => item > 0).toSet())
+                          if (store.giftPoolContributionError(
+                                pool.id,
+                                preset,
+                              ) ==
+                              null)
+                            ActionChip(
+                              label: Text(money(preset)),
+                              onPressed: () => setState(
+                                () => amount.text = (preset ~/ 100).toString(),
+                              ),
+                            ),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -9765,6 +10218,10 @@ Future<void> showContributeToGiftPoolDialog(
                               operationType: 'gift_pool_contribution',
                               details: [
                                 TransactionDetail(
+                                  'Contribution rule',
+                                  giftPoolContributionRuleLabel(pool),
+                                ),
+                                TransactionDetail(
                                   'Raised so far',
                                   money(store.giftPoolTotal(pool.id)),
                                 ),
@@ -9775,15 +10232,23 @@ Future<void> showContributeToGiftPoolDialog(
                               ],
                             ),
                             () async {
-                              store.contributeToGiftPool(pool.id, amountMinor);
+                              final message = store.contributeToGiftPool(
+                                pool.id,
+                                amountMinor,
+                              );
+                              if (!message.startsWith('Added')) {
+                                return TransactionResult.failure(
+                                  reason: message,
+                                  amount: amountMinor,
+                                  transactionReference: 'gift-pool-failed',
+                                  createdAt: DateTime.now(),
+                                  status: TransactionStatus.failedReview,
+                                );
+                              }
                               messenger
                                 ..hideCurrentSnackBar()
                                 ..showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Added ${money(amountMinor)} to ${pool.title}.',
-                                    ),
-                                  ),
+                                  SnackBar(content: Text(message)),
                                 );
                               return _successResult(
                                 title: 'Contribution Added',
@@ -9841,6 +10306,14 @@ Future<void> showGiftPoolDetailsDialog(
                 '${contributions.length == 1 ? 'contribution' : 'contributions'}',
                 style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
                   color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                giftPoolContributionRuleHelp(pool),
+                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 12),

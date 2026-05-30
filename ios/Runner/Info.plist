@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Sangai</string>
+	<string>Sajha Kharcha</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,9 +15,9 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>sangai</string>
+	<string>Sajha Kharcha</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Sangai uses the camera to scan QR invite codes and itemized bills.</string>
+	<string>Sajha Kharcha uses the camera to scan QR invite codes and itemized bills.</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

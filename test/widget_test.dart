@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sangai/features/auth/auth_controller.dart';
-import 'package:sangai/features/auth/models/user_profile.dart';
-import 'package:sangai/features/auth/screens/login_form.dart';
-import 'package:sangai/features/auth/screens/register_form.dart';
-import 'package:sangai/src/app.dart';
-import 'package:sangai/src/app_state.dart';
+import 'package:sajha_kharcha/features/auth/auth_controller.dart';
+import 'package:sajha_kharcha/features/auth/models/user_profile.dart';
+import 'package:sajha_kharcha/features/auth/screens/login_form.dart';
+import 'package:sajha_kharcha/features/auth/screens/register_form.dart';
+import 'package:sajha_kharcha/shared/design_system/app_colors.dart';
+import 'package:sajha_kharcha/src/app.dart';
+import 'package:sajha_kharcha/src/app_state.dart';
+import 'package:sajha_kharcha/src/finance.dart';
+import 'package:sajha_kharcha/src/models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -38,6 +41,25 @@ void main() {
       expect(controller.state.activeUser?.phone, '9800000001');
     },
   );
+
+  test('delete account clears saved profile and login state', () async {
+    SharedPreferences.setMockInitialValues({
+      'auth.hasSeenIntro': true,
+      'auth.isLoggedIn': true,
+      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
+      'auth.mPin': '1234',
+      'auth.biometricEnabled': true,
+    });
+    final controller = AuthController();
+
+    await controller.initialize();
+    expect(controller.state.isLoggedIn, isTrue);
+
+    await controller.deleteAccount();
+
+    expect(controller.state.isLoggedIn, isFalse);
+    expect(controller.state.activeUser, isNull);
+  });
 
   testWidgets('login form requires phone number and M-PIN', (tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -74,7 +96,7 @@ void main() {
     expect(pinField.controller?.text, '1234');
   });
 
-  testWidgets('sign up requires username dob M-PIN then verifies OTP', (
+  testWidgets('sign up requires mobile number dob M-PIN then verifies OTP', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -90,15 +112,15 @@ void main() {
       ),
     );
 
-    expect(find.text('User name'), findsOneWidget);
+    expect(find.text('Nepal mobile number'), findsOneWidget);
     expect(find.text('Date of birth'), findsOneWidget);
     expect(find.text('Create M-PIN'), findsOneWidget);
-    expect(find.text('Phone number'), findsNothing);
+    expect(find.text('User name'), findsNothing);
     expect(find.text('Password'), findsNothing);
 
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'User name'),
-      'Asha',
+      find.widgetWithText(TextFormField, 'Nepal mobile number'),
+      '9800000001',
     );
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Date of birth'),
@@ -120,7 +142,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.state.isLoggedIn, isTrue);
-    expect(controller.state.activeUser?.displayName, 'Asha');
+    expect(controller.state.activeUser?.displayName, 'Sajha Member');
+    expect(controller.state.activeUser?.phone, '9800000001');
     expect(controller.state.activeUser?.dateOfBirth, DateTime(2000, 1, 2));
   });
 
@@ -165,7 +188,7 @@ void main() {
     await tester.pumpWidget(
       AuthScope(
         notifier: AuthController(),
-        child: StoreScope(notifier: AppStore(), child: const SangaiApp()),
+        child: StoreScope(notifier: AppStore(), child: const SajhaKharchaApp()),
       ),
     );
     await tester.pump(const Duration(seconds: 1));
@@ -201,7 +224,7 @@ void main() {
     await tester.pumpWidget(
       AuthScope(
         notifier: AuthController(),
-        child: StoreScope(notifier: AppStore(), child: const SangaiApp()),
+        child: StoreScope(notifier: AppStore(), child: const SajhaKharchaApp()),
       ),
     );
     await tester.pump(const Duration(seconds: 1));
@@ -220,6 +243,145 @@ void main() {
 
     expect(find.text('Account'), findsOneWidget);
     expect(find.text('Edit Profile'), findsOneWidget);
+    expect(find.text('Delete Account'), findsOneWidget);
+
+    await tester.tap(find.text('Delete Account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Settle balances first'), findsOneWidget);
+    expect(
+      find.text('You cannot delete your account while money is unsettled.'),
+      findsOneWidget,
+    );
+    expect(find.text('• You still owe NPR 4020.'), findsOneWidget);
+    expect(find.text('• You are still owed NPR 3400.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('connection report dialog requires note and blocks duplicates', (
+    tester,
+  ) async {
+    final store = AppStore();
+    final connection = store.connectionBetween('u-sita', 'u-maya')!;
+    final reportedUser = store.userById('u-maya');
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return FilledButton(
+                  onPressed: () => showReportConnectionDialog(
+                    context,
+                    connection,
+                    reportedUser,
+                  ),
+                  child: const Text('Open report'),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Open report'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report Maya Gurung'), findsOneWidget);
+    expect(find.text('Report note'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Submit report'),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Report note'),
+      'Repeated unwanted payment messages',
+    );
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Submit report'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Submit report'));
+    await tester.pumpAndSettle();
+
+    expect(connection.reports, hasLength(1));
+    expect(
+      connection.reports.single.details,
+      'Repeated unwanted payment messages',
+    );
+    expect(find.text('Report submitted for Maya Gurung.'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Open report'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report Maya Gurung'), findsNothing);
+    expect(find.text('You have already reported Maya Gurung.'), findsOneWidget);
+    expect(connection.reports, hasLength(1));
+  });
+
+  testWidgets('gift pool dialog switches between equal and threshold amounts', (
+    tester,
+  ) async {
+    final store = AppStore();
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return FilledButton(
+                  onPressed: () => showCreateGiftPoolDialog(context),
+                  child: const Text('Open gift pool'),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Open gift pool'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Contribution rule'), findsOneWidget);
+    expect(find.text('Equal amount'), findsOneWidget);
+    expect(find.text('Equal amount per contributor'), findsOneWidget);
+    expect(find.text('Target amount'), findsNothing);
+
+    await tester.tap(find.text('Min / max'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Target amount'), findsOneWidget);
+    expect(find.text('Minimum contribution'), findsOneWidget);
+    expect(find.text('Maximum contribution'), findsOneWidget);
+    expect(find.text('Equal amount per contributor'), findsNothing);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.pumpAndSettle();
+
+    expect(
+      store.giftPools.last.contributionRule,
+      GiftPoolContributionRule.threshold,
+    );
+    expect(store.giftPools.last.minContributionAmountMinor, npr(250));
+    expect(store.giftPools.last.maxContributionAmountMinor, npr(1100));
     expect(tester.takeException(), isNull);
   });
 
@@ -241,7 +403,7 @@ void main() {
     await tester.pumpWidget(
       AuthScope(
         notifier: AuthController(),
-        child: StoreScope(notifier: AppStore(), child: const SangaiApp()),
+        child: StoreScope(notifier: AppStore(), child: const SajhaKharchaApp()),
       ),
     );
     await tester.pump(const Duration(seconds: 1));
@@ -292,6 +454,49 @@ void main() {
     expect(store.selectedGroupId, isNull);
     expect(find.text('Groups overview'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Add expense'), findsNothing);
+  });
+
+  testWidgets('group overview colors debit red and credit green', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              BalancePill(amountMinor: -100),
+              BalancePill(amountMinor: 100),
+              StatTile(
+                label: 'Debit',
+                value: 'NPR 1',
+                icon: Icons.call_made_outlined,
+                tone: Tone.danger,
+                tintValue: true,
+              ),
+              StatTile(
+                label: 'Credit',
+                value: 'NPR 2',
+                icon: Icons.call_received_outlined,
+                tone: Tone.success,
+                tintValue: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final pills = tester.widgetList<StatusPill>(find.byType(StatusPill));
+    expect(pills.elementAt(0).tone, Tone.danger);
+    expect(pills.elementAt(1).tone, Tone.success);
+    expect(
+      tester.widget<Text>(find.text('NPR 1')).style?.color,
+      AppColors.error,
+    );
+    expect(
+      tester.widget<Text>(find.text('NPR 2')).style?.color,
+      AppColors.success,
+    );
   });
 
   testWidgets('create group dialog starts with members unselected', (

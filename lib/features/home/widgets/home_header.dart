@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/design_system/app_colors.dart';
 import '../../../shared/design_system/app_spacing.dart';
 import '../../../shared/design_system/app_text_styles.dart';
+import '../../../shared/localization/app_localizations.dart';
 
 class HomeHeader extends StatelessWidget {
   const HomeHeader({
@@ -50,10 +51,13 @@ class HomeHeader extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
-              Text('Namaste, $firstName', style: AppTextStyles.screenTitle),
+              Text(
+                '${context.t('Namaste')}, $firstName',
+                style: AppTextStyles.screenTitle,
+              ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Here’s your shared balance summary',
+                context.t('Here’s your shared balance summary'),
                 style: AppTextStyles.bodySecondary.copyWith(
                   fontWeight: FontWeight.w700,
                 ),

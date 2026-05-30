@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../shared/design_system/app_colors.dart';
 import '../../shared/design_system/app_spacing.dart';
+import '../../shared/localization/app_localizations.dart';
+import '../../src/app_state.dart';
 import '../auth/auth_controller.dart';
 import '../auth/models/user_profile.dart';
 import 'edit_profile_screen.dart';
 import 'notification_settings_screen.dart';
 import 'settings_controller.dart';
 import 'settings_models.dart';
-import 'widgets/dhukuti_safety_note_card.dart';
 import 'widgets/settings_choice_bottom_sheet.dart';
 import 'widgets/settings_profile_card.dart';
 import 'widgets/settings_section.dart';
@@ -19,11 +20,13 @@ class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
     required this.controller,
     required this.authController,
+    required this.store,
     super.key,
   });
 
   final SettingsController controller;
   final AuthController authController;
+  final AppStore store;
 
   @override
   Widget build(BuildContext context) {
@@ -42,35 +45,44 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               SettingsSection(
-                title: 'Account',
+                title: context.t('Account'),
                 children: [
                   SettingsTile(
                     icon: Icons.person_outline,
-                    title: 'Edit Profile',
+                    title: context.t('Edit Profile'),
                     onTap: () => _openEditProfile(context),
                   ),
                   SettingsTile(
                     icon: Icons.logout,
-                    title: 'Logout',
-                    subtitle: 'Return to prototype login on this device.',
+                    title: context.t('Logout'),
+                    subtitle: context.t('Return to login on this device.'),
                     onTap: () => _confirmLogout(context),
+                    danger: true,
+                  ),
+                  SettingsTile(
+                    icon: Icons.delete_forever_outlined,
+                    title: context.t('Delete Account'),
+                    subtitle: context.t(
+                      'Available only after every balance is settled.',
+                    ),
+                    onTap: () => _confirmDeleteAccount(context),
                     danger: true,
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),
               SettingsSection(
-                title: 'Privacy & Connections',
+                title: context.t('Privacy & Connections'),
                 children: [
                   SettingsTile(
                     icon: Icons.shield_outlined,
-                    title: 'Connection Requests',
-                    value: state.connectionRequestPreference.label,
+                    title: context.t('Connection Requests'),
+                    value: context.t(state.connectionRequestPreference.label),
                     onTap: () => _chooseConnectionRequestPreference(context),
                   ),
                   SettingsTile(
                     icon: Icons.block_outlined,
-                    title: 'Blocked Users',
+                    title: context.t('Blocked Users'),
                     onTap: () => _showUserList(
                       context,
                       title: 'Blocked Users',
@@ -81,30 +93,23 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               SettingsSection(
-                title: 'Groups & Expenses',
+                title: context.t('Groups & Expenses'),
                 children: [
                   SettingsTile(
                     icon: Icons.call_split_outlined,
-                    title: 'Default Split',
-                    value: state.defaultSplitMode.label,
+                    title: context.t('Default Split'),
+                    value: context.t(state.defaultSplitMode.label),
                     onTap: () => _chooseDefaultSplitMode(context),
                   ),
                   SettingsTile(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'Tax Allocation',
-                    subtitle: 'Used for VAT, service charge, and tips.',
-                    value: state.taxAllocationMode.label,
-                    onTap: () => _chooseTaxAllocationMode(context),
-                  ),
-                  SettingsTile(
                     icon: Icons.document_scanner_outlined,
-                    title: 'OCR Review',
-                    value: state.ocrReviewPreference.label,
+                    title: context.t('OCR Review'),
+                    value: context.t(state.ocrReviewPreference.label),
                     onTap: () => _chooseOcrReviewPreference(context),
                   ),
                   SettingsSwitchTile(
                     icon: Icons.calculate_outlined,
-                    title: 'Show Rounding Note',
+                    title: context.t('Show Rounding Note'),
                     subtitle:
                         'Shows a small note when split amounts are adjusted by rounding.',
                     value: state.showRoundingNote,
@@ -114,70 +119,53 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               SettingsSection(
-                title: 'Payments',
+                title: context.t('Payments'),
                 children: [
                   SettingsSwitchTile(
                     icon: Icons.verified_user_outlined,
-                    title: 'Confirm Before Payment',
+                    title: context.t('Confirm Before Payment'),
                     value: state.confirmBeforePayment,
                     onChanged: controller.setConfirmBeforePayment,
                   ),
                   SettingsSwitchTile(
                     icon: Icons.notifications_active_outlined,
-                    title: 'Settlement Nudges',
+                    title: context.t('Settlement Nudges'),
                     value: state.settlementNudges,
                     onChanged: controller.setSettlementNudges,
                   ),
                   SettingsTile(
                     icon: Icons.alarm_outlined,
-                    title: 'Default Reminder',
-                    value: state.reminderFrequency.label,
+                    title: context.t('Default Reminder'),
+                    value: context.t(state.reminderFrequency.label),
                     onTap: () => _chooseReminderFrequency(context),
-                  ),
-                  SettingsTile(
-                    icon: Icons.account_balance_wallet_outlined,
-                    title: 'Mock eSewa Mode',
-                    subtitle: 'Payments are simulated for this prototype.',
-                    value: state.mockEsewaMode ? 'ON' : 'OFF',
-                    enabled: false,
-                    showChevron: false,
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),
               SettingsSection(
-                title: 'Digital Dhukuti',
-                footer: DhukutiSafetyNoteCard(
-                  onTap: () => _showDhukutiSafetyNote(context),
-                ),
+                title: context.t('Digital Dhukuti'),
                 children: [
                   SettingsSwitchTile(
                     icon: Icons.event_available_outlined,
-                    title: 'Contribution Reminders',
+                    title: context.t('Contribution Reminders'),
                     value: state.dhukutiContributionReminders,
                     onChanged: controller.setDhukutiContributionReminders,
                   ),
                   SettingsSwitchTile(
                     icon: Icons.warning_amber_outlined,
-                    title: 'At-Risk Alerts',
+                    title: context.t('At-Risk Alerts'),
                     value: state.dhukutiAtRiskAlerts,
                     onChanged: controller.setDhukutiAtRiskAlerts,
-                  ),
-                  SettingsTile(
-                    icon: Icons.info_outline,
-                    title: 'Safety Note',
-                    value: 'Read',
-                    onTap: () => _showDhukutiSafetyNote(context),
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),
               SettingsSection(
-                title: 'Notifications',
+                title: context.t('Notifications'),
                 children: [
                   SettingsTile(
                     icon: Icons.notifications_outlined,
-                    title: 'Manage Notifications',
+                    title: context.t('Manage Notifications'),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) =>
@@ -189,69 +177,71 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               SettingsSection(
-                title: 'Appearance',
+                title: context.t('Appearance'),
                 children: [
                   SettingsTile(
                     icon: Icons.palette_outlined,
-                    title: 'Theme',
-                    value: state.themeMode.label,
+                    title: context.t('Theme'),
+                    value: context.t(state.themeMode.label),
                     onTap: () => _chooseTheme(context),
                   ),
                   SettingsTile(
                     icon: Icons.language_outlined,
-                    title: 'Language',
-                    value: state.language.label,
+                    title: context.t('Language'),
+                    value: context.t(state.language.label),
                     onTap: () => _chooseLanguage(context),
-                  ),
-                  SettingsTile(
-                    icon: Icons.payments_outlined,
-                    title: 'Amount Format',
-                    value: state.amountFormatMode.label,
-                    onTap: () => _chooseAmountFormat(context),
-                  ),
-                  SettingsTile(
-                    icon: Icons.calendar_month_outlined,
-                    title: 'Date Format',
-                    value: state.dateFormatMode.label,
-                    onTap: () => _chooseDateFormat(context),
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),
               SettingsSection(
-                title: 'Help & About',
+                title: context.t('Help & About'),
                 children: [
                   SettingsTile(
                     icon: Icons.help_outline,
-                    title: 'How Sajha Kharcha Works',
+                    title: context.t('How Sajha Kharcha Works'),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => const _InfoScreen(
                           title: 'How Sajha Kharcha Works',
                           icon: Icons.help_outline,
                           body:
-                              'Sajha Kharcha helps trusted people create groups, scan receipts, split expenses, settle dues, send gifts, and track transparent Dhukuti ledgers.',
+                              'Sajha Kharcha brings shared spending into one clear flow: connect with trusted people, create a group, add an expense, choose who paid and who joined, then settle balances when everyone is ready. You can also send gifts, follow group activity, and keep Dhukuti contribution schedules visible for every member.',
+                        ),
+                      ),
+                    ),
+                  ),
+                  SettingsTile(
+                    icon: Icons.info_outline,
+                    title: context.t('About Sajha Kharcha'),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const _InfoScreen(
+                          title: 'About Sajha Kharcha',
+                          icon: Icons.info_outline,
+                          body:
+                              'Sajha Kharcha is built for everyday shared costs in Nepal: meals, trips, apartments, festivals, gifts, and rotating Dhukuti commitments. The app focuses on clear member selection, transparent balances, spending insights, and fast settlement through familiar wallet flows.',
                         ),
                       ),
                     ),
                   ),
                   SettingsTile(
                     icon: Icons.privacy_tip_outlined,
-                    title: 'Terms & Privacy',
+                    title: context.t('Terms & Privacy'),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => const _InfoScreen(
                           title: 'Terms & Privacy',
                           icon: Icons.privacy_tip_outlined,
                           body:
-                              'Terms and privacy details are placeholders for the MVP demo. No real backend account, payment, or notification delivery is connected in this prototype.',
+                              'Your group history should stay readable even when members leave, because expense records are shared financial context. Keep phone numbers current, invite only trusted contacts, and review group roles before adding or removing members.',
                         ),
                       ),
                     ),
                   ),
-                  const SettingsTile(
+                  SettingsTile(
                     icon: Icons.info_outline,
-                    title: 'Version 1.0',
+                    title: context.t('Version 1.0'),
                     subtitle:
                         'Sajha Kharcha by eSewa v1.0\nTeam Cache Flow · Challenge 10',
                     showChevron: false,
@@ -321,15 +311,92 @@ class SettingsScreen extends StatelessWidget {
     Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
   }
 
+  Future<void> _confirmDeleteAccount(BuildContext context) async {
+    final blockers = store.accountDeletionBlockers;
+    if (blockers.isNotEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: Text(context.t('Settle balances first')),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.t(
+                    'You cannot delete your account while money is unsettled.',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                for (final blocker in blockers)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('• $blocker'),
+                  ),
+              ],
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(context.t('OK')),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(context.t('Delete account?')),
+          content: Text(
+            context.t(
+              'This removes your saved profile and signs you out on this device.',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(context.t('Cancel')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(context.t('Delete')),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+    await authController.deleteAccount();
+    if (!context.mounted) {
+      return;
+    }
+    Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
+  }
+
   Future<void> _chooseConnectionRequestPreference(BuildContext context) async {
     final value =
         await showSettingsChoiceBottomSheet<ConnectionRequestPreference>(
           context: context,
-          title: 'Connection Requests',
+          title: context.t('Connection Requests'),
           selectedValue: controller.state.connectionRequestPreference,
           options: [
             for (final preference in ConnectionRequestPreference.values)
-              SettingsChoiceOption(value: preference, label: preference.label),
+              SettingsChoiceOption(
+                value: preference,
+                label: context.t(preference.label),
+              ),
           ],
         );
     if (value != null) {
@@ -340,11 +407,11 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _chooseTheme(BuildContext context) async {
     final value = await showSettingsChoiceBottomSheet<AppThemeMode>(
       context: context,
-      title: 'Theme',
+      title: context.t('Theme'),
       selectedValue: controller.state.themeMode,
       options: [
         for (final mode in AppThemeMode.values)
-          SettingsChoiceOption(value: mode, label: mode.label),
+          SettingsChoiceOption(value: mode, label: context.t(mode.label)),
       ],
     );
     if (value != null) {
@@ -355,11 +422,11 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _chooseDefaultSplitMode(BuildContext context) async {
     final value = await showSettingsChoiceBottomSheet<DefaultSplitMode>(
       context: context,
-      title: 'Default Split',
+      title: context.t('Default Split'),
       selectedValue: controller.state.defaultSplitMode,
       options: [
         for (final mode in DefaultSplitMode.values)
-          SettingsChoiceOption(value: mode, label: mode.label),
+          SettingsChoiceOption(value: mode, label: context.t(mode.label)),
       ],
     );
     if (value != null) {
@@ -367,29 +434,17 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _chooseTaxAllocationMode(BuildContext context) async {
-    final value = await showSettingsChoiceBottomSheet<TaxAllocationMode>(
-      context: context,
-      title: 'Tax Allocation',
-      selectedValue: controller.state.taxAllocationMode,
-      options: [
-        for (final mode in TaxAllocationMode.values)
-          SettingsChoiceOption(value: mode, label: mode.label),
-      ],
-    );
-    if (value != null) {
-      controller.setTaxAllocationMode(value);
-    }
-  }
-
   Future<void> _chooseOcrReviewPreference(BuildContext context) async {
     final value = await showSettingsChoiceBottomSheet<OcrReviewPreference>(
       context: context,
-      title: 'OCR Review',
+      title: context.t('OCR Review'),
       selectedValue: controller.state.ocrReviewPreference,
       options: [
         for (final preference in OcrReviewPreference.values)
-          SettingsChoiceOption(value: preference, label: preference.label),
+          SettingsChoiceOption(
+            value: preference,
+            label: context.t(preference.label),
+          ),
       ],
     );
     if (value != null) {
@@ -400,11 +455,14 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _chooseReminderFrequency(BuildContext context) async {
     final value = await showSettingsChoiceBottomSheet<ReminderFrequency>(
       context: context,
-      title: 'Default Reminder',
+      title: context.t('Default Reminder'),
       selectedValue: controller.state.reminderFrequency,
       options: [
         for (final frequency in ReminderFrequency.values)
-          SettingsChoiceOption(value: frequency, label: frequency.label),
+          SettingsChoiceOption(
+            value: frequency,
+            label: context.t(frequency.label),
+          ),
       ],
     );
     if (value != null) {
@@ -412,52 +470,17 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _chooseAmountFormat(BuildContext context) async {
-    final value = await showSettingsChoiceBottomSheet<AmountFormatMode>(
-      context: context,
-      title: 'Amount Format',
-      selectedValue: controller.state.amountFormatMode,
-      options: [
-        for (final mode in AmountFormatMode.values)
-          SettingsChoiceOption(value: mode, label: mode.label),
-      ],
-    );
-    if (value != null) {
-      controller.setAmountFormatMode(value);
-    }
-  }
-
-  Future<void> _chooseDateFormat(BuildContext context) async {
-    final value = await showSettingsChoiceBottomSheet<DateFormatMode>(
-      context: context,
-      title: 'Date Format',
-      selectedValue: controller.state.dateFormatMode,
-      options: [
-        for (final mode in DateFormatMode.values)
-          SettingsChoiceOption(value: mode, label: mode.label),
-      ],
-    );
-    if (value != null) {
-      controller.setDateFormatMode(value);
-    }
-  }
-
   Future<void> _chooseLanguage(BuildContext context) async {
     final value = await showSettingsChoiceBottomSheet<AppLanguage>(
       context: context,
-      title: 'Language',
+      title: context.t('Language'),
       selectedValue: controller.state.language,
       options: [
-        SettingsChoiceOption(
-          value: AppLanguage.english,
-          label: AppLanguage.english.label,
-        ),
-        SettingsChoiceOption(
-          value: AppLanguage.nepaliComingSoon,
-          label: AppLanguage.nepaliComingSoon.label,
-          subtitle: AppLanguage.nepaliComingSoon.helper,
-          enabled: false,
-        ),
+        for (final language in AppLanguage.values)
+          SettingsChoiceOption(
+            value: language,
+            label: context.t(language.label),
+          ),
       ],
     );
     if (value != null) {
@@ -512,45 +535,6 @@ class SettingsScreen extends StatelessWidget {
       },
     );
   }
-
-  Future<void> _showDhukutiSafetyNote(BuildContext context) {
-    return showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      child: Icon(
-                        Icons.info_outline,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Digital Dhukuti Safety Note',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                const Text(dhukutiSafetyNoteText),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
 
 class _InfoScreen extends StatelessWidget {
@@ -567,14 +551,14 @@ class _InfoScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: Text(context.t(title))),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           CircleAvatar(radius: 28, child: Icon(icon)),
           const SizedBox(height: 16),
           Text(
-            title,
+            context.t(title),
             textAlign: TextAlign.center,
             style: Theme.of(
               context,

@@ -363,14 +363,27 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void reportConnection(
+  String? reportConnection(
     String connectionId,
     String reportedUserId,
-    String reason,
-  ) {
+    String reason, {
+    required String note,
+  }) {
+    final trimmedNote = note.trim();
+    if (trimmedNote.isEmpty) {
+      return 'Add a note before submitting a report.';
+    }
     final connection = connections.firstWhere(
       (item) => item.id == connectionId,
     );
+    if (!connection.hasUser(currentUserId) ||
+        !connection.hasUser(reportedUserId) ||
+        currentUserId == reportedUserId) {
+      return 'This connection cannot be reported.';
+    }
+    if (connection.hasReportFrom(currentUserId, reportedUserId)) {
+      return 'You have already reported ${nameOf(reportedUserId)}.';
+    }
     connection.reports.add(
       ConnectionReport(
         id: _id('report'),
@@ -379,8 +392,10 @@ class AppStore extends ChangeNotifier {
         reportedUserId: reportedUserId,
         reasonCode: reason,
         createdAt: _now,
+        details: trimmedNote,
       ),
     );
+    connection.updatedAt = _now;
     _connectionEvent(
       connection,
       'reported',
@@ -393,9 +408,10 @@ class AppStore extends ChangeNotifier {
       entityType: 'connection_report',
       entityId: connectionId,
       title: 'Safety report opened',
-      body: '${nameOf(currentUserId)} opened a lightweight safety report.',
+      body: '${nameOf(currentUserId)} reported ${nameOf(reportedUserId)}.',
     );
     notifyListeners();
+    return null;
   }
 
   void updatePrivacy(PrivacyMode mode) {
@@ -403,17 +419,28 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  static const _qrInvitePrefix = 'SANGAI-QR-';
+  static const qrInviteTtl = Duration(minutes: 5);
+  static const _qrInvitePrefix = 'SAJHA-KHARCHA-QR-';
 
-  String qrInviteCodeFor(AppUser user) => '$_qrInvitePrefix${user.id}';
+  String qrInviteCodeFor(AppUser user, {DateTime? issuedAt}) {
+    final issued = issuedAt ?? _now;
+    return '$_qrInvitePrefix${user.id}-${issued.millisecondsSinceEpoch}';
+  }
 
   String? qrInviteValidationError(String code) {
-    final targetId = _qrInviteTargetId(code);
-    if (targetId == null) {
+    final invite = _qrInvitePayload(code);
+    if (invite == null) {
       return 'That QR invite code is not valid.';
     }
-    if (users.every((user) => user.id != targetId)) {
-      return 'No demo user matched that invite.';
+    if (users.every((user) => user.id != invite.userId)) {
+      return 'No user matched that invite.';
+    }
+    final now = _now;
+    if (invite.issuedAt.isAfter(now.add(const Duration(seconds: 30)))) {
+      return 'That QR invite code is not valid.';
+    }
+    if (now.difference(invite.issuedAt) > qrInviteTtl) {
+      return 'This QR invite expired. Ask for a new QR.';
     }
     return null;
   }
@@ -423,17 +450,29 @@ class AppStore extends ChangeNotifier {
     if (validationError != null) {
       return validationError;
     }
-    final targetId = _qrInviteTargetId(code)!;
-    return sendConnectionRequest(targetId, viaQr: true);
+    final invite = _qrInvitePayload(code)!;
+    return sendConnectionRequest(invite.userId, viaQr: true);
   }
 
-  String? _qrInviteTargetId(String code) {
+  ({String userId, DateTime issuedAt})? _qrInvitePayload(String code) {
     final value = code.trim();
     if (!value.startsWith(_qrInvitePrefix)) {
       return null;
     }
-    final targetId = value.substring(_qrInvitePrefix.length);
-    return targetId.isEmpty ? null : targetId;
+    final payload = value.substring(_qrInvitePrefix.length);
+    final separator = payload.lastIndexOf('-');
+    if (separator <= 0 || separator == payload.length - 1) {
+      return null;
+    }
+    final targetId = payload.substring(0, separator);
+    final issuedMillis = int.tryParse(payload.substring(separator + 1));
+    if (targetId.isEmpty || issuedMillis == null) {
+      return null;
+    }
+    return (
+      userId: targetId,
+      issuedAt: DateTime.fromMillisecondsSinceEpoch(issuedMillis),
+    );
   }
 
   String createGroup({
@@ -525,6 +564,9 @@ class AppStore extends ChangeNotifier {
         title: 'Tihar tika envelope',
         template: 'Tihar',
         targetAmountMinor: npr(5000),
+        contributionRule: GiftPoolContributionRule.threshold,
+        minContributionAmountMinor: npr(250),
+        maxContributionAmountMinor: npr(1100),
         message: 'For a bright Tihar together.',
       );
     }
@@ -1212,6 +1254,32 @@ class AppStore extends ChangeNotifier {
         .toList();
   }
 
+  int get pendingSettlementAmountForCurrentUser {
+    return pendingSettlementsForCurrentUser.fold<int>(
+      0,
+      (sum, settlement) => sum + settlement.amountMinor,
+    );
+  }
+
+  List<String> get accountDeletionBlockers {
+    final blockers = <String>[];
+    final owedByUser = totalOwedByCurrentUser;
+    final owedToUser = totalOwedToCurrentUser;
+    final pendingAmount = pendingSettlementAmountForCurrentUser;
+    if (owedByUser > 0) {
+      blockers.add('You still owe ${money(owedByUser)}.');
+    }
+    if (owedToUser > 0) {
+      blockers.add('You are still owed ${money(owedToUser)}.');
+    }
+    if (pendingAmount > 0) {
+      blockers.add('You have ${money(pendingAmount)} in pending settlements.');
+    }
+    return blockers;
+  }
+
+  bool get canDeleteCurrentAccount => accountDeletionBlockers.isEmpty;
+
   Settlement createOrReuseSettlement(SettlementSuggestion suggestion) {
     final existing = settlements.where(
       (settlement) =>
@@ -1270,7 +1338,7 @@ class AppStore extends ChangeNotifier {
     if (fail) {
       settlement
         ..status = PaymentStatus.failed
-        ..failureReason = 'Mock provider failure';
+        ..failureReason = 'Payment provider failure';
       _activity(
         actorId: settlement.payerId,
         groupId: settlement.groupId,
@@ -1278,7 +1346,7 @@ class AppStore extends ChangeNotifier {
         entityType: 'settlement',
         entityId: settlement.id,
         title: 'Settlement failed',
-        body: 'The mock payment was marked as failed.',
+        body: 'The payment was marked as failed.',
       );
     } else {
       settlement
@@ -1303,7 +1371,7 @@ class AppStore extends ChangeNotifier {
         entityId: settlement.id,
         title: 'Settlement paid',
         body:
-            '${nameOf(settlement.payerId)} paid ${nameOf(settlement.payeeId)} ${money(settlement.amountMinor)} via Sangai Pay.',
+            '${nameOf(settlement.payerId)} paid ${nameOf(settlement.payeeId)} ${money(settlement.amountMinor)} via Sajha Kharcha Pay.',
       );
     }
     notifyListeners();
@@ -1442,7 +1510,11 @@ class AppStore extends ChangeNotifier {
     required String title,
     required String template,
     required int targetAmountMinor,
+    required GiftPoolContributionRule contributionRule,
     required String message,
+    int? equalContributionAmountMinor,
+    int? minContributionAmountMinor,
+    int? maxContributionAmountMinor,
   }) {
     final pool = GiftPool(
       id: _id('gift-pool'),
@@ -1452,6 +1524,19 @@ class AppStore extends ChangeNotifier {
       title: title,
       template: template,
       targetAmountMinor: targetAmountMinor,
+      contributionRule: contributionRule,
+      equalContributionAmountMinor:
+          contributionRule == GiftPoolContributionRule.equal
+          ? equalContributionAmountMinor
+          : null,
+      minContributionAmountMinor:
+          contributionRule == GiftPoolContributionRule.threshold
+          ? minContributionAmountMinor
+          : null,
+      maxContributionAmountMinor:
+          contributionRule == GiftPoolContributionRule.threshold
+          ? maxContributionAmountMinor
+          : null,
       message: message,
       status: GiftPoolStatus.open,
       createdAt: _now,
@@ -1470,18 +1555,67 @@ class AppStore extends ChangeNotifier {
     return pool.id;
   }
 
-  String contributeToGiftPool(String giftPoolId, int amountMinor) {
+  List<String> giftPoolEligibleContributorIds(
+    String groupId,
+    String recipientId,
+  ) {
+    return membersForGroup(groupId, activeOnly: true)
+        .map((member) => member.userId)
+        .where((userId) => userId != recipientId)
+        .toList(growable: false);
+  }
+
+  bool hasContributedToGiftPool(String giftPoolId, String userId) {
+    return giftPoolContributions.any(
+      (item) =>
+          item.giftPoolId == giftPoolId &&
+          item.contributorId == userId &&
+          (item.status == PaymentStatus.paid ||
+              item.status == PaymentStatus.pending),
+    );
+  }
+
+  String? giftPoolContributionError(String giftPoolId, int amountMinor) {
     final pool = giftPools.firstWhere((item) => item.id == giftPoolId);
     final remaining = pool.targetAmountMinor - giftPoolTotal(giftPoolId);
     if (amountMinor <= 0) {
       return 'Enter a contribution amount greater than zero.';
     }
-    // A pool can never collect more than its target.
     if (remaining <= 0) {
       return 'This gift pool has already reached its target.';
     }
     if (amountMinor > remaining) {
       return 'Contribution cannot exceed the ${money(remaining)} remaining.';
+    }
+
+    switch (pool.contributionRule) {
+      case GiftPoolContributionRule.equal:
+        final fixedAmount = pool.equalContributionAmountMinor ?? 0;
+        if (hasContributedToGiftPool(giftPoolId, currentUserId)) {
+          return 'You have already contributed to this equal amount pool.';
+        }
+        if (amountMinor != fixedAmount) {
+          return 'This pool uses an equal contribution of ${money(fixedAmount)}.';
+        }
+      case GiftPoolContributionRule.threshold:
+        final minAmount = pool.minContributionAmountMinor;
+        final maxAmount = pool.maxContributionAmountMinor;
+        final closesPool = amountMinor == remaining;
+        if (minAmount != null && amountMinor < minAmount && !closesPool) {
+          return 'Contribution must be at least ${money(minAmount)}.';
+        }
+        if (maxAmount != null && amountMinor > maxAmount) {
+          return 'Contribution cannot exceed ${money(maxAmount)}.';
+        }
+    }
+    return null;
+  }
+
+  String contributeToGiftPool(String giftPoolId, int amountMinor) {
+    final pool = giftPools.firstWhere((item) => item.id == giftPoolId);
+    final error = giftPoolContributionError(giftPoolId, amountMinor);
+    if (error != null) {
+      return error;
     }
     final contribution = GiftPoolContribution(
       id: _id('gift-pool-contribution'),
@@ -2197,7 +2331,7 @@ class AppStore extends ChangeNotifier {
   }) {
     final payment = PaymentTransaction(
       id: _id('payment'),
-      paymentProvider: 'sangai_pay',
+      paymentProvider: 'sajha_kharcha_pay',
       paymentReference: 'TXN-${_sequence + 777}',
       operationType: operationType,
       entityType: entityType,
@@ -2210,7 +2344,7 @@ class AppStore extends ChangeNotifier {
       confirmedAt: status == PaymentStatus.paid ? _now : null,
       failedAt: status == PaymentStatus.failed ? _now : null,
       rawPayload:
-          '{"provider":"sangai_pay","entity":"$entityType","amount_minor":$amountMinor}',
+          '{"provider":"sajha_kharcha_pay","entity":"$entityType","amount_minor":$amountMinor}',
     );
     payments.add(payment);
     return payment;
@@ -2710,6 +2844,9 @@ class AppStore extends ChangeNotifier {
       title: 'Tihar Gift Pool',
       template: 'Tihar',
       targetAmountMinor: npr(5000),
+      contributionRule: GiftPoolContributionRule.threshold,
+      minContributionAmountMinor: npr(250),
+      maxContributionAmountMinor: npr(1100),
       message: 'A group envelope for Laxmi.',
     );
 
@@ -2894,7 +3031,7 @@ class AppStore extends ChangeNotifier {
           )
           .id,
       title: 'Arjun paid contribution',
-      body: 'Cycle 3 contribution recorded through mock eSewa confirmation.',
+      body: 'Cycle 3 contribution recorded through eSewa confirmation.',
     );
     addDhukutiLedger(
       pool: familyDhukuti,
@@ -3000,7 +3137,7 @@ class AppStore extends ChangeNotifier {
           .firstWhere((item) => item.poolId == familyDhukuti.id)
           .id,
       title: 'Cycle 2 payout completed',
-      body: 'The previous cycle was settled in the mock ledger.',
+      body: 'The previous cycle was settled in the ledger.',
     );
     _notify(
       'u-sita',

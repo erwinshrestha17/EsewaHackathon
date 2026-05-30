@@ -108,7 +108,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: _last ? _complete : _next,
-                      child: Text(_last ? 'Continue with eSewa' : 'Next'),
+                      child: Text(_last ? 'Get Started' : 'Next'),
                     ),
                   ),
                 ],

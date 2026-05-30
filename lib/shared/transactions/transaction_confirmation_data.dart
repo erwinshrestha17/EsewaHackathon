@@ -20,7 +20,7 @@ class TransactionConfirmationData {
     this.items,
     this.note,
     this.paymentMethod = 'eSewa Wallet',
-    this.isMockPayment = true,
+    this.isLocalPayment = true,
     this.warningMessage,
     this.complianceNote,
     required this.confirmationButtonText,
@@ -50,7 +50,7 @@ class TransactionConfirmationData {
   final List<TransactionItem>? items;
   final String? note;
   final String paymentMethod;
-  final bool isMockPayment;
+  final bool isLocalPayment;
   final String? warningMessage;
   final String? complianceNote;
   final String confirmationButtonText;

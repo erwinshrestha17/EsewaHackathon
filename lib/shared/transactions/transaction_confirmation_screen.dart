@@ -236,8 +236,8 @@ class _HeroSummary extends StatelessWidget {
             runSpacing: 8,
             children: [
               _StatusBadge(
-                label: data.isMockPayment ? 'Mock Payment' : 'Payment',
-                icon: Icons.science_outlined,
+                label: data.isLocalPayment ? 'Payment Ready' : 'Payment',
+                icon: Icons.account_balance_wallet_outlined,
               ),
               _StatusBadge(
                 label: data.statusLabel ?? 'Draft',

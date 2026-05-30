@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/localization/app_localizations.dart';
 import 'settings_controller.dart';
 import 'settings_models.dart';
 import 'widgets/settings_section.dart';
@@ -17,19 +18,19 @@ class NotificationSettingsScreen extends StatelessWidget {
       builder: (context, _) {
         final state = controller.state;
         return Scaffold(
-          appBar: AppBar(title: const Text('Notifications')),
+          appBar: AppBar(title: Text(context.t('Notifications'))),
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: [
               Text(
-                'Choose which Sajha Kharcha events appear in the prototype notification center.',
+                context.t(
+                  'Choose which Sajha Kharcha events appear in your notification center.',
+                ),
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
-              const SizedBox(height: 12),
-              _PrototypeNotice(),
               const SizedBox(height: 16),
               SettingsSection(
-                title: 'Notification Types',
+                title: context.t('Notification Types'),
                 children: [
                   for (final preference in NotificationPreference.values)
                     SettingsSwitchTile(
@@ -61,32 +62,5 @@ class NotificationSettingsScreen extends StatelessWidget {
         Icons.event_available_outlined,
       NotificationPreference.dhukutiCycleAtRisk => Icons.warning_amber_outlined,
     };
-  }
-}
-
-class _PrototypeNotice extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colorScheme.tertiary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: colorScheme.tertiary.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.info_outline, color: colorScheme.tertiary),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Notification delivery is simulated in this prototype.',
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

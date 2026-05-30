@@ -64,7 +64,7 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Your avatar initials update from your display name in this prototype.',
+                      'Your avatar initials update from your display name.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),

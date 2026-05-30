@@ -18,8 +18,8 @@ class TransactionReceiptCard extends StatelessWidget {
       TransactionDetail('Amount', money(data.amount)),
       TransactionDetail('Payment method', data.paymentMethod),
       TransactionDetail(
-        'Payment mode',
-        data.isMockPayment ? 'Simulated payment' : 'Live payment',
+        'Payment status',
+        data.isLocalPayment ? 'Ready' : 'Live',
       ),
       TransactionDetail('Date/time', _dateTimeLabel(data.createdAt)),
       TransactionDetail('Payer', data.payerName),

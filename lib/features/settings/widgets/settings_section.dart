@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../shared/design_system/app_colors.dart';
 import '../../../shared/design_system/app_components.dart' as ds;
 import '../../../shared/design_system/app_spacing.dart';
 import '../../../shared/design_system/app_text_styles.dart';
@@ -33,7 +32,11 @@ class SettingsSection extends StatelessWidget {
               for (var index = 0; index < children.length; index++) ...[
                 children[index],
                 if (index < children.length - 1)
-                  const Divider(height: 1, indent: 64, color: AppColors.border),
+                  Divider(
+                    height: 1,
+                    indent: 64,
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
               ],
             ],
           ),

@@ -8,7 +8,7 @@ void main() {
   runApp(
     AuthScope(
       notifier: AuthController(),
-      child: StoreScope(notifier: AppStore(), child: const SangaiApp()),
+      child: StoreScope(notifier: AppStore(), child: const SajhaKharchaApp()),
     ),
   );
 }

@@ -4,9 +4,9 @@ import '../../src/finance.dart';
 import '../../src/models.dart';
 import 'home_models.dart';
 
-HomeDashboardData mockHomeDashboardData() {
+HomeDashboardData seededHomeDashboardData() {
   final user = AppUser(
-    id: 'mock-user',
+    id: 'seed-user',
     displayName: 'Erwin Shrestha',
     phone: '98XXXXXXXX',
     avatar: 'ES',
@@ -23,7 +23,7 @@ HomeDashboardData mockHomeDashboardData() {
     ),
     pendingSettlements: [
       HomePendingSettlement(
-        id: 'mock-settlement',
+        id: 'seed-settlement',
         payerName: 'Erwin Shrestha',
         payeeName: 'Sita Shrestha',
         counterpartyName: 'Sita Shrestha',
@@ -35,8 +35,8 @@ HomeDashboardData mockHomeDashboardData() {
     ],
     upcomingDhukutiDues: [
       HomeDhukutiDue(
-        contributionId: 'mock-dhukuti-contribution',
-        poolId: 'mock-dhukuti',
+        contributionId: 'seed-dhukuti-contribution',
+        poolId: 'seed-dhukuti',
         poolName: 'Family Dashain Dhukuti',
         amount: npr(5000),
         dueLabel: '3 days left',
@@ -48,7 +48,7 @@ HomeDashboardData mockHomeDashboardData() {
     ],
     activeGroups: [
       HomeGroupSummary(
-        id: 'mock-dashain',
+        id: 'seed-dashain',
         name: 'Dashain Khasi Group',
         category: 'Festival',
         icon: Icons.celebration_outlined,
@@ -58,7 +58,7 @@ HomeDashboardData mockHomeDashboardData() {
         recentText: 'Khasi expense added',
       ),
       HomeGroupSummary(
-        id: 'mock-picnic',
+        id: 'seed-picnic',
         name: 'College Picnic',
         category: 'Event',
         icon: Icons.event_outlined,
@@ -68,7 +68,7 @@ HomeDashboardData mockHomeDashboardData() {
         recentText: 'Ramesh paid settlement',
       ),
       HomeGroupSummary(
-        id: 'mock-apartment',
+        id: 'seed-apartment',
         name: 'Apartment Monthly',
         category: 'Household',
         icon: Icons.home_work_outlined,

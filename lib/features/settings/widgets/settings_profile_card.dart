@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../shared/design_system/app_colors.dart';
 import '../../../shared/design_system/app_components.dart' as ds;
 import '../../../shared/design_system/app_spacing.dart';
 import '../../../shared/design_system/app_text_styles.dart';
@@ -18,16 +17,14 @@ class SettingsProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ds.AppCard(
       onTap: onEdit,
       padding: EdgeInsets.zero,
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              AppColors.primaryGreen.withValues(alpha: 0.12),
-              AppColors.surface,
-            ],
+            colors: [scheme.primary.withValues(alpha: 0.12), scheme.surface],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -37,8 +34,8 @@ class SettingsProfileCard extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 30,
-              backgroundColor: AppColors.primaryGreen,
-              foregroundColor: Colors.white,
+              backgroundColor: scheme.primary,
+              foregroundColor: scheme.onPrimary,
               child: Text(
                 profile.initials,
                 style: const TextStyle(
@@ -72,12 +69,6 @@ class SettingsProfileCard extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
-            IconButton.filledTonal(
-              tooltip: 'Edit profile',
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined),
-            ),
           ],
         ),
       ),
@@ -96,7 +87,11 @@ class _ProfileDetail extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: AppColors.textSecondary),
+        Icon(
+          icon,
+          size: 16,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
         const SizedBox(width: AppSpacing.xs),
         Text(label, style: AppTextStyles.caption),
       ],

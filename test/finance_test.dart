@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sangai/src/app_state.dart';
-import 'package:sangai/src/finance.dart';
-import 'package:sangai/src/models.dart';
+import 'package:sajha_kharcha/src/app_state.dart';
+import 'package:sajha_kharcha/src/finance.dart';
+import 'package:sajha_kharcha/src/models.dart';
 
 void main() {
   test('equal shares keep integer paisa totals exact', () {
@@ -552,6 +552,45 @@ void main() {
     );
   });
 
+  test('connection reports require a note and block duplicate reports', () {
+    final store = AppStore();
+    final connection = store.connectionBetween('u-sita', 'u-maya')!;
+
+    expect(
+      store.reportConnection(
+        connection.id,
+        'u-maya',
+        'safety_review',
+        note: ' ',
+      ),
+      contains('note'),
+    );
+    expect(connection.reports, isEmpty);
+
+    expect(
+      store.reportConnection(
+        connection.id,
+        'u-maya',
+        'safety_review',
+        note: 'Harassing payment messages',
+      ),
+      isNull,
+    );
+    expect(connection.reports, hasLength(1));
+    expect(connection.reports.single.details, 'Harassing payment messages');
+
+    expect(
+      store.reportConnection(
+        connection.id,
+        'u-maya',
+        'safety_review',
+        note: 'Second report for same user',
+      ),
+      contains('already reported'),
+    );
+    expect(connection.reports, hasLength(1));
+  });
+
   test('zero-value gifts are rejected', () {
     final store = AppStore();
 
@@ -589,16 +628,96 @@ void main() {
     expect(store.openGift(gift.id), isFalse);
   });
 
+  test('gift pools enforce equal amount or min max contribution rules', () {
+    final store = AppStore();
+
+    final equalPoolId = store.createGiftPool(
+      groupId: 'g-dashain',
+      recipientId: 'u-laxmi',
+      title: 'Equal birthday pool',
+      template: 'Birthday',
+      targetAmountMinor: npr(1000),
+      contributionRule: GiftPoolContributionRule.equal,
+      equalContributionAmountMinor: npr(500),
+      message: 'Equal gift',
+    );
+
+    expect(
+      store.contributeToGiftPool(equalPoolId, npr(250)),
+      contains('equal contribution'),
+    );
+    expect(
+      store.contributeToGiftPool(equalPoolId, npr(500)),
+      startsWith('Added'),
+    );
+    expect(
+      store.contributeToGiftPool(equalPoolId, npr(500)),
+      contains('already contributed'),
+    );
+
+    final thresholdPoolId = store.createGiftPool(
+      groupId: 'g-dashain',
+      recipientId: 'u-laxmi',
+      title: 'Flexible wedding pool',
+      template: 'Wedding',
+      targetAmountMinor: npr(3000),
+      contributionRule: GiftPoolContributionRule.threshold,
+      minContributionAmountMinor: npr(250),
+      maxContributionAmountMinor: npr(1100),
+      message: 'Flexible gift',
+    );
+
+    expect(
+      store.contributeToGiftPool(thresholdPoolId, npr(100)),
+      contains('at least'),
+    );
+    expect(
+      store.contributeToGiftPool(thresholdPoolId, npr(1500)),
+      contains('cannot exceed'),
+    );
+    expect(
+      store.contributeToGiftPool(thresholdPoolId, npr(500)),
+      startsWith('Added'),
+    );
+  });
+
   test('QR invites preserve hyphenated user IDs', () {
     final store = AppStore()..switchUser('u-arjun');
-    final code = store.qrInviteCodeFor(store.userById('u-kabir'));
+    final code = store.qrInviteCodeFor(
+      store.userById('u-kabir'),
+      issuedAt: DateTime.now().subtract(const Duration(minutes: 4)),
+    );
 
-    expect(code, 'SANGAI-QR-u-kabir');
+    expect(code, startsWith('SAJHA-KHARCHA-QR-u-kabir-'));
     expect(store.qrInviteValidationError(code), isNull);
     expect(store.acceptQrInvite(code), 'Request sent to Kabir Lama.');
     expect(
       store.connectionBetween('u-arjun', 'u-kabir')?.status,
       ConnectionStatus.pending,
     );
+
+    final expiredCode = store.qrInviteCodeFor(
+      store.userById('u-kabir'),
+      issuedAt: DateTime.now().subtract(const Duration(minutes: 6)),
+    );
+    expect(
+      store.qrInviteValidationError(expiredCode),
+      'This QR invite expired. Ask for a new QR.',
+    );
+  });
+
+  test('account deletion is blocked by unsettled balances', () {
+    final store = AppStore();
+
+    expect(store.canDeleteCurrentAccount, isFalse);
+    expect(
+      store.accountDeletionBlockers,
+      containsAll(['You still owe NPR 4020.', 'You are still owed NPR 3400.']),
+    );
+
+    store.switchUser('u-kabir');
+
+    expect(store.accountDeletionBlockers, isEmpty);
+    expect(store.canDeleteCurrentAccount, isTrue);
   });
 }

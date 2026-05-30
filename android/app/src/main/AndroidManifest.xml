@@ -3,7 +3,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
-        android:label="sangai"
+        android:label="Sajha Kharcha"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

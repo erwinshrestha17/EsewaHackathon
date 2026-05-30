@@ -25,7 +25,7 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Sangai uses the camera to scan QR invite codes and itemized bills.</string>
+	<string>Sajha Kharcha uses the camera to scan QR invite codes and itemized bills.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
