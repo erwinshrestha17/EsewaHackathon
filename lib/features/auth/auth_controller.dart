@@ -10,7 +10,11 @@ import 'nepal_mobile.dart';
 class AuthController extends ChangeNotifier {
   AuthController({BackendApi? backendApi, FlutterSecureStorage? secureStorage})
     : _backendApi = backendApi ?? BackendApi(),
-      _secureStorage = secureStorage ?? const FlutterSecureStorage();
+      _secureStorage =
+          secureStorage ??
+          const FlutterSecureStorage(
+            mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+          );
 
   static const _hasSeenIntroKey = 'auth.hasSeenIntro';
   static const _activeUserProfileKey = 'auth.activeUserProfile';
