@@ -29,6 +29,26 @@ async function json(response) {
 }
 
 test(
+  'development CORS accepts Flutter web loopback origins on dynamic ports',
+  { skip: env.isProduction },
+  async () => {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'http://localhost:54732',
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'content-type',
+        },
+      });
+
+      assert.equal(response.status, 204);
+      assert.equal(response.headers.get('access-control-allow-origin'), 'http://localhost:54732');
+    });
+  },
+);
+
+test(
   'remote API smoke: login, profile, groups, community savings balance',
   {
     skip:

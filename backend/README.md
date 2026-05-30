@@ -53,6 +53,7 @@ Node.js/Express API for Sajha Kharcha. It uses Supabase PostgreSQL as the system
 
    ```bash
    flutter run -d macos --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
+   flutter run -d chrome --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
    ```
 
 ## Authentication
@@ -80,6 +81,7 @@ Run Flutter against the backend auth/API layer with:
 
 ```bash
 flutter run -d macos --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
+flutter run -d chrome --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
 ```
 
 ## Main Endpoints

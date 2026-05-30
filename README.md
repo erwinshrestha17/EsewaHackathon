@@ -83,7 +83,7 @@ flutter run -d macos --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
 Other generated targets are available too:
 
 ```sh
-flutter run -d chrome
+flutter run -d chrome --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
 flutter run -d ios
 flutter run -d android
 ```

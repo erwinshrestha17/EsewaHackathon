@@ -19,12 +19,30 @@ import { settlementsRouter } from './modules/settlements/settlements.routes.js';
 
 export const app = express();
 
+export function isAllowedCorsOrigin(origin) {
+  if (!origin || env.allowedOrigins.length === 0 || env.allowedOrigins.includes(origin)) {
+    return true;
+  }
+  if (env.isProduction) {
+    return false;
+  }
+  try {
+    const { hostname, protocol } = new URL(origin);
+    return (
+      protocol === 'http:' &&
+      (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]')
+    );
+  } catch (_error) {
+    return false;
+  }
+}
+
 app.disable('x-powered-by');
 app.use(helmet());
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || env.allowedOrigins.length === 0 || env.allowedOrigins.includes(origin)) {
+      if (isAllowedCorsOrigin(origin)) {
         callback(null, true);
         return;
       }
