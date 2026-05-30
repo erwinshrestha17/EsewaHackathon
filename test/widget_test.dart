@@ -545,6 +545,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Manual entry places split mode before item list', (
+    tester,
+  ) async {
+    final store = AppStore()..selectedGroupId = 'g-dashain';
+
+    await pumpGroupsForAddExpense(tester, store);
+    await openManualEntry(tester);
+
+    final whoPaidTop = tester.getTopLeft(find.text('Who paid?').first).dy;
+    final splitModeTop = tester.getTopLeft(find.text('Split mode').first).dy;
+    final itemListTop = tester.getTopLeft(find.text('Item list').first).dy;
+
+    expect(whoPaidTop, lessThan(splitModeTop));
+    expect(splitModeTop, lessThan(itemListTop));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'Manual entry defaults who paid to current user and remains editable',
     (tester) async {

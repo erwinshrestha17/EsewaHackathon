@@ -5819,6 +5819,28 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                 ),
                 const SizedBox(height: 14),
                 _ManualFormSection(
+                  title: 'Split mode',
+                  icon: Icons.call_split_outlined,
+                  subtitle: 'Equal, custom, or item split',
+                  child: DropdownButtonFormField<SplitMode>(
+                    initialValue: _splitMode,
+                    decoration: const InputDecoration(labelText: 'Split mode'),
+                    items: [
+                      for (final item in SplitMode.values)
+                        DropdownMenuItem(
+                          value: item,
+                          child: Text(enumLabel(item)),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        unawaited(_changeSplitMode(value));
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _ManualFormSection(
                   title: 'Item list',
                   icon: Icons.list_alt_outlined,
                   subtitle: _skipItemSplit
@@ -5907,28 +5929,6 @@ class _ManualEntrySheetState extends State<_ManualEntrySheet> {
                         _BillTotalsCard(totals: billTotals),
                       ],
                     ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                _ManualFormSection(
-                  title: 'Split mode',
-                  icon: Icons.call_split_outlined,
-                  subtitle: 'Equal, custom, or item split',
-                  child: DropdownButtonFormField<SplitMode>(
-                    initialValue: _splitMode,
-                    decoration: const InputDecoration(labelText: 'Split mode'),
-                    items: [
-                      for (final item in SplitMode.values)
-                        DropdownMenuItem(
-                          value: item,
-                          child: Text(enumLabel(item)),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        unawaited(_changeSplitMode(value));
-                      }
-                    },
                   ),
                 ),
                 const SizedBox(height: 14),
