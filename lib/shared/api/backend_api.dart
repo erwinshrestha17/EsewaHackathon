@@ -144,6 +144,15 @@ class BackendApi {
     return get('/api/notifications', accessToken: accessToken);
   }
 
+  Future<Map<String, dynamic>> requestConnection({
+    required String accessToken,
+    required String targetUserId,
+  }) {
+    return _post('/api/connections', {
+      'targetUserId': targetUserId,
+    }, accessToken: accessToken);
+  }
+
   Future<Map<String, dynamic>> appBootstrap({required String accessToken}) {
     return get('/api/app/bootstrap', accessToken: accessToken);
   }

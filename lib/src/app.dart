@@ -550,7 +550,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         activityTimelineLimit:
             _settingsController.state.activityTimelineLimit.count,
       ),
-      2 => const ConnectionsScreen(),
+      2 => ConnectionsScreen(onRequestConnection: _requestConnection),
       3 => const GiftsScreen(),
       4 => SettingsScreen(
         controller: _settingsController,
@@ -649,9 +649,20 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
                     ],
                   ),
                 Expanded(
-                  child: KeyedSubtree(
-                    key: ValueKey('shell-screen-$_index-$_visitSerial'),
-                    child: body,
+                  child: Column(
+                    children: [
+                      if (_incomingConnection(store) case final connection?)
+                        _IncomingConnectionBanner(
+                          connection: connection,
+                          onReview: () => _go(2),
+                        ),
+                      Expanded(
+                        child: KeyedSubtree(
+                          key: ValueKey('shell-screen-$_index-$_visitSerial'),
+                          child: body,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -733,7 +744,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     }
   }
 
-  Future<void> _loadBackendSnapshot() async {
+  Future<void> _loadBackendSnapshot({bool force = false}) async {
     final authController = _authController;
     final store = _store;
     if (!_backendApi.isConfigured ||
@@ -743,7 +754,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
       return;
     }
     final token = await authController.backendAccessToken();
-    if (token == null || token == _loadedBackendSnapshotToken) {
+    if (token == null || (!force && token == _loadedBackendSnapshotToken)) {
       return;
     }
     _loadingBackendSnapshot = true;
@@ -759,6 +770,37 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     } finally {
       _loadingBackendSnapshot = false;
     }
+  }
+
+  Future<String> _requestConnection(String targetUserId) async {
+    final store = _store;
+    final authController = _authController;
+    if (store == null) {
+      throw const BackendApiException('Store is not ready yet.');
+    }
+    final target = store.userById(targetUserId);
+    if (_backendApi.isConfigured && authController != null) {
+      final token = await authController.backendAccessToken();
+      if (token != null) {
+        await _backendApi.requestConnection(
+          accessToken: token,
+          targetUserId: targetUserId,
+        );
+        await _loadBackendSnapshot(force: true);
+        return 'Request sent to ${target.displayName}.';
+      }
+    }
+    return store.sendConnectionRequest(targetUserId);
+  }
+
+  Connection? _incomingConnection(AppStore store) {
+    for (final connection in store.connectionsFor(store.currentUserId)) {
+      if (connection.recipientId == store.currentUserId &&
+          connection.status == ConnectionStatus.pending) {
+        return connection;
+      }
+    }
+    return null;
   }
 
   void _openNotifications() {
@@ -858,7 +900,9 @@ class ActivityScreen extends StatelessWidget {
 }
 
 class ConnectionsScreen extends StatefulWidget {
-  const ConnectionsScreen({super.key});
+  const ConnectionsScreen({this.onRequestConnection, super.key});
+
+  final Future<String> Function(String targetUserId)? onRequestConnection;
 
   @override
   State<ConnectionsScreen> createState() => _ConnectionsScreenState();
@@ -866,6 +910,7 @@ class ConnectionsScreen extends StatefulWidget {
 
 class _ConnectionsScreenState extends State<ConnectionsScreen> {
   final _searchController = TextEditingController();
+  final Set<String> _requestingUserIds = <String>{};
 
   @override
   void dispose() {
@@ -935,20 +980,10 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
                 )
               else
                 for (final user in results)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: UserAvatar(user: user),
-                    title: Text(user.displayName),
-                    subtitle: Text(user.phone),
-                    trailing: FilledButton.icon(
-                      onPressed: () {
-                        final message = store.sendConnectionRequest(user.id);
-                        showSnack(context, message);
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.person_add_alt_1),
-                      label: const Text('Connect'),
-                    ),
+                  _ContactRequestTile(
+                    user: user,
+                    requesting: _requestingUserIds.contains(user.id),
+                    onConnect: () => _sendRequest(user),
                   ),
             ],
           ),
@@ -980,6 +1015,115 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
                 ),
         ),
       ],
+    );
+  }
+
+  Future<void> _sendRequest(AppUser user) async {
+    if (_requestingUserIds.contains(user.id)) {
+      return;
+    }
+    setState(() => _requestingUserIds.add(user.id));
+    try {
+      final action = widget.onRequestConnection;
+      final message = action == null
+          ? StoreScope.of(context).sendConnectionRequest(user.id)
+          : await action(user.id);
+      if (!mounted) {
+        return;
+      }
+      showSnack(context, message);
+    } on BackendApiException catch (error) {
+      if (mounted) {
+        showSnack(context, error.message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _requestingUserIds.remove(user.id));
+      }
+    }
+  }
+}
+
+class _ContactRequestTile extends StatelessWidget {
+  const _ContactRequestTile({
+    required this.user,
+    required this.requesting,
+    required this.onConnect,
+  });
+
+  final AppUser user;
+  final bool requesting;
+  final VoidCallback onConnect;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final connection = store.connectionBetween(store.currentUserId, user.id);
+    final isPending = connection?.status == ConnectionStatus.pending;
+    final isApproved = connection?.status == ConnectionStatus.approved;
+    final label = requesting
+        ? 'Sending...'
+        : isApproved
+        ? 'Connected'
+        : isPending
+        ? connection?.requesterId == store.currentUserId
+              ? 'Pending'
+              : 'Review'
+        : 'Connect';
+    final enabled = !requesting && !isPending && !isApproved;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: UserAvatar(user: user),
+      title: Text(user.displayName),
+      subtitle: Text(user.phone),
+      trailing: FilledButton.icon(
+        onPressed: enabled ? onConnect : null,
+        icon: Icon(isApproved ? Icons.check : Icons.person_add_alt_1),
+        label: Text(label),
+      ),
+    );
+  }
+}
+
+class _IncomingConnectionBanner extends StatelessWidget {
+  const _IncomingConnectionBanner({
+    required this.connection,
+    required this.onReview,
+  });
+
+  final Connection connection;
+  final VoidCallback onReview;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final requester = store.userById(connection.requesterId);
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      color: scheme.secondaryContainer,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: scheme.secondary,
+            foregroundColor: scheme.onSecondary,
+            child: const Icon(Icons.person_add_alt_1),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '${requester.displayName} wants to connect with you.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: scheme.onSecondaryContainer,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(onPressed: onReview, child: const Text('View request')),
+        ],
+      ),
     );
   }
 }

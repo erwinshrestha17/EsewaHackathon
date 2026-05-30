@@ -663,6 +663,38 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('incoming connection requests show a recipient banner', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    _mockLoggedInStorage();
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(backendApi: _FakeBackendApi()),
+        child: StoreScope(
+          notifier: AppStore.seeded(),
+          child: const SajhaKharchaApp(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kabir Lama wants to connect with you.'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'View request'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Incoming Requests'), findsOneWidget);
+    expect(find.text('Kabir Lama'), findsWidgets);
+  });
+
   testWidgets('connection report dialog requires note and blocks duplicates', (
     tester,
   ) async {

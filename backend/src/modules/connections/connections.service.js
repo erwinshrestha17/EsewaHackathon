@@ -5,6 +5,8 @@ import { db, assertDb, isUuid, maybeSingle, single } from '../common/db.js';
 import { profileDto } from '../common/mappers.js';
 
 const statuses = ['pending', 'approved', 'declined', 'expired', 'removed'];
+const connectionSelect =
+  '*, requester:profiles!connections_requester_id_fkey(*), recipient:profiles!connections_recipient_id_fkey(*)';
 
 function pair(a, b) {
   return a < b ? [a, b] : [b, a];
@@ -36,7 +38,7 @@ export async function listConnections(userId, status) {
   assertChoice(status, statuses, 'status');
   let query = db()
     .from('connections')
-    .select('*, requester:profiles!connections_requester_id_fkey(*), recipient:profiles!connections_recipient_id_fkey(*)')
+    .select(connectionSelect)
     .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`)
     .order('updated_at', { ascending: false });
   if (status) query = query.eq('status', status);
@@ -70,6 +72,9 @@ export async function requestConnection(userId, body) {
   const existing = await maybeSingle(
     db().from('connections').select('*').eq('user_low_id', low).eq('user_high_id', high),
   );
+  if (existing?.status === 'pending' || existing?.status === 'approved') {
+    throw new ApiError(409, `Connection already ${existing.status}.`);
+  }
   const payload = {
     requester_id: userId,
     recipient_id: target.id,
@@ -81,13 +86,13 @@ export async function requestConnection(userId, body) {
   const { data, error } = await db()
     .from('connections')
     .upsert(existing ? { ...payload, id: existing.id } : payload)
-    .select()
+    .select(connectionSelect)
     .single();
   assertDb(error);
   await createNotification({
     userId: target.id,
     title: 'Connection request',
-    body: 'You have a new Sajha Kharcha connection request.',
+    body: `${data.requester.full_name} wants to connect with you.`,
     type: 'connection_requested',
     metadata: { connectionId: data.id },
   });
