@@ -18,6 +18,7 @@ abstract final class AppTheme {
       error: AppColors.error,
       surface: AppColors.surface,
       onSurface: AppColors.textPrimary,
+      onSurfaceVariant: AppColors.textSecondary,
       outline: AppColors.border,
       outlineVariant: AppColors.border,
       shadow: AppColors.shadow,
@@ -120,11 +121,17 @@ abstract final class AppTheme {
           borderRadius: BorderRadius.circular(AppRadius.md),
           borderSide: const BorderSide(color: AppColors.error),
         ),
-        labelStyle: AppTextStyles.bodySecondary,
-        helperStyle: AppTextStyles.caption,
-        hintStyle: AppTextStyles.bodySecondary,
-        prefixStyle: AppTextStyles.body,
-        suffixStyle: AppTextStyles.body,
+        labelStyle: AppTextStyles.bodySecondary.copyWith(
+          color: AppColors.textSecondary,
+        ),
+        helperStyle: AppTextStyles.caption.copyWith(
+          color: AppColors.textSecondary,
+        ),
+        hintStyle: AppTextStyles.bodySecondary.copyWith(
+          color: AppColors.textSecondary,
+        ),
+        prefixStyle: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+        suffixStyle: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -190,14 +197,30 @@ abstract final class AppTheme {
         ),
       ),
       textTheme: base.textTheme.copyWith(
-        headlineMedium: AppTextStyles.largeScreenTitle,
-        headlineSmall: AppTextStyles.screenTitle,
-        titleLarge: AppTextStyles.sectionTitle.copyWith(fontSize: 20),
-        titleMedium: AppTextStyles.sectionTitle,
-        titleSmall: AppTextStyles.cardTitle,
-        bodyLarge: AppTextStyles.body.copyWith(fontSize: 15),
-        bodyMedium: AppTextStyles.body,
-        bodySmall: AppTextStyles.bodySecondary,
+        headlineMedium: AppTextStyles.largeScreenTitle.copyWith(
+          color: AppColors.textPrimary,
+        ),
+        headlineSmall: AppTextStyles.screenTitle.copyWith(
+          color: AppColors.textPrimary,
+        ),
+        titleLarge: AppTextStyles.sectionTitle.copyWith(
+          fontSize: 20,
+          color: AppColors.textPrimary,
+        ),
+        titleMedium: AppTextStyles.sectionTitle.copyWith(
+          color: AppColors.textPrimary,
+        ),
+        titleSmall: AppTextStyles.cardTitle.copyWith(
+          color: AppColors.textPrimary,
+        ),
+        bodyLarge: AppTextStyles.body.copyWith(
+          fontSize: 15,
+          color: AppColors.textPrimary,
+        ),
+        bodyMedium: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+        bodySmall: AppTextStyles.bodySecondary.copyWith(
+          color: AppColors.textSecondary,
+        ),
         labelLarge: AppTextStyles.caption.copyWith(
           fontSize: 13,
           color: AppColors.textSecondary,

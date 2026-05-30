@@ -190,6 +190,19 @@ void main() {
     expect(card.color, AppTheme.dark.colorScheme.surface);
   });
 
+  test('light theme keeps explicit readable text defaults', () {
+    final textTheme = AppTheme.light.textTheme;
+    final inputTheme = AppTheme.light.inputDecorationTheme;
+
+    expect(textTheme.headlineSmall?.color, AppColors.textPrimary);
+    expect(textTheme.titleMedium?.color, AppColors.textPrimary);
+    expect(textTheme.titleSmall?.color, AppColors.textPrimary);
+    expect(textTheme.bodyMedium?.color, AppColors.textPrimary);
+    expect(textTheme.bodySmall?.color, AppColors.textSecondary);
+    expect(inputTheme.labelStyle?.color, AppColors.textSecondary);
+    expect(inputTheme.hintStyle?.color, AppColors.textSecondary);
+  });
+
   Future<void> pumpGroupsForAddExpense(
     WidgetTester tester,
     AppStore store,
