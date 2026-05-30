@@ -283,21 +283,18 @@ void main() {
     );
   });
 
-  test('non-admin members cannot rename groups', () {
+  test('active expense group members can rename groups', () {
     final store = AppStore();
     final groupId = store.createGroup(
-      name: 'Admin only name',
+      name: 'Member editable name',
       category: GroupCategory.custom,
       memberIds: const ['u-arjun'],
     );
 
     store.switchUser('u-arjun');
-    expect(
-      store.renameGroup(groupId, 'Member renamed'),
-      'Only group admins can rename this group.',
-    );
+    expect(store.renameGroup(groupId, 'Member renamed'), isNull);
 
-    expect(store.groupById(groupId).name, 'Admin only name');
+    expect(store.groupById(groupId).name, 'Member renamed');
   });
 
   test('Saving Circle admins can rename circle groups', () {
@@ -341,6 +338,56 @@ void main() {
       isTrue,
     );
   });
+
+  test(
+    'external settlements update balances only after recipient approval',
+    () {
+      final store = AppStore();
+      final groupId = store.createGroup(
+        name: 'Cash settlement test',
+        category: GroupCategory.custom,
+        memberIds: const ['u-arjun'],
+      );
+      store.addExpense(
+        groupId: groupId,
+        title: 'Cash lunch',
+        totalMinor: npr(200),
+        payerId: 'u-sita',
+        category: 'custom',
+        splitMode: SplitMode.equal,
+        participantIds: const ['u-sita', 'u-arjun'],
+      );
+      final suggestion = store.suggestionsForGroup(groupId).single;
+
+      store.switchUser('u-arjun');
+      final request = store.createOrReuseExternalSettlement(suggestion);
+
+      expect(request.isExternal, isTrue);
+      expect(request.status, PaymentStatus.pending);
+      expect(store.balanceForUserInGroup(groupId, 'u-arjun'), -npr(100));
+      expect(
+        store.approveExternalSettlement(request.id),
+        'Only the settlement recipient can approve this request.',
+      );
+
+      store.switchUser('u-sita');
+      expect(store.approveExternalSettlement(request.id), isNull);
+
+      expect(request.status, PaymentStatus.paid);
+      expect(store.balancesForGroup(groupId), isEmpty);
+      final payment = store.payments.firstWhere(
+        (item) => item.id == request.paymentTransactionId,
+      );
+      expect(payment.paymentProvider, 'external');
+      expect(
+        store.activityForGroup(groupId).map((item) => item.eventType),
+        containsAll([
+          'external_settlement_requested',
+          'external_settlement_approved',
+        ]),
+      );
+    },
+  );
 
   test('item receipt expenses create auditable item shares', () {
     final store = AppStore();

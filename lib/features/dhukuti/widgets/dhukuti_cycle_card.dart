@@ -81,7 +81,7 @@ class DhukutiCycleCard extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
               subtitle: Text(
-                '${dateLabel(cycle.dueDate)} • Payout recipient: ${store.nameOf(cycle.payoutRecipientId)}',
+                '${dateLabel(cycle.dueDate)} • Recipient: ${store.nameOf(cycle.payoutRecipientId)}',
               ),
               trailing: DhukutiStatusBadge(
                 label: dhukutiEnumLabel(cycle.status),

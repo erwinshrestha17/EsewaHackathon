@@ -56,7 +56,7 @@ class UpcomingDhukutiCard extends StatelessWidget {
                             ?.copyWith(fontWeight: FontWeight.w900),
                       ),
                       Text(
-                        '${item.cycleLabel} · payout recipient: ${item.payoutRecipientName}',
+                        '${item.cycleLabel} · Recipient: ${item.payoutRecipientName}',
                         style: TextStyle(color: scheme.onSurfaceVariant),
                       ),
                     ],

@@ -95,7 +95,7 @@ class DhukutiPoolCard extends StatelessWidget {
               ),
               _Fact(
                 icon: Icons.person_outline,
-                label: 'Payout: $recipientName',
+                label: 'Recipient: $recipientName',
               ),
               _Fact(
                 icon: Icons.calendar_today_outlined,

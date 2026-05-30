@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sajha_kharcha/features/auth/auth_controller.dart';
 import 'package:sajha_kharcha/features/auth/models/user_profile.dart';
+import 'package:sajha_kharcha/features/auth/screens/auth_screen.dart';
 import 'package:sajha_kharcha/features/auth/screens/login_form.dart';
 import 'package:sajha_kharcha/features/auth/screens/register_form.dart';
 import 'package:sajha_kharcha/features/home/home_controller.dart';
+import 'package:sajha_kharcha/features/settings/settings_screen.dart';
 import 'package:sajha_kharcha/shared/design_system/app_components.dart' as ds;
 import 'package:sajha_kharcha/shared/design_system/app_colors.dart';
 import 'package:sajha_kharcha/shared/design_system/app_theme.dart';
@@ -150,6 +152,28 @@ void main() {
     expect(controller.state.activeUser?.dateOfBirth, DateTime(2000, 1, 2));
   });
 
+  testWidgets('auth screen follows the active theme background', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(),
+        child: MaterialApp(
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: ThemeMode.dark,
+          home: const AuthScreen(),
+        ),
+      ),
+    );
+
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    expect(scaffold.backgroundColor, AppTheme.dark.scaffoldBackgroundColor);
+
+    final card = tester.widget<Card>(find.byType(Card));
+    expect(card.color, AppTheme.dark.colorScheme.surface);
+  });
+
   Future<void> pumpGroupsForAddExpense(
     WidgetTester tester,
     AppStore store,
@@ -181,6 +205,24 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> chooseTheme(WidgetTester tester, String label) async {
+    final settingsScroll = find.descendant(
+      of: find.byType(SettingsScreen),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(
+      find.text('Theme'),
+      260,
+      scrollable: settingsScroll,
+    );
+    await tester.drag(settingsScroll, const Offset(0, -160));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Theme'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(label));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('Sajha Kharcha shell renders seeded dashboard', (tester) async {
     SharedPreferences.setMockInitialValues({
       'auth.hasSeenIntro': true,
@@ -208,6 +250,82 @@ void main() {
     expect(find.text('Create Group'), findsNothing);
     expect(find.text('Send Gift'), findsWidgets);
     expect(find.text('Activity'), findsNothing);
+  });
+
+  testWidgets('theme choice applies across main and auth routes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    tester.binding.platformDispatcher.platformBrightnessTestValue =
+        Brightness.dark;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      tester.binding.platformDispatcher.clearPlatformBrightnessTestValue();
+    });
+    SharedPreferences.setMockInitialValues({
+      'auth.hasSeenIntro': true,
+      'auth.isLoggedIn': true,
+      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
+    });
+
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(),
+        child: StoreScope(notifier: AppStore(), child: const SajhaKharchaApp()),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Settings'));
+    await tester.pumpAndSettle();
+    expect(
+      Theme.of(tester.element(find.byType(SettingsScreen))).brightness,
+      Brightness.dark,
+    );
+
+    await chooseTheme(tester, 'Light');
+    expect(
+      Theme.of(tester.element(find.byType(SettingsScreen))).brightness,
+      Brightness.light,
+    );
+
+    Navigator.of(
+      tester.element(find.byType(SettingsScreen)),
+    ).pushNamed('/auth');
+    await tester.pumpAndSettle();
+    expect(
+      Theme.of(tester.element(find.byType(AuthScreen))).brightness,
+      Brightness.light,
+    );
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+      AppTheme.light.scaffoldBackgroundColor,
+    );
+
+    Navigator.of(tester.element(find.byType(AuthScreen))).pop();
+    await tester.pumpAndSettle();
+
+    await chooseTheme(tester, 'Dark');
+    expect(
+      Theme.of(tester.element(find.byType(SettingsScreen))).brightness,
+      Brightness.dark,
+    );
+
+    Navigator.of(
+      tester.element(find.byType(SettingsScreen)),
+    ).pushNamed('/auth');
+    await tester.pumpAndSettle();
+    expect(
+      Theme.of(tester.element(find.byType(AuthScreen))).brightness,
+      Brightness.dark,
+    );
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+      AppTheme.dark.scaffoldBackgroundColor,
+    );
   });
 
   test('upcoming Saving Circle card skips paid past cycles', () {
@@ -859,8 +977,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('admin sees rename action in group detail', (tester) async {
-    final store = AppStore()..selectedGroupId = 'g-dashain';
+  testWidgets('active expense member sees rename action in group detail', (
+    tester,
+  ) async {
+    final store = AppStore()..selectedGroupId = 'g-apartment';
 
     await tester.pumpWidget(
       StoreScope(
@@ -895,7 +1015,84 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Family Dashain Saving Circle'), findsWidgets);
-    expect(find.widgetWithText(OutlinedButton, 'Rename'), findsOneWidget);
+    final renameButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Rename'),
+    );
+    expect(
+      renameButton.style?.minimumSize?.resolve(<WidgetState>{}),
+      const Size(0, 40),
+    );
+  });
+
+  testWidgets('external settlement request requires recipient approval', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 7000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final store = AppStore();
+    final groupId = store.createGroup(
+      name: 'Offline Lunch',
+      category: GroupCategory.custom,
+      memberIds: const ['u-arjun'],
+    );
+    store.addExpense(
+      groupId: groupId,
+      title: 'Cash momo',
+      totalMinor: npr(200),
+      payerId: 'u-sita',
+      category: 'custom',
+      splitMode: SplitMode.equal,
+      participantIds: const ['u-sita', 'u-arjun'],
+    );
+    store.switchUser('u-arjun');
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: MaterialApp(
+          home: Scaffold(body: GroupDetail(group: store.groupById(groupId))),
+        ),
+      ),
+    );
+
+    expect(find.widgetWithText(FilledButton, 'Settle Now'), findsOneWidget);
+    expect(
+      find.widgetWithText(OutlinedButton, 'Paid outside app'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Paid outside app'));
+    await tester.pumpAndSettle();
+    expect(find.text('Record external settlement'), findsOneWidget);
+
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Send Approval Request'),
+    );
+    await tester.pumpAndSettle();
+
+    final request = store.settlements.singleWhere((item) => item.isExternal);
+    expect(request.status, PaymentStatus.pending);
+    expect(find.text('Approval pending'), findsOneWidget);
+
+    store.switchUser('u-sita');
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Approve'));
+    await tester.pumpAndSettle();
+    expect(find.text('Approve external settlement'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Approve Settlement'));
+    await tester.pumpAndSettle();
+
+    expect(request.status, PaymentStatus.paid);
+    expect(store.balancesForGroup(groupId), isEmpty);
+    expect(find.text('Nothing to settle'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Add expense starts with participants and supports payer rows', (

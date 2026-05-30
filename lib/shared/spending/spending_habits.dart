@@ -64,45 +64,19 @@ class _SpendingHabitsPanelState extends State<SpendingHabitsPanel> {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: AppSpacing.md,
-          runSpacing: AppSpacing.sm,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          alignment: WrapAlignment.spaceBetween,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(widget.title, style: AppTextStyles.sectionTitle),
-                  if (widget.subtitle != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.subtitle!,
-                      style: AppTextStyles.bodySecondary.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ],
+            Text(widget.title, style: AppTextStyles.sectionTitle),
+            if (widget.subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                widget.subtitle!,
+                style: AppTextStyles.bodySecondary.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SegmentedButton<SpendingPeriod>(
-                segments: [
-                  for (final period in SpendingPeriod.values)
-                    ButtonSegment(
-                      value: period,
-                      label: Text(context.t(period.label)),
-                    ),
-                ],
-                selected: {_period},
-                onSelectionChanged: (value) =>
-                    setState(() => _period = value.first),
-              ),
-            ),
+            ],
           ],
         ),
         const SizedBox(height: AppSpacing.md),
@@ -113,6 +87,25 @@ class _SpendingHabitsPanelState extends State<SpendingHabitsPanel> {
         ),
         const SizedBox(height: AppSpacing.md),
         _SpendingBarChart(buckets: buckets),
+        const SizedBox(height: AppSpacing.md),
+        Align(
+          alignment: Alignment.bottomLeft,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<SpendingPeriod>(
+              segments: [
+                for (final period in SpendingPeriod.values)
+                  ButtonSegment(
+                    value: period,
+                    label: Text(context.t(period.label)),
+                  ),
+              ],
+              selected: {_period},
+              onSelectionChanged: (value) =>
+                  setState(() => _period = value.first),
+            ),
+          ),
+        ),
       ],
     );
 

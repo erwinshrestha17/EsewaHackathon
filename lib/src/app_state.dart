@@ -627,13 +627,30 @@ class AppStore extends ChangeNotifier {
     );
   }
 
+  bool canRenameGroup(String groupId, String userId) {
+    final group = groupByIdOrNull(groupId);
+    if (group == null || group.isDisbanded) {
+      return false;
+    }
+    if (isGroupAdmin(groupId, userId)) {
+      return true;
+    }
+    if (group.kind != GroupKind.expense) {
+      return false;
+    }
+    final member = memberForGroup(groupId, userId);
+    return member?.status == MemberStatus.active;
+  }
+
   String? renameGroup(String groupId, String name) {
     final group = groupByIdOrNull(groupId);
     if (group == null || group.isDisbanded) {
       return 'Group is no longer available.';
     }
-    if (!isGroupAdmin(groupId, currentUserId)) {
-      return 'Only group admins can rename this group.';
+    if (!canRenameGroup(groupId, currentUserId)) {
+      return group.kind == GroupKind.expense
+          ? 'Only active group members can rename this group.'
+          : 'Only group admins can rename this group.';
     }
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
@@ -1255,6 +1272,15 @@ class AppStore extends ChangeNotifier {
         .toList();
   }
 
+  Settlement? settlementById(String settlementId) {
+    for (final settlement in settlements) {
+      if (settlement.id == settlementId) {
+        return settlement;
+      }
+    }
+    return null;
+  }
+
   int get pendingSettlementAmountForCurrentUser {
     return pendingSettlementsForCurrentUser.fold<int>(
       0,
@@ -1321,6 +1347,117 @@ class AppStore extends ChangeNotifier {
     );
     notifyListeners();
     return settlement;
+  }
+
+  Settlement createOrReuseExternalSettlement(SettlementSuggestion suggestion) {
+    if (currentUserId != suggestion.payerId) {
+      throw StateError('Only the payer can initiate an external settlement.');
+    }
+    final existing = settlements.where(
+      (settlement) =>
+          settlement.groupId == suggestion.groupId &&
+          settlement.payerId == suggestion.payerId &&
+          settlement.payeeId == suggestion.payeeId &&
+          settlement.amountMinor == suggestion.amountMinor &&
+          settlement.status == PaymentStatus.pending,
+    );
+    if (existing.isNotEmpty) {
+      return existing.first;
+    }
+    final settlement = Settlement(
+      id: _id('settlement'),
+      groupId: suggestion.groupId,
+      payerId: suggestion.payerId,
+      payeeId: suggestion.payeeId,
+      amountMinor: suggestion.amountMinor,
+      status: PaymentStatus.pending,
+      idempotencyKey:
+          'external-${suggestion.groupId}-${suggestion.payerId}-${suggestion.payeeId}-${suggestion.amountMinor}',
+      idempotencyScope: suggestion.groupId,
+      operationType: 'external_settlement',
+      expiresAt: _now.add(const Duration(days: 7)),
+      balanceSnapshotHash: balancesForGroup(suggestion.groupId).toString(),
+      createdAt: _now,
+    );
+    settlements.add(settlement);
+    _activity(
+      actorId: currentUserId,
+      groupId: suggestion.groupId,
+      eventType: 'external_settlement_requested',
+      entityType: 'settlement',
+      entityId: settlement.id,
+      title: 'External settlement requested',
+      body:
+          '${nameOf(suggestion.payerId)} marked ${money(suggestion.amountMinor)} paid outside Sajha Kharcha. ${nameOf(suggestion.payeeId)} needs to approve it.',
+    );
+    _notify(
+      suggestion.payeeId,
+      'settlement',
+      'External settlement approval',
+      '${nameOf(suggestion.payerId)} says they paid you ${money(suggestion.amountMinor)} outside Sajha Kharcha.',
+    );
+    notifyListeners();
+    return settlement;
+  }
+
+  String? approveExternalSettlement(String settlementId) {
+    final settlement = settlementById(settlementId);
+    if (settlement == null) {
+      return 'Settlement request not found.';
+    }
+    if (!settlement.isExternal) {
+      return 'Only external settlement requests can be approved here.';
+    }
+    if (settlement.status != PaymentStatus.pending) {
+      return 'Only pending external settlement requests can be approved.';
+    }
+    if (currentUserId != settlement.payeeId) {
+      return 'Only the settlement recipient can approve this request.';
+    }
+    final payment = _payment(
+      actorId: currentUserId,
+      entityId: settlement.id,
+      entityType: 'settlement',
+      operationType: settlement.operationType,
+      amountMinor: settlement.amountMinor,
+      status: PaymentStatus.paid,
+      paymentProvider: 'external',
+      rawPayload:
+          '{"provider":"external","entity":"settlement","amount_minor":${settlement.amountMinor}}',
+    );
+    settlement
+      ..paymentTransactionId = payment.id
+      ..status = PaymentStatus.paid
+      ..paidAt = _now;
+    final group = groupById(settlement.groupId);
+    group.latestSettlementLockAt = settlement.paidAt;
+    for (final expense in expenses.where(
+      (expense) =>
+          expense.groupId == settlement.groupId &&
+          expense.status == ExpenseStatus.active &&
+          expense.lockedAt == null &&
+          !expense.createdAt.isAfter(settlement.paidAt!),
+    )) {
+      expense.lockedAt = settlement.paidAt;
+    }
+    _activity(
+      actorId: currentUserId,
+      groupId: settlement.groupId,
+      eventType: 'external_settlement_approved',
+      entityType: 'settlement',
+      entityId: settlement.id,
+      title: 'External settlement approved',
+      body:
+          '${nameOf(settlement.payeeId)} approved ${nameOf(settlement.payerId)}\'s external payment of ${money(settlement.amountMinor)}.',
+    );
+    _notify(
+      settlement.payerId,
+      'settlement',
+      'External settlement approved',
+      '${nameOf(settlement.payeeId)} approved your external settlement of ${money(settlement.amountMinor)}.',
+    );
+    notifyListeners();
+    return null;
   }
 
   void confirmSettlement(String settlementId, {bool fail = false}) {
@@ -2334,10 +2471,12 @@ class AppStore extends ChangeNotifier {
     required String operationType,
     required int amountMinor,
     required PaymentStatus status,
+    String paymentProvider = 'sajha_kharcha_pay',
+    String? rawPayload,
   }) {
     final payment = PaymentTransaction(
       id: _id('payment'),
-      paymentProvider: 'sajha_kharcha_pay',
+      paymentProvider: paymentProvider,
       paymentReference: 'TXN-${_sequence + 777}',
       operationType: operationType,
       entityType: entityType,
@@ -2350,7 +2489,8 @@ class AppStore extends ChangeNotifier {
       confirmedAt: status == PaymentStatus.paid ? _now : null,
       failedAt: status == PaymentStatus.failed ? _now : null,
       rawPayload:
-          '{"provider":"sajha_kharcha_pay","entity":"$entityType","amount_minor":$amountMinor}',
+          rawPayload ??
+          '{"provider":"$paymentProvider","entity":"$entityType","amount_minor":$amountMinor}',
     );
     payments.add(payment);
     return payment;
@@ -3054,8 +3194,8 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_recipient_current',
       entityType: 'dhukuti_pool',
       entityId: familyDhukuti.id,
-      title: 'Sita is current payout recipient',
-      body: 'Payout turn follows the visible rotation order.',
+      title: 'Sita is current recipient',
+      body: 'Recipient turn follows the visible rotation order.',
     );
     addDhukutiLedger(
       pool: familyDhukuti,

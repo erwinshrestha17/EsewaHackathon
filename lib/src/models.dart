@@ -560,6 +560,8 @@ class Settlement {
   final String balanceSnapshotHash;
   final DateTime createdAt;
   DateTime? paidAt;
+
+  bool get isExternal => operationType == 'external_settlement';
 }
 
 class AdjustmentEntry {

@@ -46,9 +46,10 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F8EF),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Center(
         child: FadeTransition(
           opacity: _fade,
@@ -72,10 +73,10 @@ class _SplashScreenState extends State<SplashScreen>
                       ),
                     ],
                   ),
-                  child: const Text(
+                  child: Text(
                     'S',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: colorScheme.onPrimary,
                       fontSize: 42,
                       fontWeight: FontWeight.w900,
                     ),
@@ -84,7 +85,7 @@ class _SplashScreenState extends State<SplashScreen>
                 const SizedBox(height: 22),
                 Text(
                   'Sajha Kharcha',
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                  style: theme.textTheme.displaySmall?.copyWith(
                     fontWeight: FontWeight.w900,
                     color: colorScheme.primary,
                   ),
@@ -93,7 +94,7 @@ class _SplashScreenState extends State<SplashScreen>
                 Text(
                   'Connect, split, gift, and settle together.',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  style: theme.textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
                 ),

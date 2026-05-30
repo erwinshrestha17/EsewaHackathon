@@ -46,25 +46,52 @@ class StoreScope extends InheritedNotifier<AppStore> {
   }
 }
 
-class SajhaKharchaApp extends StatelessWidget {
+class SajhaKharchaApp extends StatefulWidget {
   const SajhaKharchaApp({super.key});
 
   @override
+  State<SajhaKharchaApp> createState() => _SajhaKharchaAppState();
+}
+
+class _SajhaKharchaAppState extends State<SajhaKharchaApp> {
+  final _settingsController = SettingsController();
+
+  @override
+  void dispose() {
+    _settingsController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Sajha Kharcha',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
-      initialRoute: '/splash',
-      routes: {
-        '/splash': (_) => const SplashScreen(),
-        '/intro': (_) => const OnboardingScreen(),
-        '/auth': (_) => const AuthScreen(),
-        '/main': (_) => const SajhaKharchaShell(),
+    return ListenableBuilder(
+      listenable: _settingsController,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'Sajha Kharcha',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: _materialThemeMode(_settingsController.state.themeMode),
+          initialRoute: '/splash',
+          routes: {
+            '/splash': (_) => const SplashScreen(),
+            '/intro': (_) => const OnboardingScreen(),
+            '/auth': (_) => const AuthScreen(),
+            '/main': (_) =>
+                SajhaKharchaShell(settingsController: _settingsController),
+          },
+        );
       },
     );
+  }
+
+  ThemeMode _materialThemeMode(AppThemeMode mode) {
+    return switch (mode) {
+      AppThemeMode.system => ThemeMode.system,
+      AppThemeMode.light => ThemeMode.light,
+      AppThemeMode.dark => ThemeMode.dark,
+    };
   }
 }
 
@@ -289,8 +316,86 @@ Future<void> _openRemainingSettlementPicker(
   _openSettlementConfirmation(context, store, selected.suggestion);
 }
 
+Future<void> showExternalSettlementRequestDialog(
+  BuildContext context,
+  SettlementSuggestion suggestion,
+) async {
+  final store = StoreScope.of(context);
+  final payerName = store.nameOf(suggestion.payerId);
+  final payeeName = store.nameOf(suggestion.payeeId);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Record external settlement'),
+      content: Text(
+        'Use this when $payerName paid $payeeName ${friendlyMoney(suggestion.amountMinor)} outside Sajha Kharcha, like cash or bank transfer. $payeeName must approve before balances update.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Send Approval Request'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+  final settlement = store.createOrReuseExternalSettlement(suggestion);
+  showSnack(
+    context,
+    'Approval request sent to ${store.nameOf(settlement.payeeId)}.',
+  );
+}
+
+Future<void> showApproveExternalSettlementDialog(
+  BuildContext context,
+  String settlementId,
+) async {
+  final store = StoreScope.of(context);
+  final settlement = store.settlementById(settlementId);
+  if (settlement == null) {
+    showSnack(context, 'Settlement request not found.');
+    return;
+  }
+  final payerName = store.nameOf(settlement.payerId);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Approve external settlement'),
+      content: Text(
+        'Approve only after you received ${friendlyMoney(settlement.amountMinor)} from $payerName outside Sajha Kharcha.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Approve Settlement'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+  final error = store.approveExternalSettlement(settlementId);
+  showSnack(
+    context,
+    error ?? 'External settlement approved. Group balances are updated.',
+  );
+}
+
 class SajhaKharchaShell extends StatefulWidget {
-  const SajhaKharchaShell({super.key});
+  const SajhaKharchaShell({required this.settingsController, super.key});
+
+  final SettingsController settingsController;
 
   @override
   State<SajhaKharchaShell> createState() => _SajhaKharchaShellState();
@@ -300,9 +405,10 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   var _index = 0;
   var _visitSerial = 0;
   var _groupsInitialTab = GroupKind.expense;
-  final _settingsController = SettingsController();
   AuthController? _authController;
   AppStore? _store;
+
+  SettingsController get _settingsController => widget.settingsController;
 
   static const _destinations = <_Destination>[
     _Destination('Home', Icons.home_outlined, Icons.home),
@@ -323,11 +429,18 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   }
 
   @override
+  void didUpdateWidget(covariant SajhaKharchaShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.settingsController != widget.settingsController) {
+      oldWidget.settingsController.removeListener(_handleSettingsChanged);
+      _settingsController.addListener(_handleSettingsChanged);
+    }
+  }
+
+  @override
   void dispose() {
     _authController?.removeListener(_handleAuthChanged);
-    _settingsController
-      ..removeListener(_handleSettingsChanged)
-      ..dispose();
+    _settingsController.removeListener(_handleSettingsChanged);
     super.dispose();
   }
 
@@ -392,119 +505,105 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
 
     return SajhaLocalizationScope(
       language: _settingsController.state.language,
-      child: Theme(
-        data: _themeForSettings(context),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 900;
-            final scheme = Theme.of(context).colorScheme;
-            return Scaffold(
-              appBar: _index == 0
-                  ? null
-                  : AppBar(
-                      title: Row(
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: scheme.primary,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              'S',
-                              style: TextStyle(
-                                color: scheme.onPrimary,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 900;
+          final scheme = Theme.of(context).colorScheme;
+          return Scaffold(
+            appBar: _index == 0
+                ? null
+                : AppBar(
+                    title: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          const SizedBox(width: 12),
-                          const Flexible(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Sajha Kharcha'),
-                                Text(
-                                  'Scan. Split. Settle. Together.',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                              ],
+                          child: Text(
+                            'S',
+                            style: TextStyle(
+                              color: scheme.onPrimary,
+                              fontWeight: FontWeight.w800,
                             ),
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        IconButton(
-                          tooltip: 'Notifications',
-                          onPressed: _openNotifications,
-                          icon: Badge(
-                            isLabelVisible: store.currentNotifications
-                                .where((item) => !item.read)
-                                .isNotEmpty,
-                            child: const Icon(Icons.notifications_outlined),
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        _CurrentUserBadge(store: store),
                         const SizedBox(width: 12),
-                      ],
-                    ),
-              body: Row(
-                children: [
-                  if (wide)
-                    NavigationRail(
-                      selectedIndex: _index,
-                      onDestinationSelected: _handleDestinationSelected,
-                      labelType: NavigationRailLabelType.all,
-                      destinations: [
-                        for (final destination in _destinations)
-                          NavigationRailDestination(
-                            icon: Icon(destination.icon),
-                            selectedIcon: Icon(destination.selectedIcon),
-                            label: Text(context.t(destination.label)),
+                        const Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Sajha Kharcha'),
+                              Text(
+                                'Scan. Split. Settle. Together.',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ],
                           ),
+                        ),
                       ],
                     ),
-                  Expanded(
-                    child: KeyedSubtree(
-                      key: ValueKey('shell-screen-$_index-$_visitSerial'),
-                      child: body,
-                    ),
+                    actions: [
+                      IconButton(
+                        tooltip: 'Notifications',
+                        onPressed: _openNotifications,
+                        icon: Badge(
+                          isLabelVisible: store.currentNotifications
+                              .where((item) => !item.read)
+                              .isNotEmpty,
+                          child: const Icon(Icons.notifications_outlined),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      _CurrentUserBadge(store: store),
+                      const SizedBox(width: 12),
+                    ],
                   ),
-                ],
-              ),
-              bottomNavigationBar: wide
-                  ? null
-                  : ds.AppBottomNavigationBar(
-                      selectedIndex: _index,
-                      onDestinationSelected: _handleDestinationSelected,
-                      destinations: [
-                        for (final destination in _destinations)
-                          NavigationDestination(
-                            icon: Icon(destination.icon),
-                            selectedIcon: Icon(destination.selectedIcon),
-                            label: context.t(destination.label),
-                          ),
-                      ],
-                    ),
-            );
-          },
-        ),
+            body: Row(
+              children: [
+                if (wide)
+                  NavigationRail(
+                    selectedIndex: _index,
+                    onDestinationSelected: _handleDestinationSelected,
+                    labelType: NavigationRailLabelType.all,
+                    destinations: [
+                      for (final destination in _destinations)
+                        NavigationRailDestination(
+                          icon: Icon(destination.icon),
+                          selectedIcon: Icon(destination.selectedIcon),
+                          label: Text(context.t(destination.label)),
+                        ),
+                    ],
+                  ),
+                Expanded(
+                  child: KeyedSubtree(
+                    key: ValueKey('shell-screen-$_index-$_visitSerial'),
+                    child: body,
+                  ),
+                ),
+              ],
+            ),
+            bottomNavigationBar: wide
+                ? null
+                : ds.AppBottomNavigationBar(
+                    selectedIndex: _index,
+                    onDestinationSelected: _handleDestinationSelected,
+                    destinations: [
+                      for (final destination in _destinations)
+                        NavigationDestination(
+                          icon: Icon(destination.icon),
+                          selectedIcon: Icon(destination.selectedIcon),
+                          label: context.t(destination.label),
+                        ),
+                    ],
+                  ),
+          );
+        },
       ),
     );
-  }
-
-  ThemeData _themeForSettings(BuildContext context) {
-    return switch (_settingsController.state.themeMode) {
-      AppThemeMode.light => AppTheme.light,
-      AppThemeMode.dark => AppTheme.dark,
-      AppThemeMode.system =>
-        MediaQuery.platformBrightnessOf(context) == Brightness.dark
-            ? AppTheme.dark
-            : AppTheme.light,
-    };
   }
 
   void _go(int index) {
@@ -1550,6 +1649,8 @@ class SettlementStatementTile extends StatelessWidget {
     required this.store,
     required this.suggestion,
     this.onSettle,
+    this.onExternalSettle,
+    this.onApproveExternal,
     this.onReminder,
     super.key,
   });
@@ -1557,11 +1658,17 @@ class SettlementStatementTile extends StatelessWidget {
   final AppStore store;
   final SettlementSuggestion suggestion;
   final VoidCallback? onSettle;
+  final VoidCallback? onExternalSettle;
+  final VoidCallback? onApproveExternal;
   final VoidCallback? onReminder;
 
   @override
   Widget build(BuildContext context) {
     final currentUserId = store.currentUserId;
+    final pendingSettlement = suggestion.pendingSettlementId == null
+        ? null
+        : store.settlementById(suggestion.pendingSettlementId!);
+    final pendingIsExternal = pendingSettlement?.isExternal ?? false;
     final payerName = store.nameOf(suggestion.payerId);
     final payeeName = store.nameOf(suggestion.payeeId);
     final payerIsCurrent = suggestion.payerId == currentUserId;
@@ -1576,45 +1683,106 @@ class SettlementStatementTile extends StatelessWidget {
     final title = payerIsCurrent
         ? 'You need to pay'
         : payeeIsCurrent
-        ? 'You should receive'
+        ? pendingIsExternal
+              ? 'Approve external payment'
+              : 'You should receive'
         : 'Payment needed';
     final statement = payerIsCurrent
         ? 'You owe $payeeName ${friendlyMoney(suggestion.amountMinor)}'
         : payeeIsCurrent
         ? '$payerName owes you ${friendlyMoney(suggestion.amountMinor)}'
         : '$payerName owes $payeeName ${friendlyMoney(suggestion.amountMinor)}';
-    final pendingText = payerIsCurrent
+    final pendingText = pendingIsExternal
+        ? payerIsCurrent
+              ? 'Waiting for $payeeName to approve your external payment'
+              : payeeIsCurrent
+              ? '$payerName marked this paid outside the app. Approve after receiving it.'
+              : '$payerName marked this paid outside the app'
+        : payerIsCurrent
         ? 'Payment pending with $payeeName'
         : payeeIsCurrent
         ? 'Payment pending from $payerName'
         : 'Payment pending from $payerName';
 
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundColor: toneColor(context, tone).withValues(alpha: 0.12),
-        foregroundColor: toneColor(context, tone),
-        child: Icon(payerIsCurrent ? Icons.call_made : Icons.call_received),
-      ),
-      title: Text(title, style: AppTextStyles.cardTitle),
-      subtitle: Text(suggestion.hasPending ? pendingText : statement),
-      trailing: Wrap(
-        spacing: AppSpacing.sm,
-        crossAxisAlignment: WrapCrossAlignment.center,
+    final status = StatusPill(
+      label: suggestion.hasPending
+          ? pendingIsExternal
+                ? 'Approval pending'
+                : 'Payment pending'
+          : friendlyMoney(suggestion.amountMinor),
+      tone: tone,
+    );
+    final actions = <Widget>[
+      if (onSettle != null)
+        FilledButton(onPressed: onSettle, child: const Text('Settle Now')),
+      if (onExternalSettle != null)
+        OutlinedButton.icon(
+          onPressed: onExternalSettle,
+          icon: const Icon(Icons.payments_outlined),
+          label: const Text('Paid outside app'),
+          style: compactOutlinedButtonStyle(),
+        )
+      else if (onApproveExternal != null)
+        FilledButton.icon(
+          onPressed: onApproveExternal,
+          icon: const Icon(Icons.verified_outlined),
+          label: const Text('Approve'),
+        )
+      else if (onReminder != null)
+        OutlinedButton(
+          onPressed: onReminder,
+          style: compactOutlinedButtonStyle(),
+          child: const Text('Send Reminder'),
+        ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          StatusPill(
-            label: suggestion.hasPending
-                ? 'Payment pending'
-                : friendlyMoney(suggestion.amountMinor),
-            tone: tone,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                backgroundColor: toneColor(context, tone).withValues(
+                  alpha: 0.12,
+                ),
+                foregroundColor: toneColor(context, tone),
+                child: Icon(
+                  payerIsCurrent ? Icons.call_made : Icons.call_received,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AppTextStyles.cardTitle),
+                    const SizedBox(height: 4),
+                    Text(suggestion.hasPending ? pendingText : statement),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              status,
+            ],
           ),
-          if (onSettle != null)
-            FilledButton(onPressed: onSettle, child: const Text('Settle Now'))
-          else if (onReminder != null)
-            OutlinedButton(
-              onPressed: onReminder,
-              child: const Text('Send Reminder'),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Padding(
+              padding: const EdgeInsets.only(left: 56),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  alignment: WrapAlignment.end,
+                  children: actions,
+                ),
+              ),
             ),
+          ],
         ],
       ),
     );
@@ -1672,6 +1840,7 @@ class GroupDetail extends StatelessWidget {
     final currentMember = store.memberForGroup(group.id, store.currentUserId);
     final isCurrentMember = currentMember?.status == MemberStatus.active;
     final isAdmin = store.isGroupAdmin(group.id, store.currentUserId);
+    final canRename = store.canRenameGroup(group.id, store.currentUserId);
     final balances = store.balancesForGroup(group.id);
     final suggestions = store.suggestionsForGroup(group.id);
     final youOweMinor = suggestions
@@ -1718,11 +1887,12 @@ class GroupDetail extends StatelessWidget {
               icon: const Icon(Icons.logout),
               label: const Text('Leave group'),
             ),
-            if (isAdmin)
+            if (canRename)
               OutlinedButton.icon(
                 onPressed: () => showRenameGroupDialog(context, group.id),
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Rename'),
+                style: compactOutlinedButtonStyle(),
               ),
             if (isAdmin)
               FilledButton.tonalIcon(
@@ -1889,6 +2059,28 @@ class GroupDetail extends StatelessWidget {
                                   reference: settlement.id,
                                 );
                               },
+                            )
+                          : null,
+                      onExternalSettle:
+                          suggestion.payerId == store.currentUserId &&
+                              !suggestion.hasPending
+                          ? () => showExternalSettlementRequestDialog(
+                              context,
+                              suggestion,
+                            )
+                          : null,
+                      onApproveExternal:
+                          suggestion.pendingSettlementId != null &&
+                              store
+                                      .settlementById(
+                                        suggestion.pendingSettlementId!,
+                                      )
+                                      ?.isExternal ==
+                                  true &&
+                              suggestion.payeeId == store.currentUserId
+                          ? () => showApproveExternalSettlementDialog(
+                              context,
+                              suggestion.pendingSettlementId!,
                             )
                           : null,
                       onReminder:
@@ -3188,7 +3380,7 @@ class DhukutiDetail extends StatelessWidget {
         ScreenHeader(
           title: pool.name,
           subtitle:
-              '${money(pool.contributionAmountMinor)} ${pool.frequency} • Current payout: ${store.nameOf(cycles.first.payoutRecipientId)}',
+              '${money(pool.contributionAmountMinor)} ${pool.frequency} • Recipient: ${store.nameOf(cycles.first.payoutRecipientId)}',
           icon: Icons.account_balance_wallet,
           action: Wrap(
             spacing: 8,
@@ -3274,7 +3466,7 @@ class DhukutiDetail extends StatelessWidget {
                   tilePadding: EdgeInsets.zero,
                   leading: CircleAvatar(child: Text('${cycle.cycleNumber}')),
                   title: Text(
-                    'Cycle ${cycle.cycleNumber}: payout to ${store.nameOf(cycle.payoutRecipientId)}',
+                    'Cycle ${cycle.cycleNumber}: Recipient ${store.nameOf(cycle.payoutRecipientId)}',
                   ),
                   subtitle: Text(
                     '${dateLabel(cycle.dueDate)} • ${money(cycle.paidContributionTotalMinor)} of ${money(cycle.expectedContributionTotalMinor)}',
@@ -3605,6 +3797,15 @@ class ResponsiveWrap extends StatelessWidget {
 }
 
 enum Tone { neutral, success, warning, info, danger }
+
+ButtonStyle compactOutlinedButtonStyle() {
+  return OutlinedButton.styleFrom(
+    minimumSize: const Size(0, 40),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    visualDensity: VisualDensity.compact,
+  );
+}
 
 class StatTile extends StatelessWidget {
   const StatTile({
@@ -7643,8 +7844,13 @@ Future<void> showDisbandGroupDialog(
 Future<void> showRenameGroupDialog(BuildContext context, String groupId) async {
   final store = StoreScope.of(context);
   final group = store.groupById(groupId);
-  if (!store.isGroupAdmin(groupId, store.currentUserId)) {
-    showSnack(context, 'Only group admins can rename this group.');
+  if (!store.canRenameGroup(groupId, store.currentUserId)) {
+    showSnack(
+      context,
+      group.kind == GroupKind.expense
+          ? 'Only active group members can rename this group.'
+          : 'Only group admins can rename this group.',
+    );
     return;
   }
   final name = TextEditingController(text: group.name);

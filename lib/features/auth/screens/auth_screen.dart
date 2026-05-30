@@ -8,11 +8,12 @@ class AuthScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF5F7F2),
+        backgroundColor: theme.scaffoldBackgroundColor,
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -32,10 +33,10 @@ class AuthScreen extends StatelessWidget {
                           color: colorScheme.primary,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
+                        child: Text(
                           'S',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: colorScheme.onPrimary,
                             fontSize: 30,
                             fontWeight: FontWeight.w900,
                           ),
@@ -46,7 +47,7 @@ class AuthScreen extends StatelessWidget {
                     Text(
                       'Sajha Kharcha',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                      style: theme.textTheme.displaySmall?.copyWith(
                         color: colorScheme.primary,
                         fontWeight: FontWeight.w900,
                       ),
@@ -55,7 +56,7 @@ class AuthScreen extends StatelessWidget {
                     Text(
                       'Scan. Split. Settle. Together.',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      style: theme.textTheme.bodyLarge?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -73,8 +74,13 @@ class AuthScreen extends StatelessWidget {
                                 ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const TabBar(
-                                tabs: [
+                              child: TabBar(
+                                dividerColor: colorScheme.outlineVariant,
+                                indicatorColor: colorScheme.primary,
+                                labelColor: colorScheme.primary,
+                                unselectedLabelColor:
+                                    colorScheme.onSurfaceVariant,
+                                tabs: const [
                                   Tab(text: 'Login'),
                                   Tab(text: 'Sign up'),
                                 ],
@@ -98,7 +104,7 @@ class AuthScreen extends StatelessWidget {
                     Text(
                       'Sign in with your mobile number, M-PIN, or biometric unlock.',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),

@@ -40,10 +40,7 @@ Future<bool> showDhukutiPaymentBottomSheet({
       details: [
         TransactionDetail('Cycle', 'Cycle ${contribution.cycleNumber}'),
         TransactionDetail('Due date', dateLabel(contribution.dueDate)),
-        TransactionDetail(
-          'Current payout recipient',
-          store.nameOf(cycle.payoutRecipientId),
-        ),
+        TransactionDetail('Recipient', store.nameOf(cycle.payoutRecipientId)),
       ],
     ),
     () async {
