@@ -3361,7 +3361,6 @@ class GroupDetail extends StatelessWidget {
                 onPressed: () => showRenameGroupDialog(context, group.id),
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Rename'),
-                style: compactOutlinedButtonStyle(),
               ),
             if (isAdmin)
               FilledButton.tonalIcon(

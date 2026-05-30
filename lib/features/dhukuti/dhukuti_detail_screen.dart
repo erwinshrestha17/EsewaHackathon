@@ -306,16 +306,14 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
                     pool: widget.pool,
                     onRenamed: () => setState(() {}),
                   ),
-                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  icon: const Icon(Icons.edit_outlined),
                   label: const Text('Rename'),
                   style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 40),
+                    minimumSize: const Size(48, 48),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
+                      horizontal: 18,
+                      vertical: 14,
                     ),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
                   ),
                 )
               : null,
@@ -571,7 +569,7 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
   }
 
   Future<String> _accessToken() async {
-    final token = await AuthScope.of(context).backendAccessToken();
+    final token = await AuthScope.read(context).backendAccessToken();
     if (token == null || token.isEmpty) {
       throw const CommunitySavingsApiException(
         'Start the app with BACKEND_API_BASE_URL and log in again.',

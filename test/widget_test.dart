@@ -1172,6 +1172,14 @@ void main() {
       expect(find.text('Community Savings'), findsOneWidget);
       expect(find.text('Community Savings Tracker'), findsWidgets);
       expect(
+        find.textContaining('dependOnInheritedWidgetOfExactType'),
+        findsNothing,
+      );
+      expect(
+        find.textContaining('_DhukutiDetailScreenState.initState'),
+        findsNothing,
+      );
+      expect(
         find.text('Expense groups stay separate from community fund tracking.'),
         findsNothing,
       );
@@ -1499,7 +1507,7 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, 'Rename'), findsOneWidget);
   });
 
-  testWidgets('admin sees rename action in community savings group detail', (
+  testWidgets('admin rename action uses standard button sizing', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 1400);
@@ -1527,7 +1535,7 @@ void main() {
     );
     expect(
       renameButton.style?.minimumSize?.resolve(<WidgetState>{}),
-      const Size(0, 40),
+      const Size(48, 48),
     );
   });
 
