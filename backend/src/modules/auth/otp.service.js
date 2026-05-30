@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { env } from '../../config/env.js';
 import { redisDelete, redisGetJson, redisSetJson } from '../../config/redis.js';
 import { ApiError } from '../../utils/ApiError.js';
-import { sendSignupOtpSms } from './sns.service.js';
+import { sendSignupOtpSms } from './twilio.service.js';
 
 const maxOtpAttempts = 5;
 

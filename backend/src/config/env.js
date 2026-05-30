@@ -7,6 +7,10 @@ function csv(value) {
     .filter(Boolean);
 }
 
+function configured(value) {
+  return Boolean(value && !value.startsWith('replace-with') && value !== 'YOUR-PASSWORD');
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: Number(process.env.PORT ?? 3000),
@@ -23,23 +27,20 @@ export const env = {
   authRefreshTokenTtlDays: Number(process.env.AUTH_REFRESH_TOKEN_TTL_DAYS ?? 30),
   otpTtlMinutes: Number(process.env.OTP_TTL_MINUTES ?? 5),
   otpResendCooldownSeconds: Number(process.env.OTP_RESEND_COOLDOWN_SECONDS ?? 60),
-  awsRegion: process.env.AWS_REGION,
-  awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  awsSessionToken: process.env.AWS_SESSION_TOKEN,
-  awsSnsSmsSenderId: process.env.AWS_SNS_SMS_SENDER_ID,
+  twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
+  twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
+  twilioFromPhoneNumber: process.env.TWILIO_FROM_PHONE_NUMBER,
+  twilioMessagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID,
 };
 
-env.hasSupabaseSecret = Boolean(
-  env.supabaseSecretKey &&
-    !env.supabaseSecretKey.startsWith('replace-with') &&
-    env.supabaseSecretKey !== 'YOUR-PASSWORD',
-);
+env.hasSupabaseSecret = configured(env.supabaseSecretKey);
 env.hasSupabaseConfig = Boolean(env.supabaseUrl && env.hasSupabaseSecret);
 env.isProduction = env.nodeEnv === 'production';
 env.hasAuthAccessTokenSecret = Boolean(env.authAccessTokenSecret);
-env.hasAwsSnsConfig = Boolean(
-  env.awsRegion && env.awsAccessKeyId && env.awsSecretAccessKey,
+env.hasTwilioSmsConfig = Boolean(
+  configured(env.twilioAccountSid) &&
+    configured(env.twilioAuthToken) &&
+    (configured(env.twilioFromPhoneNumber) || configured(env.twilioMessagingServiceSid)),
 );
 
 if (env.isProduction && !env.hasAuthAccessTokenSecret) {

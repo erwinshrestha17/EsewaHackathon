@@ -4,7 +4,7 @@ import test from 'node:test';
 import { env } from '../src/config/env.js';
 import { setRedisClientForTests } from '../src/config/redis.js';
 import { sendSignupOtp, verifySignupOtp } from '../src/modules/auth/otp.service.js';
-import { setSnsPublisherForTests } from '../src/modules/auth/sns.service.js';
+import { setSmsPublisherForTests } from '../src/modules/auth/twilio.service.js';
 
 class FakeRedis {
   constructor() {
@@ -37,7 +37,7 @@ test('signup OTP is hashed in Redis and can be verified once', async () => {
   const redis = new FakeRedis();
   let deliveredOtp;
   setRedisClientForTests(redis);
-  setSnsPublisherForTests(async ({ otp }) => {
+  setSmsPublisherForTests(async ({ otp }) => {
     deliveredOtp = otp;
   });
 
@@ -52,15 +52,15 @@ test('signup OTP is hashed in Redis and can be verified once', async () => {
   assert.equal(await redis.get('auth:otp:signup:9800000001'), null);
 
   setRedisClientForTests(null);
-  setSnsPublisherForTests(null);
+  setSmsPublisherForTests(null);
 });
 
-test('signup OTP fails closed when AWS SNS is not configured', async () => {
+test('signup OTP fails closed when Twilio SMS is not configured', async () => {
   const redis = new FakeRedis();
-  const previous = env.hasAwsSnsConfig;
-  env.hasAwsSnsConfig = false;
+  const previous = env.hasTwilioSmsConfig;
+  env.hasTwilioSmsConfig = false;
   setRedisClientForTests(redis);
-  setSnsPublisherForTests(null);
+  setSmsPublisherForTests(null);
 
   await assert.rejects(
     () => sendSignupOtp('9800000001'),
@@ -68,6 +68,6 @@ test('signup OTP fails closed when AWS SNS is not configured', async () => {
   );
   assert.equal(await redis.get('auth:otp:signup:9800000001'), null);
 
-  env.hasAwsSnsConfig = previous;
+  env.hasTwilioSmsConfig = previous;
   setRedisClientForTests(null);
 });

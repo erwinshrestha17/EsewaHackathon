@@ -2,7 +2,7 @@
 
 Sajha Kharcha is a responsive Flutter app for Cache Flow's Challenge 10 PRD: social financial connections, group expenses, split modes, transparent balances, real eSewa settlements, gift cards, group gift pools, and Saving Circle.
 
-The app now uses the bundled Express backend for production-style signup/login. Signup verifies a Nepal mobile number with AWS SNS OTP, login uses mobile number + M-PIN, and the Flutter client stores access/refresh tokens in secure storage.
+The app now uses the bundled Express backend for production-style signup/login. Signup verifies a Nepal mobile number with Twilio OTP, login uses mobile number + M-PIN, and the Flutter client stores access/refresh tokens in secure storage.
 
 ## eSewa Setup
 
@@ -59,7 +59,7 @@ flutter run -d android
 - P2: Flutter cross-platform app, local cache projection, smart item assignment defaults, emergency Saving Circle exit workflow, admin review surfaces, analytics dashboard, and multi-group batch settlement for the current user.
 - P3: no P3 items are defined in the PRD.
 
-Redis-backed session caching and AWS SNS OTP delivery are implemented in the bundled backend. Production OCR/cloud fallback, delivery infrastructure, and payment webhooks remain outside this app.
+Redis-backed session caching and Twilio OTP delivery are implemented in the bundled backend. Production OCR/cloud fallback, delivery infrastructure, and payment webhooks remain outside this app.
 
 ## Verification
 

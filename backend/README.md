@@ -1,6 +1,6 @@
 # Sajha Kharcha API
 
-Node.js/Express API for Sajha Kharcha. It uses Supabase PostgreSQL as the system of record, Redis for OTP/session cache and invalidation, and AWS SNS for signup OTP delivery.
+Node.js/Express API for Sajha Kharcha. It uses Supabase PostgreSQL as the system of record, Redis for OTP/session cache and invalidation, and Twilio for signup OTP delivery.
 
 ## Setup
 
@@ -20,11 +20,9 @@ Node.js/Express API for Sajha Kharcha. It uses Supabase PostgreSQL as the system
 
    - `REDIS_URL`
    - `AUTH_ACCESS_TOKEN_SECRET`
-   - `AWS_REGION`
-   - `AWS_ACCESS_KEY_ID`
-   - `AWS_SECRET_ACCESS_KEY`
-   - optional `AWS_SESSION_TOKEN`
-   - optional `AWS_SNS_SMS_SENDER_ID`
+   - `TWILIO_ACCOUNT_SID`
+   - `TWILIO_AUTH_TOKEN`
+   - `TWILIO_FROM_PHONE_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID`
 
 4. Apply database structure:
 
@@ -59,7 +57,7 @@ Node.js/Express API for Sajha Kharcha. It uses Supabase PostgreSQL as the system
 
 ## Authentication
 
-The app signup UX is Nepal mobile number + AWS SNS OTP + M-PIN. Login is verified Nepal mobile number + M-PIN.
+The app signup UX is Nepal mobile number + Twilio OTP + M-PIN. Login is verified Nepal mobile number + M-PIN.
 
 Backend auth endpoints:
 
