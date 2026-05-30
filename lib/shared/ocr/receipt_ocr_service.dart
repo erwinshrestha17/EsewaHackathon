@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_paddle_ocr/flutter_paddle_ocr.dart';
@@ -31,30 +33,54 @@ class ReceiptOcrService {
     'sajha_kharcha/macos_vision_ocr',
   );
 
+  // Serializes recognition: the live-scan loop and a gallery scan must never
+  // call the shared native/JS engine concurrently.
+  static Future<void> _recognizeLock = Future<void>.value();
+
   /// Scans [bytes] (a JPEG/PNG bill photo) and returns the parsed bill.
   ///
   /// [onStatus] reports human-readable progress (model download, recognition)
   /// so the UI can keep the user informed. Throws [ReceiptOcrException] on any
-  /// model-load or recognition failure.
+  /// model-load or recognition failure. Calls are serialized, so overlapping
+  /// requests run one after another.
   Future<ReceiptScanResult> scanReceipt(
     Uint8List bytes, {
     void Function(String message)? onStatus,
-  }) async {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
-      return _scanReceiptWithMacosVision(bytes, onStatus: onStatus);
-    }
-    final engine = await _ensureEngine(onStatus);
-    onStatus?.call('Reading the bill…');
-    final List<OcrResult> regions;
+  }) {
+    return _synchronized(() async {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
+        return _scanReceiptWithMacosVision(bytes, onStatus: onStatus);
+      }
+      final engine = await _ensureEngine(onStatus);
+      onStatus?.call('Reading the bill…');
+      final List<OcrResult> regions;
+      try {
+        regions = await engine.recognize(bytes, runClassification: !kIsWeb);
+      } catch (error) {
+        throw ReceiptOcrException('Could not read the bill: $error');
+      }
+      return parseReceipt([
+        for (final region in regions)
+          if (region.text.trim().isNotEmpty) _wordFromRegion(region),
+      ]);
+    });
+  }
+
+  /// Runs [action] after any in-flight scan completes, chaining the next one.
+  Future<T> _synchronized<T>(Future<T> Function() action) async {
+    final previous = _recognizeLock;
+    final completer = Completer<void>();
+    _recognizeLock = completer.future;
     try {
-      regions = await engine.recognize(bytes, runClassification: !kIsWeb);
-    } catch (error) {
-      throw ReceiptOcrException('Could not read the bill: $error');
+      await previous;
+    } catch (_) {
+      // A prior scan's failure must not block the queue.
     }
-    return parseReceipt([
-      for (final region in regions)
-        if (region.text.trim().isNotEmpty) _wordFromRegion(region),
-    ]);
+    try {
+      return await action();
+    } finally {
+      completer.complete();
+    }
   }
 
   Future<ReceiptScanResult> _scanReceiptWithMacosVision(
