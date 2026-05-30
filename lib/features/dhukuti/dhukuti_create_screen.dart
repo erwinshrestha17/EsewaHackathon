@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../shared/design_system/app_colors.dart';
 import '../../shared/design_system/app_spacing.dart';
 import '../../shared/design_system/app_text_styles.dart';
 import '../../src/app_state.dart';
@@ -19,7 +18,7 @@ class DhukutiCreateScreen extends StatefulWidget {
 }
 
 class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
-  final _poolName = TextEditingController(text: 'New Digital Dhukuti');
+  final _poolName = TextEditingController(text: 'New Saving Circle');
   final _amount = TextEditingController(text: '3000');
   final _serviceFee = TextEditingController(text: '50');
   var _frequency = 'Monthly';
@@ -58,11 +57,11 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
     final netPayout = expected - serviceFee;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Dhukuti Pool')),
+      appBar: AppBar(title: const Text('Create Saving Circle Pool')),
       body: DhukutiScrollView(
         children: [
           DhukutiHeader(
-            title: 'Create Dhukuti Pool',
+            title: 'Create Saving Circle Pool',
             subtitle: 'Set up a trusted contribution circle.',
           ),
           DhukutiSection(
@@ -139,7 +138,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'You are included automatically. Select members who must accept the Dhukuti schedule.',
+                  'You are included automatically. Select members who must accept the Saving Circle schedule.',
                   style: AppTextStyles.bodySecondary,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -234,7 +233,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
                     ),
                   ),
                   child: const Text(
-                    'Digital Dhukuti is a contribution schedule and transparent ledger. It does not provide credit, interest, investment return, or guaranteed payout.',
+                    'Saving Circle is a contribution schedule and transparent ledger. It does not provide credit, interest, investment return, or guaranteed payout.',
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -271,7 +270,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
     final id = widget.store.createDhukutiPool(
       groupId: _groupId!,
       name: _poolName.text.trim().isEmpty
-          ? 'New Digital Dhukuti'
+          ? 'New Saving Circle'
           : _poolName.text.trim(),
       contributionAmountMinor: parseMoneyToMinor(_amount.text),
       frequency: _frequency,
@@ -302,10 +301,11 @@ class _DhukutiMemberSelectorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 210, maxWidth: 260),
       child: Material(
-        color: selected ? AppColors.primaryGreen : AppColors.surface,
+        color: selected ? scheme.primary : scheme.surface,
         borderRadius: BorderRadius.circular(AppRadius.md),
         elevation: selected ? 2 : 0,
         child: InkWell(
@@ -320,7 +320,7 @@ class _DhukutiMemberSelectorCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppRadius.md),
               border: Border.all(
-                color: selected ? AppColors.primaryGreen : AppColors.border,
+                color: selected ? scheme.primary : scheme.outlineVariant,
                 width: selected ? 1.4 : 1,
               ),
             ),
@@ -334,13 +334,13 @@ class _DhukutiMemberSelectorCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                      color: selected ? Colors.white : AppColors.textPrimary,
+                      color: selected ? scheme.onPrimary : scheme.onSurface,
                     ),
                   ),
                 ),
                 if (selected) ...[
                   const SizedBox(width: AppSpacing.sm),
-                  const Icon(Icons.check_circle, size: 18, color: Colors.white),
+                  Icon(Icons.check_circle, size: 18, color: scheme.onPrimary),
                 ],
               ],
             ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../design_system/app_colors.dart';
 import '../design_system/app_components.dart' as ds;
 import '../design_system/app_spacing.dart';
 import '../design_system/app_text_styles.dart';
@@ -55,6 +54,7 @@ class _ReceiptLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
@@ -65,7 +65,7 @@ class _ReceiptLine extends StatelessWidget {
             child: Text(
               detail.label,
               style: AppTextStyles.caption.copyWith(
-                color: AppColors.textSecondary,
+                color: scheme.onSurfaceVariant,
               ),
             ),
           ),

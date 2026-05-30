@@ -40,6 +40,10 @@ abstract final class AppTheme {
         surfaceTintColor: Colors.transparent,
         systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+      ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
@@ -84,6 +88,11 @@ abstract final class AppTheme {
         selectedIconTheme: IconThemeData(color: AppColors.darkGreen),
         unselectedIconTheme: IconThemeData(color: AppColors.textSecondary),
       ),
+      listTileTheme: const ListTileThemeData(
+        iconColor: AppColors.textSecondary,
+        textColor: AppColors.textPrimary,
+      ),
+      iconTheme: const IconThemeData(color: AppColors.textPrimary),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
@@ -113,6 +122,9 @@ abstract final class AppTheme {
         ),
         labelStyle: AppTextStyles.bodySecondary,
         helperStyle: AppTextStyles.caption,
+        hintStyle: AppTextStyles.bodySecondary,
+        prefixStyle: AppTextStyles.body,
+        suffixStyle: AppTextStyles.body,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -145,6 +157,36 @@ abstract final class AppTheme {
         side: const BorderSide(color: AppColors.border),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          textStyle: WidgetStateProperty.all(AppTextStyles.button),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? AppColors.darkGreen
+                : AppColors.textPrimary,
+          ),
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? AppColors.lightGreen
+                : AppColors.surface,
+          ),
+          side: WidgetStateProperty.all(
+            const BorderSide(color: AppColors.border),
+          ),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppColors.surface
+              : AppColors.textMuted,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppColors.primaryGreen
+              : AppColors.surfaceSoft,
         ),
       ),
       textTheme: base.textTheme.copyWith(
@@ -204,6 +246,10 @@ abstract final class AppTheme {
         surfaceTintColor: Colors.transparent,
         systemOverlayStyle: SystemUiOverlayStyle.light,
       ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+      ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: surface,
         surfaceTintColor: Colors.transparent,
@@ -248,6 +294,11 @@ abstract final class AppTheme {
         selectedIconTheme: IconThemeData(color: scheme.primary),
         unselectedIconTheme: IconThemeData(color: scheme.onSurfaceVariant),
       ),
+      listTileTheme: ListTileThemeData(
+        iconColor: scheme.onSurfaceVariant,
+        textColor: scheme.onSurface,
+      ),
+      iconTheme: IconThemeData(color: scheme.onSurface),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surfaceSoft,
@@ -278,6 +329,11 @@ abstract final class AppTheme {
         helperStyle: AppTextStyles.caption.copyWith(
           color: scheme.onSurfaceVariant,
         ),
+        hintStyle: AppTextStyles.bodySecondary.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+        prefixStyle: AppTextStyles.body.copyWith(color: scheme.onSurface),
+        suffixStyle: AppTextStyles.body.copyWith(color: scheme.onSurface),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -310,6 +366,34 @@ abstract final class AppTheme {
         side: const BorderSide(color: outline),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          textStyle: WidgetStateProperty.all(AppTextStyles.button),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? scheme.onPrimaryContainer
+                : scheme.onSurface,
+          ),
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? scheme.primaryContainer
+                : surfaceSoft,
+          ),
+          side: WidgetStateProperty.all(const BorderSide(color: outline)),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? scheme.onPrimary
+              : scheme.onSurfaceVariant,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? scheme.primary
+              : surfaceSoft,
         ),
       ),
       textTheme: base.textTheme.copyWith(

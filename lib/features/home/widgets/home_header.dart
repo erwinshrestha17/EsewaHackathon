@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../shared/design_system/app_colors.dart';
 import '../../../shared/design_system/app_spacing.dart';
 import '../../../shared/design_system/app_text_styles.dart';
 import '../../../shared/localization/app_localizations.dart';
@@ -19,6 +18,7 @@ class HomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final firstName = displayName.trim().split(' ').first;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -35,13 +35,13 @@ class HomeHeader extends StatelessWidget {
                     height: 28,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: AppColors.primaryGreen,
+                      color: scheme.primary,
                       borderRadius: BorderRadius.circular(AppRadius.xs),
                     ),
-                    child: const Text(
+                    child: Text(
                       'S',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: scheme.onPrimary,
                         fontWeight: FontWeight.w900,
                       ),
                     ),

@@ -22,10 +22,11 @@ class UpcomingDhukutiCard extends StatelessWidget {
     }
     final item = due!;
     final scheme = Theme.of(context).colorScheme;
-    final isAtRisk = item.status == 'At Risk';
-    final color = isAtRisk ? const Color(0xFFB56A12) : scheme.primary;
+    final needsAttention =
+        item.status == 'At Risk' || item.status == 'Due Late';
+    final color = needsAttention ? const Color(0xFFB56A12) : scheme.primary;
     return _HomeSection(
-      title: 'Upcoming Dhukuti',
+      title: 'Upcoming Saving Circle',
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
@@ -77,7 +78,7 @@ class UpcomingDhukutiCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Dhukuti is shown as a transparent contribution ledger and payment scheduler.',
+              'Saving Circle is shown as a transparent contribution ledger and payment scheduler.',
               style: TextStyle(
                 color: scheme.onSurfaceVariant,
                 fontSize: 12,

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../design_system/app_colors.dart';
 import '../design_system/app_components.dart' as ds;
 import '../design_system/app_spacing.dart';
 import '../design_system/app_text_styles.dart';
@@ -14,6 +13,7 @@ class TransactionSuccessScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Transaction Complete')),
       body: SafeArea(
@@ -26,12 +26,12 @@ class TransactionSuccessScreen extends StatelessWidget {
               height: 86,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppColors.lightGreen,
+                color: scheme.primaryContainer,
                 borderRadius: BorderRadius.circular(AppRadius.xl),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.check_circle,
-                color: AppColors.primaryGreen,
+                color: scheme.onPrimaryContainer,
                 size: 54,
               ),
             ),

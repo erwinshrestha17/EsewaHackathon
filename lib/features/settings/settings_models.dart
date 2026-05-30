@@ -24,7 +24,7 @@ enum NotificationPreference {
 }
 
 const dhukutiSafetyNoteText =
-    'Digital Dhukuti is a transparent contribution ledger '
+    'Saving Circle is a transparent contribution ledger '
     'and payment scheduler. It does not provide credit, interest, investment '
     'return, or guaranteed payout.';
 
@@ -228,8 +228,9 @@ extension NotificationPreferenceLabel on NotificationPreference {
       NotificationPreference.paymentStatusUpdates => 'Payment status updates',
       NotificationPreference.giftReceived => 'Gift received',
       NotificationPreference.dhukutiContributionDue =>
-        'Dhukuti contribution due',
-      NotificationPreference.dhukutiCycleAtRisk => 'Dhukuti cycle at risk',
+        'Saving Circle contribution due',
+      NotificationPreference.dhukutiCycleAtRisk =>
+        'Saving Circle cycle at risk',
     };
   }
 
@@ -240,7 +241,7 @@ extension NotificationPreferenceLabel on NotificationPreference {
       NotificationPreference.groupInvitations ||
       NotificationPreference.expenseAdded => 'Groups',
       NotificationPreference.dhukutiContributionDue ||
-      NotificationPreference.dhukutiCycleAtRisk => 'Dhukuti',
+      NotificationPreference.dhukutiCycleAtRisk => 'Saving Circle',
       NotificationPreference.connectionRequests => 'Requests',
       NotificationPreference.giftReceived => 'Groups',
     };

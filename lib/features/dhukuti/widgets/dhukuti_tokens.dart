@@ -13,12 +13,13 @@ const dhukutiFestival = AppColors.warning;
 const dhukutiInk = AppColors.textPrimary;
 
 Color dhukutiToneColor(BuildContext context, DhukutiTone tone) {
+  final scheme = Theme.of(context).colorScheme;
   return switch (tone) {
     DhukutiTone.success => AppColors.success,
     DhukutiTone.warning => AppColors.warning,
     DhukutiTone.info => AppColors.info,
-    DhukutiTone.danger => AppColors.error,
-    DhukutiTone.neutral => AppColors.textSecondary,
+    DhukutiTone.danger => scheme.error,
+    DhukutiTone.neutral => scheme.onSurfaceVariant,
   };
 }
 
@@ -135,13 +136,14 @@ class DhukutiHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final scheme = Theme.of(context).colorScheme;
         final compact = constraints.maxWidth < 760;
         final titleBlock = Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             CircleAvatar(
-              backgroundColor: AppColors.lightGreen,
-              foregroundColor: AppColors.darkGreen,
+              backgroundColor: scheme.primaryContainer,
+              foregroundColor: scheme.onPrimaryContainer,
               child: const Icon(Icons.account_balance_wallet_outlined),
             ),
             const SizedBox(width: AppSpacing.md),
@@ -201,6 +203,7 @@ class DhukutiEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
       child: Center(
@@ -213,10 +216,10 @@ class DhukutiEmptyState extends StatelessWidget {
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: AppColors.lightGreen,
+                  color: scheme.primaryContainer,
                   borderRadius: BorderRadius.circular(AppRadius.xl),
                 ),
-                child: Icon(icon, size: 34, color: AppColors.darkGreen),
+                child: Icon(icon, size: 34, color: scheme.onPrimaryContainer),
               ),
               const SizedBox(height: AppSpacing.lg),
               Text(
@@ -255,10 +258,11 @@ class DhukutiAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return CircleAvatar(
       radius: small ? 14 : null,
-      backgroundColor: AppColors.lightGreen,
-      foregroundColor: AppColors.darkGreen,
+      backgroundColor: scheme.primaryContainer,
+      foregroundColor: scheme.onPrimaryContainer,
       child: Text(
         label,
         style: TextStyle(

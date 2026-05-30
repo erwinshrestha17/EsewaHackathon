@@ -24,7 +24,7 @@ Future<bool> showDhukutiPaymentBottomSheet({
     TransactionConfirmationData(
       id: contribution.id,
       transactionType: TransactionType.dhukutiContribution,
-      title: 'Confirm Dhukuti Contribution',
+      title: 'Confirm Saving Circle Contribution',
       subtitle: '${pool.name} • Cycle ${contribution.cycleNumber}',
       amount: contribution.amountMinor,
       payerName: store.nameOf(contribution.userId),
@@ -50,7 +50,7 @@ Future<bool> showDhukutiPaymentBottomSheet({
       store.payDhukutiContribution(contribution.id);
       return TransactionResult.success(
         title: 'Contribution Paid',
-        message: 'Your Dhukuti ledger has been updated.',
+        message: 'Your Saving Circle ledger has been updated.',
         amount: contribution.amountMinor,
         transactionReference: contribution.id,
         createdAt: DateTime.now(),
@@ -99,7 +99,7 @@ class _DhukutiPaymentSheetState extends State<_DhukutiPaymentSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Confirm Dhukuti Contribution',
+          'Confirm Saving Circle Contribution',
           style: Theme.of(
             context,
           ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),

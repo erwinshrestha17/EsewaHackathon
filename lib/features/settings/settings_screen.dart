@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../shared/design_system/app_colors.dart';
 import '../../shared/design_system/app_spacing.dart';
 import '../../shared/localization/app_localizations.dart';
 import '../../src/app_state.dart';
@@ -143,7 +142,7 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               SettingsSection(
-                title: context.t('Digital Dhukuti'),
+                title: context.t('Saving Circle'),
                 children: [
                   SettingsSwitchTile(
                     icon: Icons.event_available_outlined,
@@ -206,7 +205,7 @@ class SettingsScreen extends StatelessWidget {
                           title: 'How Sajha Kharcha Works',
                           icon: Icons.help_outline,
                           body:
-                              'Sajha Kharcha brings shared spending into one clear flow: connect with trusted people, create a group, add an expense, choose who paid and who joined, then settle balances when everyone is ready. You can also send gifts, follow group activity, and keep Dhukuti contribution schedules visible for every member.',
+                              'Sajha Kharcha brings shared spending into one clear flow: connect with trusted people, create a group, add an expense, choose who paid and who joined, then settle balances when everyone is ready. You can also send gifts, follow group activity, and keep Saving Circle contribution schedules visible for every member.',
                         ),
                       ),
                     ),
@@ -220,7 +219,7 @@ class SettingsScreen extends StatelessWidget {
                           title: 'About Sajha Kharcha',
                           icon: Icons.info_outline,
                           body:
-                              'Sajha Kharcha is built for everyday shared costs in Nepal: meals, trips, apartments, festivals, gifts, and rotating Dhukuti commitments. The app focuses on clear member selection, transparent balances, spending insights, and fast settlement through familiar wallet flows.',
+                              'Sajha Kharcha is built for everyday shared costs in Nepal: meals, trips, apartments, festivals, gifts, and rotating Saving Circle commitments. The app focuses on clear member selection, transparent balances, spending insights, and fast settlement through familiar wallet flows.',
                         ),
                       ),
                     ),
@@ -243,7 +242,7 @@ class SettingsScreen extends StatelessWidget {
                     icon: Icons.info_outline,
                     title: context.t('Version 1.0'),
                     subtitle:
-                        'Sajha Kharcha by eSewa v1.0\nTeam Cache Flow · Challenge 10',
+                        'Sajha Kharcha v1.0\nTeam Cache Flow · Challenge 10',
                     showChevron: false,
                   ),
                 ],
@@ -282,7 +281,7 @@ class SettingsScreen extends StatelessWidget {
         return AlertDialog(
           title: const Text('Log out of Sajha Kharcha?'),
           content: const Text(
-            'You will need to log in again to access your groups, gifts, and Dhukuti details on this device.',
+            'You will need to log in again to access your groups, gifts, and Saving Circle details on this device.',
           ),
           actions: [
             TextButton(
@@ -291,8 +290,8 @@ class SettingsScreen extends StatelessWidget {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.error,
-                foregroundColor: Colors.white,
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                foregroundColor: Theme.of(dialogContext).colorScheme.onError,
               ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('Log Out'),
@@ -365,8 +364,8 @@ class SettingsScreen extends StatelessWidget {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.error,
-                foregroundColor: Colors.white,
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                foregroundColor: Theme.of(dialogContext).colorScheme.onError,
               ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
               child: Text(context.t('Delete')),

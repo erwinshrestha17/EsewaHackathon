@@ -59,7 +59,15 @@ class HomeController {
   }
 
   List<HomeDhukutiDue> _dhukutiDues() {
-    final dues = <HomeDhukutiDue>[];
+    final candidates =
+        <
+          ({
+            DhukutiContribution contribution,
+            DhukutiCycle cycle,
+            DhukutiPool pool,
+          })
+        >[];
+    final now = DateTime.now();
     for (final pool in store.visibleDhukutiPools) {
       final cycles =
           store.dhukutiCycles.where((cycle) => cycle.poolId == pool.id).toList()
@@ -72,36 +80,52 @@ class HomeController {
         if (cycle.isEmpty) {
           continue;
         }
-        final status = contribution.status == ContributionStatus.paid
-            ? 'Paid'
-            : cycle.first.status == DhukutiCycleStatus.atRisk
-            ? 'At Risk'
-            : 'Due Soon';
-        dues.add(
-          HomeDhukutiDue(
-            contributionId: contribution.id,
-            poolId: pool.id,
-            poolName: pool.name,
-            amount: contribution.amountMinor,
-            dueLabel: _dueLabel(contribution.dueDate),
-            cycleLabel: 'Cycle ${contribution.cycleNumber} of ${cycles.length}',
-            payoutRecipientName: store.nameOf(cycle.first.payoutRecipientId),
-            status: status,
-            isPayable:
-                contribution.status != ContributionStatus.paid &&
-                contribution.status != ContributionStatus.pending &&
-                pool.status == DhukutiPoolStatus.active &&
-                cycle.first.status != DhukutiCycleStatus.cancelled &&
-                cycle.first.status != DhukutiCycleStatus.closed &&
-                cycle.first.status != DhukutiCycleStatus.paidOut,
-          ),
-        );
-        if (dues.length >= 2) {
-          return dues;
+        final currentCycle = cycle.first;
+        if (_shouldHideDhukutiContribution(contribution, currentCycle)) {
+          continue;
         }
+        candidates.add((
+          contribution: contribution,
+          cycle: currentCycle,
+          pool: pool,
+        ));
       }
     }
-    return dues;
+    candidates.sort((a, b) {
+      final byDueDate = a.contribution.dueDate.compareTo(
+        b.contribution.dueDate,
+      );
+      if (byDueDate != 0) {
+        return byDueDate;
+      }
+      return a.contribution.cycleNumber.compareTo(b.contribution.cycleNumber);
+    });
+
+    final futureOrToday = candidates
+        .where((item) => !_isPastDue(item.contribution.dueDate, now))
+        .toList();
+    final visible = futureOrToday.isNotEmpty ? futureOrToday : candidates;
+
+    return [
+      for (final item in visible.take(2))
+        HomeDhukutiDue(
+          contributionId: item.contribution.id,
+          poolId: item.pool.id,
+          poolName: item.pool.name,
+          amount: item.contribution.amountMinor,
+          dueLabel: _dueLabel(item.contribution.dueDate),
+          cycleLabel:
+              'Cycle ${item.contribution.cycleNumber} of ${store.dhukutiCycles.where((cycle) => cycle.poolId == item.pool.id).length}',
+          payoutRecipientName: store.nameOf(item.cycle.payoutRecipientId),
+          status: _dhukutiDueStatus(item.contribution, item.cycle, now),
+          isPayable: _isDhukutiContributionPayable(
+            item.pool,
+            item.contribution,
+            item.cycle,
+            now,
+          ),
+        ),
+    ];
   }
 
   List<HomeGroupSummary> _activeGroups() {
@@ -225,6 +249,68 @@ String _dueLabel(DateTime dueDate) {
     return 'Due today';
   }
   return '$days day${days == 1 ? '' : 's'} left';
+}
+
+bool _shouldHideDhukutiContribution(
+  DhukutiContribution contribution,
+  DhukutiCycle cycle,
+) {
+  if (contribution.status == ContributionStatus.paid ||
+      contribution.status == ContributionStatus.cancelled ||
+      contribution.status == ContributionStatus.expired) {
+    return true;
+  }
+  return cycle.status == DhukutiCycleStatus.cancelled ||
+      cycle.status == DhukutiCycleStatus.closed ||
+      cycle.status == DhukutiCycleStatus.paidOut;
+}
+
+String _dhukutiDueStatus(
+  DhukutiContribution contribution,
+  DhukutiCycle cycle,
+  DateTime now,
+) {
+  if (cycle.status == DhukutiCycleStatus.atRisk) {
+    return 'At Risk';
+  }
+  if (contribution.status == ContributionStatus.late ||
+      contribution.status == ContributionStatus.missed ||
+      _isPastDue(contribution.dueDate, now)) {
+    return 'Due Late';
+  }
+  if (cycle.status == DhukutiCycleStatus.upcoming ||
+      contribution.status == ContributionStatus.pending ||
+      contribution.dueDate.isAfter(now)) {
+    return 'Upcoming';
+  }
+  return 'Due Soon';
+}
+
+bool _isDhukutiContributionPayable(
+  DhukutiPool pool,
+  DhukutiContribution contribution,
+  DhukutiCycle cycle,
+  DateTime now,
+) {
+  return pool.status == DhukutiPoolStatus.active &&
+      contribution.status != ContributionStatus.pending &&
+      !_isFutureDue(contribution.dueDate, now) &&
+      cycle.status != DhukutiCycleStatus.upcoming &&
+      cycle.status != DhukutiCycleStatus.cancelled &&
+      cycle.status != DhukutiCycleStatus.closed &&
+      cycle.status != DhukutiCycleStatus.paidOut;
+}
+
+bool _isPastDue(DateTime dueDate, DateTime now) {
+  final dueDay = DateTime(dueDate.year, dueDate.month, dueDate.day);
+  final today = DateTime(now.year, now.month, now.day);
+  return dueDay.isBefore(today);
+}
+
+bool _isFutureDue(DateTime dueDate, DateTime now) {
+  final dueDay = DateTime(dueDate.year, dueDate.month, dueDate.day);
+  final today = DateTime(now.year, now.month, now.day);
+  return dueDay.isAfter(today);
 }
 
 String _relativeTime(DateTime createdAt) {

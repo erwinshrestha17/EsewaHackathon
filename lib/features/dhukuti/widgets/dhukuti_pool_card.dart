@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../shared/design_system/app_colors.dart';
 import '../../../shared/design_system/app_components.dart' as ds;
 import '../../../shared/design_system/app_spacing.dart';
 import '../../../shared/design_system/app_text_styles.dart';
@@ -143,11 +142,12 @@ class _Fact extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       constraints: const BoxConstraints(maxWidth: 260),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.surfaceSoft,
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
         borderRadius: BorderRadius.circular(AppRadius.xs),
       ),
       child: Row(

@@ -37,7 +37,7 @@ HomeDashboardData seededHomeDashboardData() {
       HomeDhukutiDue(
         contributionId: 'seed-dhukuti-contribution',
         poolId: 'seed-dhukuti',
-        poolName: 'Family Dashain Dhukuti',
+        poolName: 'Family Dashain Saving Circle',
         amount: npr(5000),
         dueLabel: '3 days left',
         cycleLabel: 'Cycle 3 of 6',
@@ -108,8 +108,8 @@ HomeDashboardData seededHomeDashboardData() {
       ),
       HomeActivityItem(
         id: 'activity-4',
-        title: 'Dhukuti contribution paid',
-        subtitle: 'Family Dashain Dhukuti',
+        title: 'Saving Circle contribution paid',
+        subtitle: 'Family Dashain Saving Circle',
         amount: npr(5000),
         timestamp: '2 days ago',
         icon: Icons.savings_outlined,
@@ -138,7 +138,7 @@ HomeDashboardData seededHomeDashboardData() {
       ),
       HomeQuickAction(
         id: 'dhukuti',
-        label: 'Dhukuti',
+        label: 'Saving Circle',
         helper: 'View dues',
         icon: Icons.account_balance_wallet_outlined,
       ),

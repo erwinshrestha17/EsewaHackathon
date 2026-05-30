@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../design_system/app_colors.dart';
 import '../design_system/app_components.dart' as ds;
 import '../design_system/app_spacing.dart';
 import '../design_system/app_text_styles.dart';
@@ -19,6 +18,7 @@ class TransactionFailureScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Transaction Failed')),
       body: SafeArea(
@@ -31,14 +31,10 @@ class TransactionFailureScreen extends StatelessWidget {
               height: 86,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.10),
+                color: scheme.error.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(AppRadius.xl),
               ),
-              child: const Icon(
-                Icons.error_outline,
-                color: AppColors.error,
-                size: 54,
-              ),
+              child: Icon(Icons.error_outline, color: scheme.error, size: 54),
             ),
             const SizedBox(height: AppSpacing.xl),
             Text(

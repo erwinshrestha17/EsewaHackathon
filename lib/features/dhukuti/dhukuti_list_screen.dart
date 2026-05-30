@@ -54,13 +54,13 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
             ? Center(
                 child: DhukutiEmptyState(
                   icon: Icons.account_balance_wallet_outlined,
-                  title: 'No Dhukuti pools yet',
+                  title: 'No Saving Circle pools yet',
                   message:
                       'Start or join a trusted contribution circle with people you know.',
                   action: FilledButton.icon(
                     onPressed: () => _openCreate(context),
                     icon: const Icon(Icons.add),
-                    label: const Text('Create Dhukuti Group'),
+                    label: const Text('Create Saving Circle Group'),
                   ),
                 ),
               )
@@ -112,14 +112,14 @@ class _DigitalDhukutiScreenState extends State<DigitalDhukutiScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'How Sajha Kharcha Dhukuti Works',
+                  'How Sajha Kharcha Saving Circle Works',
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Sajha Kharcha Dhukuti tracks contribution schedules, payout turns, member statuses, and ledger activity for transparency.',
+                  'Sajha Kharcha Saving Circle tracks contribution schedules, payout turns, member statuses, and ledger activity for transparency.',
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -157,33 +157,33 @@ class _DhukutiPoolList extends StatelessWidget {
     return DhukutiScrollView(
       children: [
         DhukutiHeader(
-          title: 'Digital Dhukuti',
+          title: 'Saving Circle',
           subtitle:
               'Track contributions, payout turns, and group transparency.',
           action: FilledButton.icon(
             onPressed: onCreate,
             icon: const Icon(Icons.add),
-            label: const Text('Create Dhukuti Group'),
+            label: const Text('Create Saving Circle Group'),
           ),
         ),
         DhukutiSection(
-          title: 'About Sajha Kharcha Dhukuti',
+          title: 'About Sajha Kharcha Saving Circle',
           child: const Text(
-            'Sajha Kharcha Dhukuti is a transparent contribution ledger and payment scheduler.',
+            'Sajha Kharcha Saving Circle is a transparent contribution ledger and payment scheduler.',
           ),
         ),
         DhukutiSection(
-          title: 'Your Dhukuti Pools',
+          title: 'Your Saving Circle Pools',
           child: pools.isEmpty
               ? DhukutiEmptyState(
                   icon: Icons.account_balance_wallet_outlined,
-                  title: 'No Dhukuti pools yet',
+                  title: 'No Saving Circle pools yet',
                   message:
                       'Start or join a trusted contribution circle with people you know.',
                   action: FilledButton.icon(
                     onPressed: onCreate,
                     icon: const Icon(Icons.add),
-                    label: const Text('Create Dhukuti Group'),
+                    label: const Text('Create Saving Circle Group'),
                   ),
                   secondaryAction: OutlinedButton.icon(
                     onPressed: onLearn,

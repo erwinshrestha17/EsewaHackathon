@@ -75,7 +75,7 @@ const _nepaliText = <String, String>{
   'Confirm Before Payment': 'भुक्तानी अघि पुष्टि',
   'Settlement Nudges': 'सेटलमेन्ट सम्झना',
   'Default Reminder': 'पूर्वनिर्धारित सम्झना',
-  'Digital Dhukuti': 'डिजिटल ढुकुटी',
+  'Saving Circle': 'बचत सर्कल',
   'Contribution Reminders': 'योगदान सम्झना',
   'At-Risk Alerts': 'जोखिम सूचना',
   'Notifications': 'सूचनाहरू',

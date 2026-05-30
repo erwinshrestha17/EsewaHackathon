@@ -4,7 +4,10 @@ import 'package:sajha_kharcha/features/auth/auth_controller.dart';
 import 'package:sajha_kharcha/features/auth/models/user_profile.dart';
 import 'package:sajha_kharcha/features/auth/screens/login_form.dart';
 import 'package:sajha_kharcha/features/auth/screens/register_form.dart';
+import 'package:sajha_kharcha/features/home/home_controller.dart';
+import 'package:sajha_kharcha/shared/design_system/app_components.dart' as ds;
 import 'package:sajha_kharcha/shared/design_system/app_colors.dart';
+import 'package:sajha_kharcha/shared/design_system/app_theme.dart';
 import 'package:sajha_kharcha/src/app.dart';
 import 'package:sajha_kharcha/src/app_state.dart';
 import 'package:sajha_kharcha/src/finance.dart';
@@ -196,7 +199,8 @@ void main() {
 
     expect(find.text('Sajha Kharcha'), findsOneWidget);
     expect(find.text('Namaste, Erwin'), findsOneWidget);
-    expect(find.text('Fast Demo Flow'), findsOneWidget);
+    expect(find.text('Quick actions'), findsOneWidget);
+    expect(find.text('Festival Mode'), findsNothing);
     expect(find.text('Scan Receipt'), findsNothing);
     expect(find.text('Settle Now'), findsNothing);
     expect(find.text('View Groups'), findsNothing);
@@ -204,6 +208,122 @@ void main() {
     expect(find.text('Create Group'), findsNothing);
     expect(find.text('Send Gift'), findsWidgets);
     expect(find.text('Activity'), findsNothing);
+  });
+
+  test('upcoming Saving Circle card skips paid past cycles', () {
+    final store = AppStore();
+    final now = DateTime.now();
+    final pool = DhukutiPool(
+      id: 'd-test-upcoming',
+      groupId: 'g-test',
+      name: 'Future Office Saving Circle',
+      contributionAmountMinor: npr(1000),
+      frequency: 'Monthly',
+      startDate: now.add(const Duration(days: 12)),
+      createdBy: store.currentUserId,
+      status: DhukutiPoolStatus.active,
+      createdAt: now,
+    );
+    final pastCycle = DhukutiCycle(
+      id: 'cycle-past',
+      poolId: pool.id,
+      cycleNumber: 1,
+      dueDate: now.subtract(const Duration(days: 10)),
+      payoutRecipientId: store.currentUserId,
+      expectedContributionTotalMinor: npr(1000),
+      paidContributionTotalMinor: npr(1000),
+      status: DhukutiCycleStatus.paidOut,
+    );
+    final futureCycle = DhukutiCycle(
+      id: 'cycle-future',
+      poolId: pool.id,
+      cycleNumber: 2,
+      dueDate: now.add(const Duration(days: 12)),
+      payoutRecipientId: store.currentUserId,
+      expectedContributionTotalMinor: npr(1000),
+      paidContributionTotalMinor: 0,
+      status: DhukutiCycleStatus.upcoming,
+    );
+
+    store.dhukutiPools
+      ..clear()
+      ..add(pool);
+    store.dhukutiMembers
+      ..clear()
+      ..add(
+        DhukutiMember(
+          id: 'member-current',
+          poolId: pool.id,
+          userId: store.currentUserId,
+          payoutOrder: 1,
+          status: DhukutiMemberStatus.active,
+        ),
+      );
+    store.dhukutiCycles
+      ..clear()
+      ..addAll([pastCycle, futureCycle]);
+    store.dhukutiContributions
+      ..clear()
+      ..addAll([
+        DhukutiContribution(
+          id: 'contribution-paid',
+          poolId: pool.id,
+          cycleId: pastCycle.id,
+          userId: store.currentUserId,
+          cycleNumber: pastCycle.cycleNumber,
+          dueDate: pastCycle.dueDate,
+          amountMinor: npr(1000),
+          status: ContributionStatus.paid,
+          idempotencyKey: 'paid',
+          idempotencyScope: pool.id,
+          operationType: 'dhukuti_contribution',
+          paidAt: pastCycle.dueDate,
+        ),
+        DhukutiContribution(
+          id: 'contribution-upcoming',
+          poolId: pool.id,
+          cycleId: futureCycle.id,
+          userId: store.currentUserId,
+          cycleNumber: futureCycle.cycleNumber,
+          dueDate: futureCycle.dueDate,
+          amountMinor: npr(1000),
+          status: ContributionStatus.pending,
+          idempotencyKey: 'upcoming',
+          idempotencyScope: pool.id,
+          operationType: 'dhukuti_contribution',
+        ),
+      ]);
+
+    final dues = HomeController(
+      store: store,
+    ).loadDashboard().upcomingDhukutiDues;
+
+    expect(dues, hasLength(1));
+    expect(dues.single.contributionId, 'contribution-upcoming');
+    expect(dues.single.status, 'Upcoming');
+    expect(dues.single.dueLabel, contains('left'));
+    expect(dues.single.dueLabel, isNot(contains('late')));
+    expect(dues.single.isPayable, isFalse);
+  });
+
+  testWidgets('shared cards use dark theme surfaces', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: ThemeMode.dark,
+        home: const Scaffold(body: ds.AppCard(child: Text('Dark card'))),
+      ),
+    );
+
+    final material = tester.widget<Material>(
+      find.descendant(
+        of: find.byType(ds.AppCard),
+        matching: find.byType(Material),
+      ),
+    );
+
+    expect(material.color, AppTheme.dark.colorScheme.surface);
   });
 
   testWidgets('Main navigation includes Connections and excludes Scan tab', (
@@ -361,8 +481,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Contribution rule'), findsOneWidget);
+    expect(find.text('Template'), findsNothing);
     expect(find.text('Equal amount'), findsOneWidget);
     expect(find.text('Equal amount per contributor'), findsOneWidget);
+    expect(find.text('Allow contributions above goal'), findsOneWidget);
     expect(find.text('Target amount'), findsNothing);
 
     await tester.tap(find.text('Min / max'));
@@ -380,48 +502,55 @@ void main() {
       store.giftPools.last.contributionRule,
       GiftPoolContributionRule.threshold,
     );
+    expect(store.giftPools.last.allowOverTarget, isFalse);
     expect(store.giftPools.last.minContributionAmountMinor, npr(250));
     expect(store.giftPools.last.maxContributionAmountMinor, npr(1100));
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Dhukuti quick action opens Dhukuti Groups inside Groups tab', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(800, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-    SharedPreferences.setMockInitialValues({
-      'auth.hasSeenIntro': true,
-      'auth.isLoggedIn': true,
-      'auth.activeUserProfile': UserProfile.demo().toJsonString(),
-    });
+  testWidgets(
+    'Saving Circle quick action opens Saving Circle Groups inside Groups tab',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      SharedPreferences.setMockInitialValues({
+        'auth.hasSeenIntro': true,
+        'auth.isLoggedIn': true,
+        'auth.activeUserProfile': UserProfile.demo().toJsonString(),
+      });
 
-    await tester.pumpWidget(
-      AuthScope(
-        notifier: AuthController(),
-        child: StoreScope(notifier: AppStore(), child: const SajhaKharchaApp()),
-      ),
-    );
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        AuthScope(
+          notifier: AuthController(),
+          child: StoreScope(
+            notifier: AppStore(),
+            child: const SajhaKharchaApp(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
 
-    final dhukutiAction = find.text('Dhukuti').first;
-    await tester.ensureVisible(dhukutiAction);
-    await tester.tap(dhukutiAction);
-    await tester.pumpAndSettle();
+      final savingCircleAction = find.text('Saving Circle').first;
+      await tester.ensureVisible(savingCircleAction);
+      await tester.tap(savingCircleAction);
+      await tester.pumpAndSettle();
 
-    expect(find.text('Dhukuti Groups'), findsOneWidget);
-    expect(find.text('Digital Dhukuti'), findsOneWidget);
-    expect(
-      find.text('Expense groups stay separate from Dhukuti commitments.'),
-      findsNothing,
-    );
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.text('Saving Circle Groups'), findsOneWidget);
+      expect(find.text('Saving Circle'), findsWidgets);
+      expect(
+        find.text(
+          'Expense groups stay separate from Saving Circle commitments.',
+        ),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('Groups screen tolerates a stale selected group', (tester) async {
     final store = AppStore()..selectedGroupId = 'missing-group';
@@ -460,7 +589,8 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
+        theme: AppTheme.light,
         home: Scaffold(
           body: Column(
             children: [
@@ -526,7 +656,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Create Expense Group'), findsWidgets);
-    expect(find.text('Dhukuti Group'), findsNothing);
+    expect(find.text('Saving Circle Group'), findsNothing);
     final memberChips = tester.widgetList<FilterChip>(find.byType(FilterChip));
     expect(memberChips, isNotEmpty);
     expect(memberChips.every((chip) => !chip.selected), isTrue);
@@ -538,7 +668,7 @@ void main() {
     );
   });
 
-  testWidgets('dhukuti create flow uses dhukuti-specific setup', (
+  testWidgets('Saving Circle create flow uses circle-specific setup', (
     tester,
   ) async {
     final store = AppStore();
@@ -552,7 +682,7 @@ void main() {
               return Scaffold(
                 body: FilledButton(
                   onPressed: () => showCreateDhukutiGroupDialog(context),
-                  child: const Text('Open dhukuti create'),
+                  child: const Text('Open Saving Circle create'),
                 ),
               );
             },
@@ -561,10 +691,12 @@ void main() {
       ),
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Open dhukuti create'));
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Open Saving Circle create'),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('Create Dhukuti Group'), findsWidgets);
+    expect(find.text('Create Saving Circle Group'), findsWidgets);
     expect(find.text('Contribution amount'), findsOneWidget);
     expect(find.text('Gross pot per cycle'), findsOneWidget);
     expect(find.text('Default split: Equal'), findsNothing);
@@ -580,7 +712,7 @@ void main() {
     expect(memberCards.first.enabled, isFalse);
   });
 
-  testWidgets('Groups screen separates expense and Dhukuti groups', (
+  testWidgets('Groups screen separates expense and Saving Circle groups', (
     tester,
   ) async {
     final store = AppStore();
@@ -600,18 +732,18 @@ void main() {
     expect(find.text('Dashain Khasi Split'), findsOneWidget);
     expect(find.text('Shrestha Family'), findsNothing);
 
-    final dhukutiTab = find.text('Dhukuti Groups');
-    await tester.ensureVisible(dhukutiTab);
-    await tester.tapAt(tester.getCenter(dhukutiTab));
+    final savingCircleTab = find.text('Saving Circle Groups');
+    await tester.ensureVisible(savingCircleTab);
+    await tester.tapAt(tester.getCenter(savingCircleTab));
     await tester.pump();
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.text('Family Dashain Dhukuti'),
+      find.text('Family Dashain Saving Circle'),
       300,
       scrollable: find.byType(Scrollable).last,
     );
-    expect(find.text('Family Dashain Dhukuti'), findsOneWidget);
+    expect(find.text('Family Dashain Saving Circle'), findsOneWidget);
     expect(find.text('Dashain Khasi Split'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -659,6 +791,74 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('transaction history tags and filters paid and unpaid rows', (
+    tester,
+  ) async {
+    final statement = GroupStatementData(
+      rows: [
+        GroupStatementRow(
+          date: DateTime(2026, 5, 1),
+          type: 'Payment',
+          description: 'Paid settlement',
+          paidBy: 'Erwin',
+          participants: 'Maya',
+          totalAmountMinor: npr(500),
+          splitMode: 'Payment',
+          yourShareMinor: 0,
+          paidTag: TransactionPaidTag.paid,
+          status: 'Paid',
+        ),
+        GroupStatementRow(
+          date: DateTime(2026, 5, 2),
+          type: 'Payment',
+          description: 'Pending settlement',
+          paidBy: 'Maya',
+          participants: 'Erwin',
+          totalAmountMinor: npr(700),
+          splitMode: 'Payment',
+          yourShareMinor: 0,
+          paidTag: TransactionPaidTag.unpaid,
+          status: 'Pending',
+        ),
+      ],
+      totalGroupExpenses: 0,
+      totalPaidByUser: 0,
+      totalUserShare: 0,
+      totalSettled: npr(500),
+      remainingBalance: -npr(700),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 960,
+            height: 560,
+            child: GroupStatementTable(statement: statement),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Transaction history'), findsOneWidget);
+    expect(find.text('Paid Tag'), findsOneWidget);
+    expect(find.text('Paid settlement'), findsOneWidget);
+    expect(find.text('Pending settlement'), findsOneWidget);
+
+    await tester.tap(find.text('Unpaid').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Paid settlement'), findsNothing);
+    expect(find.text('Pending settlement'), findsOneWidget);
+
+    await tester.tap(find.text('Paid').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Paid settlement'), findsOneWidget);
+    expect(find.text('Pending settlement'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('admin sees rename action in group detail', (tester) async {
     final store = AppStore()..selectedGroupId = 'g-dashain';
 
@@ -672,7 +872,7 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, 'Rename'), findsOneWidget);
   });
 
-  testWidgets('admin sees rename action in dhukuti group detail', (
+  testWidgets('admin sees rename action in Saving Circle group detail', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 1400);
@@ -690,11 +890,11 @@ void main() {
       ),
     );
 
-    final dhukutiTab = find.text('Dhukuti Groups');
-    await tester.tapAt(tester.getCenter(dhukutiTab));
+    final savingCircleTab = find.text('Saving Circle Groups');
+    await tester.tapAt(tester.getCenter(savingCircleTab));
     await tester.pumpAndSettle();
 
-    expect(find.text('Family Dashain Dhukuti'), findsWidgets);
+    expect(find.text('Family Dashain Saving Circle'), findsWidgets);
     expect(find.widgetWithText(OutlinedButton, 'Rename'), findsOneWidget);
   });
 

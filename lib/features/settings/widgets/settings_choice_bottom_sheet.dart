@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../shared/design_system/app_colors.dart';
 import '../../../shared/design_system/app_spacing.dart';
 import '../../../shared/design_system/app_text_styles.dart';
 
@@ -28,6 +27,7 @@ Future<T?> showSettingsChoiceBottomSheet<T>({
     context: context,
     showDragHandle: true,
     builder: (context) {
+      final scheme = Theme.of(context).colorScheme;
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -57,10 +57,7 @@ Future<T?> showSettingsChoiceBottomSheet<T>({
                           ? null
                           : Text(option.subtitle!),
                       trailing: selected
-                          ? Icon(
-                              Icons.check_circle,
-                              color: AppColors.primaryGreen,
-                            )
+                          ? Icon(Icons.check_circle, color: scheme.primary)
                           : null,
                       onTap: option.enabled
                           ? () => Navigator.pop(context, option.value)

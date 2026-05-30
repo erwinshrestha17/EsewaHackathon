@@ -554,7 +554,7 @@ class AppStore extends ChangeNotifier {
         category: 'festival',
         splitMode: SplitMode.equal,
         participantIds: members.followedBy(<String>[currentUserId]).toList(),
-        note: 'Festival Mode seeded split for a 90-second demo.',
+        note: 'Template split prepared for the demo.',
       );
     }
     if (template == 'Tihar Gift Pool' && members.isNotEmpty) {
@@ -565,6 +565,7 @@ class AppStore extends ChangeNotifier {
         template: 'Tihar',
         targetAmountMinor: npr(5000),
         contributionRule: GiftPoolContributionRule.threshold,
+        allowOverTarget: false,
         minContributionAmountMinor: npr(250),
         maxContributionAmountMinor: npr(1100),
         message: 'For a bright Tihar together.',
@@ -1511,6 +1512,7 @@ class AppStore extends ChangeNotifier {
     required String template,
     required int targetAmountMinor,
     required GiftPoolContributionRule contributionRule,
+    required bool allowOverTarget,
     required String message,
     int? equalContributionAmountMinor,
     int? minContributionAmountMinor,
@@ -1525,6 +1527,7 @@ class AppStore extends ChangeNotifier {
       template: template,
       targetAmountMinor: targetAmountMinor,
       contributionRule: contributionRule,
+      allowOverTarget: allowOverTarget,
       equalContributionAmountMinor:
           contributionRule == GiftPoolContributionRule.equal
           ? equalContributionAmountMinor
@@ -1581,10 +1584,10 @@ class AppStore extends ChangeNotifier {
     if (amountMinor <= 0) {
       return 'Enter a contribution amount greater than zero.';
     }
-    if (remaining <= 0) {
+    if (remaining <= 0 && !pool.allowOverTarget) {
       return 'This gift pool has already reached its target.';
     }
-    if (amountMinor > remaining) {
+    if (amountMinor > remaining && !pool.allowOverTarget) {
       return 'Contribution cannot exceed the ${money(remaining)} remaining.';
     }
 
@@ -1601,7 +1604,9 @@ class AppStore extends ChangeNotifier {
         final minAmount = pool.minContributionAmountMinor;
         final maxAmount = pool.maxContributionAmountMinor;
         final closesPool = amountMinor == remaining;
-        if (minAmount != null && amountMinor < minAmount && !closesPool) {
+        if (minAmount != null &&
+            amountMinor < minAmount &&
+            (!closesPool || pool.allowOverTarget)) {
           return 'Contribution must be at least ${money(minAmount)}.';
         }
         if (maxAmount != null && amountMinor > maxAmount) {
@@ -1639,7 +1644,8 @@ class AppStore extends ChangeNotifier {
     );
     contribution.paymentTransactionId = payment.id;
     giftPoolContributions.add(contribution);
-    if (giftPoolTotal(pool.id) >= pool.targetAmountMinor) {
+    if (!pool.allowOverTarget &&
+        giftPoolTotal(pool.id) >= pool.targetAmountMinor) {
       pool.status = GiftPoolStatus.completed;
     }
     _activity(
@@ -1733,7 +1739,7 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_created',
       entityType: 'dhukuti_pool',
       entityId: pool.id,
-      title: 'Digital Dhukuti created',
+      title: 'Saving Circle created',
       body: '$name now has a transparent schedule and ledger.',
     );
     notifyListeners();
@@ -1756,14 +1762,14 @@ class AppStore extends ChangeNotifier {
   String? renameDhukutiPool(String poolId, String name) {
     final pool = poolByIdOrNull(poolId);
     if (pool == null) {
-      return 'Dhukuti group is no longer available.';
+      return 'Saving Circle group is no longer available.';
     }
     if (!canManageDhukutiPool(poolId, currentUserId)) {
-      return 'Only the Dhukuti admin can rename this group.';
+      return 'Only the Saving Circle admin can rename this group.';
     }
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
-      return 'Dhukuti group name cannot be empty.';
+      return 'Saving Circle group name cannot be empty.';
     }
     if (trimmed == pool.name) {
       return null;
@@ -1776,7 +1782,7 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_renamed',
       entityType: 'dhukuti_pool',
       entityId: pool.id,
-      title: 'Dhukuti group renamed',
+      title: 'Saving Circle group renamed',
       body: '${nameOf(currentUserId)} renamed $previousName to ${pool.name}.',
     );
     notifyListeners();
@@ -1794,8 +1800,8 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_accepted',
       entityType: 'dhukuti_member',
       entityId: member.id,
-      title: 'Dhukuti participation accepted',
-      body: '${nameOf(currentUserId)} accepted the Dhukuti invite.',
+      title: 'Saving Circle participation accepted',
+      body: '${nameOf(currentUserId)} accepted the Saving Circle invite.',
     );
     notifyListeners();
   }
@@ -1811,8 +1817,8 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_declined',
       entityType: 'dhukuti_member',
       entityId: member.id,
-      title: 'Dhukuti invite declined',
-      body: '${nameOf(currentUserId)} declined the Dhukuti invite.',
+      title: 'Saving Circle invite declined',
+      body: '${nameOf(currentUserId)} declined the Saving Circle invite.',
     );
     notifyListeners();
   }
@@ -1850,7 +1856,7 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_contribution_paid',
       entityType: 'dhukuti_contribution',
       entityId: contribution.id,
-      title: 'Dhukuti contribution paid',
+      title: 'Saving Circle contribution paid',
       body:
           '${nameOf(currentUserId)} paid ${money(contribution.amountMinor)} for cycle ${contribution.cycleNumber}.',
     );
@@ -1890,7 +1896,7 @@ class AppStore extends ChangeNotifier {
         eventType: 'dhukuti_exit_contribution_paid',
         entityType: 'dhukuti_contribution',
         entityId: contribution.id,
-        title: 'Dhukuti exit contribution paid',
+        title: 'Saving Circle exit contribution paid',
         body:
             '${nameOf(currentUserId)} prepaid ${money(contribution.amountMinor)} for cycle ${contribution.cycleNumber} before exit review.',
       );
@@ -1914,7 +1920,7 @@ class AppStore extends ChangeNotifier {
         eventType: 'dhukuti_payout_completed',
         entityType: 'dhukuti_payout',
         entityId: payout.id,
-        title: 'Dhukuti payout recorded',
+        title: 'Saving Circle payout recorded',
         body:
             'Cycle ${cycle.cycleNumber} payout was recorded in the transparent ledger.',
       );
@@ -1925,7 +1931,7 @@ class AppStore extends ChangeNotifier {
         eventType: 'dhukuti_payout_reviewed',
         entityType: 'dhukuti_payout',
         entityId: payout.id,
-        title: 'Dhukuti payout reviewed',
+        title: 'Saving Circle payout reviewed',
         body:
             'Cycle ${cycle.cycleNumber} payout was reviewed without changing ledger balances.',
       );
@@ -1981,9 +1987,9 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_left_before_start',
       entityType: 'dhukuti_member',
       entityId: member.id,
-      title: 'Dhukuti member left',
+      title: 'Saving Circle member left',
       body:
-          '${nameOf(currentUserId)} left before the Dhukuti started. The schedule needs member review.',
+          '${nameOf(currentUserId)} left before the Saving Circle started. The schedule needs member review.',
     );
     _regenerateDhukutiSchedule(poolId);
     notifyListeners();
@@ -1998,8 +2004,8 @@ class AppStore extends ChangeNotifier {
     if (pool == null || pool.status == DhukutiPoolStatus.cancelled) {
       return const DhukutiExitDecision(
         type: DhukutiExitDecisionType.unavailable,
-        title: 'Dhukuti unavailable',
-        message: 'This Dhukuti pool is no longer available.',
+        title: 'Saving Circle unavailable',
+        message: 'This Saving Circle pool is no longer available.',
       );
     }
     final member = dhukutiMembers
@@ -2010,7 +2016,7 @@ class AppStore extends ChangeNotifier {
       return const DhukutiExitDecision(
         type: DhukutiExitDecisionType.unavailable,
         title: 'No active participation',
-        message: 'You are not an active participant in this Dhukuti.',
+        message: 'You are not an active participant in this Saving Circle.',
       );
     }
     final members = membersForPool(poolId);
@@ -2039,10 +2045,10 @@ class AppStore extends ChangeNotifier {
         (hasPendingInvite && !hasPaidAnyContribution && !hasReceivedPayout)) {
       return DhukutiExitDecision(
         type: DhukutiExitDecisionType.canLeaveBeforeStart,
-        title: 'Leave before Dhukuti starts?',
+        title: 'Leave before Saving Circle starts?',
         message:
             'You can leave before all members accept. Contribution amount and payout schedule will be recalculated.',
-        primaryAction: 'Leave Dhukuti',
+        primaryAction: 'Leave Saving Circle',
       );
     }
     final remainingExitContributions = remainingDhukutiExitContributions(
@@ -2062,7 +2068,7 @@ class AppStore extends ChangeNotifier {
         type: DhukutiExitDecisionType.pendingContribution,
         title: 'Remaining contributions required',
         message:
-            'You are in Cycle $currentCycle. To leave this Dhukuti, you must first pay ${money(remainingExitTotal)} for your remaining contribution obligations ($cycleText).',
+            'You are in Cycle $currentCycle. To leave this Saving Circle, you must first pay ${money(remainingExitTotal)} for your remaining contribution obligations ($cycleText).',
         amountMinor: remainingExitTotal,
         primaryAction: 'Pay Remaining Contributions',
         secondaryAction: 'View Agreement',
@@ -2652,7 +2658,7 @@ class AppStore extends ChangeNotifier {
       id: 'g-shrestha-family',
       name: 'Shrestha Family',
       category: GroupCategory.festival,
-      template: 'Family Dhukuti',
+      template: 'Family Saving Circle',
       kind: GroupKind.dhukuti,
       createdBy: 'u-sita',
       createdAt: DateTime(2026, 5, 14),
@@ -2845,6 +2851,7 @@ class AppStore extends ChangeNotifier {
       template: 'Tihar',
       targetAmountMinor: npr(5000),
       contributionRule: GiftPoolContributionRule.threshold,
+      allowOverTarget: false,
       minContributionAmountMinor: npr(250),
       maxContributionAmountMinor: npr(1100),
       message: 'A group envelope for Laxmi.',
@@ -2970,7 +2977,7 @@ class AppStore extends ChangeNotifier {
     final familyDhukuti = seedDhukutiPool(
       id: 'd-family-dashain',
       group: family,
-      name: 'Family Dashain Dhukuti',
+      name: 'Family Dashain Saving Circle',
       amountMinor: npr(5000),
       startDate: DateTime(2026, 3, 15),
       createdBy: 'u-sita',
@@ -3056,14 +3063,14 @@ class AppStore extends ChangeNotifier {
       eventType: 'dhukuti_member_accepted',
       entityType: 'dhukuti_member',
       entityId: familyDhukuti.id,
-      title: 'Member accepted Dhukuti invitation',
+      title: 'Member accepted Saving Circle invitation',
       body: 'Maya joined the transparent contribution schedule.',
     );
 
     final collegeDhukuti = seedDhukutiPool(
       id: 'd-college-friends',
       group: college,
-      name: 'College Friends Dhukuti',
+      name: 'College Friends Saving Circle',
       amountMinor: npr(2000),
       startDate: DateTime(2026, 4, 15),
       createdBy: 'u-maya',
@@ -3148,7 +3155,7 @@ class AppStore extends ChangeNotifier {
     _notify(
       'u-sita',
       'dhukuti',
-      'Dhukuti cycle at risk',
+      'Saving Circle cycle at risk',
       'One contribution is late before this cycle can be ready for payout.',
     );
   }

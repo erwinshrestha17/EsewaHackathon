@@ -10,7 +10,6 @@ import 'home_controller.dart';
 import 'home_models.dart';
 import 'widgets/active_group_card.dart';
 import 'widgets/balance_summary_card.dart';
-import 'widgets/festival_mode_card.dart';
 import 'widgets/home_empty_state.dart';
 import 'widgets/home_error_state.dart';
 import 'widgets/home_header.dart';
@@ -32,7 +31,6 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenDhukuti,
     required this.onOpenFriends,
     required this.onViewActivity,
-    required this.onExploreTemplates,
     super.key,
   });
 
@@ -46,7 +44,6 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onOpenDhukuti;
   final VoidCallback onOpenFriends;
   final VoidCallback onViewActivity;
-  final VoidCallback onExploreTemplates;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -141,8 +138,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       onViewAll: widget.onViewActivity,
                       onItemTap: (_) => widget.onViewActivity(),
                     ),
-                    const SizedBox(height: 18),
-                    FestivalModeCard(onExplore: widget.onExploreTemplates),
                   ],
                 ),
               ),

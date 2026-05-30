@@ -57,7 +57,8 @@ class _GroupCard extends StatelessWidget {
         ? AppColors.success
         : group.userBalance < 0
         ? AppColors.warning
-        : AppColors.textSecondary;
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+    final scheme = Theme.of(context).colorScheme;
     return ds.AppCard(
       onTap: onTap,
       padding: const EdgeInsets.all(14),
@@ -66,8 +67,8 @@ class _GroupCard extends StatelessWidget {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: AppColors.lightGreen,
-              foregroundColor: AppColors.darkGreen,
+              backgroundColor: scheme.primaryContainer,
+              foregroundColor: scheme.onPrimaryContainer,
               child: Icon(group.icon),
             ),
             const SizedBox(width: AppSpacing.md),

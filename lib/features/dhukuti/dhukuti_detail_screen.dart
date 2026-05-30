@@ -29,7 +29,7 @@ Future<void> showRenameDhukutiPoolDialog({
   if (!store.canManageDhukutiPool(pool.id, store.currentUserId)) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Only the Dhukuti admin can rename this group.'),
+        content: Text('Only the Saving Circle admin can rename this group.'),
       ),
     );
     return;
@@ -42,7 +42,7 @@ Future<void> showRenameDhukutiPoolDialog({
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Rename Dhukuti group'),
+            title: const Text('Rename Saving Circle group'),
             content: SizedBox(
               width: 420,
               child: TextField(
@@ -50,7 +50,7 @@ Future<void> showRenameDhukutiPoolDialog({
                 autofocus: true,
                 textCapitalization: TextCapitalization.words,
                 decoration: InputDecoration(
-                  labelText: 'Dhukuti group name',
+                  labelText: 'Saving Circle group name',
                   errorText: errorText,
                 ),
                 onChanged: (_) {
@@ -132,7 +132,7 @@ class _DhukutiDetailScreenState extends State<DhukutiDetailScreen> {
             child: TextButton.icon(
               onPressed: widget.onBack,
               icon: const Icon(Icons.arrow_back),
-              label: const Text('Dhukuti pools'),
+              label: const Text('Saving Circle pools'),
             ),
           ),
         DhukutiHeader(
@@ -393,7 +393,7 @@ class _HeroCycleCard extends StatelessWidget {
                           ? 'Payout Recorded'
                           : 'Payout Review Recorded',
                       message:
-                          'Your Dhukuti ledger has been updated without implying a guaranteed payout.',
+                          'Your Saving Circle ledger has been updated without implying a guaranteed payout.',
                       amount: cycle.expectedContributionTotalMinor,
                       transactionReference: reference,
                       createdAt: DateTime.now(),
@@ -673,7 +673,7 @@ class _DhukutiExitCard extends StatelessWidget {
                                 content: Text(
                                   paidAmount == 0
                                       ? 'No remaining contribution is open.'
-                                      : 'Paid ${money(paidAmount)} toward remaining Dhukuti obligations.',
+                                      : 'Paid ${money(paidAmount)} toward remaining Saving Circle obligations.',
                                 ),
                               ),
                             );
@@ -953,7 +953,7 @@ class _LedgerTab extends StatelessWidget {
             const DhukutiEmptyState(
               icon: Icons.receipt_long_outlined,
               title: 'No ledger activity',
-              message: 'Dhukuti actions and status updates appear here.',
+              message: 'Saving Circle actions and status updates appear here.',
             )
           else
             for (final event in events)

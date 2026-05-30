@@ -55,6 +55,8 @@ class SajhaKharchaApp extends StatelessWidget {
       title: 'Sajha Kharcha',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.system,
       initialRoute: '/splash',
       routes: {
         '/splash': (_) => const SplashScreen(),
@@ -359,7 +361,6 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         onOpenDhukuti: _openDhukutiGroups,
         onOpenFriends: () => _go(2),
         onViewActivity: () => _openStandaloneScreen(const ActivityScreen()),
-        onExploreTemplates: _showFestivalTemplates,
       ),
       1 => GroupsScreen(
         initialTab: _groupsInitialTab,
@@ -386,7 +387,6 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         onOpenDhukuti: _openDhukutiGroups,
         onOpenFriends: () => _go(2),
         onViewActivity: () => _openStandaloneScreen(const ActivityScreen()),
-        onExploreTemplates: _showFestivalTemplates,
       ),
     };
 
@@ -397,6 +397,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 900;
+            final scheme = Theme.of(context).colorScheme;
             return Scaffold(
               appBar: _index == 0
                   ? null
@@ -408,13 +409,13 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
                             height: 36,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary,
+                              color: scheme.primary,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Text(
+                            child: Text(
                               'S',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: scheme.onPrimary,
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
@@ -622,58 +623,6 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   void _openStandaloneScreen(Widget screen) {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
-
-  void _showFestivalTemplates() {
-    final store = StoreScope.of(context);
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        final templates = const [
-          'Dashain Khasi Split',
-          'Tihar Gift Pool',
-          'New Year Trek',
-          'Office Bhoj',
-          'College Picnic',
-          'Apartment Monthly',
-        ];
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Festival templates',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Festival templates are available in the demo flow.',
-                ),
-                const SizedBox(height: 12),
-                for (final template in templates)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.celebration_outlined),
-                    title: Text(template),
-                    onTap: () {
-                      final id = store.createFestivalTemplate(template);
-                      store.selectedGroupId = id;
-                      Navigator.pop(context);
-                      _go(1);
-                    },
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
 
 class _Destination {
@@ -695,7 +644,7 @@ class ActivityScreen extends StatelessWidget {
         const ScreenHeader(
           title: 'Activity',
           subtitle:
-              'A single timeline for your groups, gifts, settlements, and Digital Dhukuti actions.',
+              'A single timeline for your groups, gifts, settlements, and Saving Circle actions.',
           icon: Icons.timeline,
         ),
         SectionPanel(
@@ -1113,7 +1062,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
               ButtonSegment(
                 value: GroupKind.dhukuti,
                 icon: Icon(Icons.account_balance_wallet_outlined),
-                label: Text('Dhukuti Groups'),
+                label: Text('Saving Circle Groups'),
               ),
             ],
             selected: {_tab},
@@ -1145,7 +1094,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
             ScreenHeader(
               title: 'Groups overview',
               subtitle:
-                  'Expense groups stay separate from Dhukuti commitments. Open a group when you want its expenses, balances, members, and activity.',
+                  'Expense groups stay separate from Saving Circle commitments. Open a group when you want its expenses, balances, members, and activity.',
               icon: Icons.groups,
               action: FilledButton.icon(
                 onPressed: () => showCreateGroupDialog(
@@ -2207,7 +2156,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
                             title: Text(pool.title),
                             subtitle: Text(
                               '${store.groupById(pool.groupId).name} • '
-                              '${money(store.giftPoolTotal(pool.id))} of ${money(pool.targetAmountMinor)} • '
+                              '${giftPoolProgressText(pool, store.giftPoolTotal(pool.id))} • '
                               '${giftPoolContributionRuleLabel(pool)}',
                             ),
                             trailing: Wrap(
@@ -3142,7 +3091,7 @@ class _DhukutiScreenState extends State<DhukutiScreen> {
         final list = AppScrollView(
           children: [
             ScreenHeader(
-              title: 'Digital Dhukuti',
+              title: 'Saving Circle',
               subtitle:
                   'Transparent contribution scheduler and ledger. No credit, interest, investment return, or guaranteed payout claims.',
               icon: Icons.account_balance_wallet,
@@ -3157,7 +3106,7 @@ class _DhukutiScreenState extends State<DhukutiScreen> {
               child: pools.isEmpty
                   ? const EmptyState(
                       icon: Icons.account_balance_wallet_outlined,
-                      title: 'No Dhukuti pool',
+                      title: 'No Saving Circle pool',
                       body: 'Create one from an existing group.',
                     )
                   : Column(
@@ -3190,7 +3139,7 @@ class _DhukutiScreenState extends State<DhukutiScreen> {
                 child: EmptyState(
                   icon: Icons.account_balance_wallet_outlined,
                   title: 'Select a pool',
-                  body: 'Dhukuti details appear here.',
+                  body: 'Saving Circle details appear here.',
                 ),
               )
             : DhukutiDetail(pool: selected);
@@ -3389,7 +3338,13 @@ class NotificationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    const categories = ['All', 'Payments', 'Groups', 'Dhukuti', 'Requests'];
+    const categories = [
+      'All',
+      'Payments',
+      'Groups',
+      'Saving Circle',
+      'Requests',
+    ];
 
     return DefaultTabController(
       length: categories.length,
@@ -3402,7 +3357,7 @@ class NotificationsScreen extends StatelessWidget {
               Tab(text: 'All'),
               Tab(text: 'Payments'),
               Tab(text: 'Groups'),
-              Tab(text: 'Dhukuti'),
+              Tab(text: 'Saving Circle'),
               Tab(text: 'Requests'),
             ],
           ),
@@ -3457,7 +3412,7 @@ class _NotificationList extends StatelessWidget {
               icon: Icons.notifications_none,
               title: 'No notifications',
               body:
-                  'Settlement, group, request, gift, and Dhukuti alerts appear here.',
+                  'Settlement, group, request, gift, and Saving Circle alerts appear here.',
             )
           : Column(
               children: [
@@ -3484,7 +3439,7 @@ String _notificationCategory(NotificationItem item) {
     return 'Payments';
   }
   if (type.contains('dhukuti')) {
-    return 'Dhukuti';
+    return 'Saving Circle';
   }
   if (type.contains('connection') || type.contains('request')) {
     return 'Requests';
@@ -3495,7 +3450,7 @@ String _notificationCategory(NotificationItem item) {
 IconData _notificationIcon(NotificationItem item) {
   return switch (_notificationCategory(item)) {
     'Payments' => Icons.payments_outlined,
-    'Dhukuti' => Icons.account_balance_wallet_outlined,
+    'Saving Circle' => Icons.account_balance_wallet_outlined,
     'Requests' => Icons.person_add_alt_1_outlined,
     _ => Icons.groups_outlined,
   };
@@ -3535,12 +3490,13 @@ class ScreenHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final scheme = Theme.of(context).colorScheme;
         final compact = constraints.maxWidth < 840;
         final titleBlock = Row(
           children: [
             CircleAvatar(
-              backgroundColor: AppColors.lightGreen,
-              foregroundColor: AppColors.darkGreen,
+              backgroundColor: scheme.primaryContainer,
+              foregroundColor: scheme.onPrimaryContainer,
               child: Icon(icon),
             ),
             const SizedBox(width: AppSpacing.md),
@@ -3708,10 +3664,11 @@ class UserAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return CircleAvatar(
       radius: small ? 12 : null,
-      backgroundColor: AppColors.lightGreen,
-      foregroundColor: AppColors.darkGreen,
+      backgroundColor: scheme.primaryContainer,
+      foregroundColor: scheme.onPrimaryContainer,
       child: Text(
         user.avatar,
         style: TextStyle(
@@ -4149,12 +4106,13 @@ class _CurrentUserBadge extends StatelessWidget {
 }
 
 Color toneColor(BuildContext context, Tone tone) {
+  final scheme = Theme.of(context).colorScheme;
   return switch (tone) {
     Tone.success => AppColors.success,
     Tone.warning => AppColors.warning,
     Tone.info => AppColors.info,
-    Tone.danger => AppColors.error,
-    Tone.neutral => AppColors.textSecondary,
+    Tone.danger => scheme.error,
+    Tone.neutral => scheme.onSurfaceVariant,
   };
 }
 
@@ -6433,6 +6391,7 @@ class _ManualSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -6440,10 +6399,10 @@ class _ManualSectionHeader extends StatelessWidget {
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: AppColors.lightGreen,
+            color: scheme.primaryContainer,
             borderRadius: BorderRadius.circular(AppRadius.md),
           ),
-          child: Icon(icon, color: AppColors.darkGreen, size: 20),
+          child: Icon(icon, color: scheme.onPrimaryContainer, size: 20),
         ),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
@@ -7197,7 +7156,7 @@ Future<void> showCreateDhukutiGroupDialog(
   ValueChanged<GroupKind>? onCreated,
 }) async {
   final store = StoreScope.of(context);
-  final name = TextEditingController(text: 'Family Dhukuti');
+  final name = TextEditingController(text: 'Family Saving Circle');
   final contribution = TextEditingController(text: '5000');
   final serviceFee = TextEditingController(text: '50');
   var frequency = 'monthly';
@@ -7217,7 +7176,7 @@ Future<void> showCreateDhukutiGroupDialog(
           final canCreate =
               agreementAccepted && selected.isNotEmpty && amount > 0;
           return AlertDialog(
-            title: const Text('Create Dhukuti Group'),
+            title: const Text('Create Saving Circle Group'),
             content: SizedBox(
               width: 580,
               child: SingleChildScrollView(
@@ -7232,7 +7191,7 @@ Future<void> showCreateDhukutiGroupDialog(
                     TextField(
                       controller: name,
                       decoration: const InputDecoration(
-                        labelText: 'Dhukuti group name',
+                        labelText: 'Saving Circle group name',
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
@@ -7277,7 +7236,7 @@ Future<void> showCreateDhukutiGroupDialog(
                     _ManualFormSection(
                       title: 'Members',
                       icon: Icons.group_outlined,
-                      subtitle: 'Choose who joins this Dhukuti schedule',
+                      subtitle: 'Choose who joins this Saving Circle schedule',
                       trailing: _CountPill(label: '$memberCount people'),
                       child: Wrap(
                         spacing: 10,
@@ -7360,14 +7319,14 @@ Future<void> showCreateDhukutiGroupDialog(
                 onPressed: canCreate
                     ? () {
                         final groupName = name.text.trim().isEmpty
-                            ? 'New Dhukuti Group'
+                            ? 'New Saving Circle Group'
                             : name.text.trim();
                         final groupId = store.createGroup(
                           name: groupName,
                           category: GroupCategory.custom,
                           memberIds: selected.toList(),
                           kind: GroupKind.dhukuti,
-                          template: 'Dhukuti',
+                          template: 'Saving Circle',
                         );
                         final poolId = store.createDhukutiPool(
                           groupId: groupId,
@@ -7382,10 +7341,10 @@ Future<void> showCreateDhukutiGroupDialog(
                           ..selectedGroupId = null;
                         Navigator.pop(dialogContext);
                         onCreated?.call(GroupKind.dhukuti);
-                        showSnack(context, '$groupName Dhukuti created.');
+                        showSnack(context, '$groupName Saving Circle created.');
                       }
                     : null,
-                child: const Text('Create Dhukuti Group'),
+                child: const Text('Create Saving Circle Group'),
               ),
             ],
           );
@@ -8464,10 +8423,11 @@ class ParticipantSelectorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 210, maxWidth: 260),
       child: Material(
-        color: selected ? AppColors.primaryGreen : AppColors.surface,
+        color: selected ? scheme.primary : scheme.surface,
         borderRadius: BorderRadius.circular(AppRadius.md),
         elevation: selected ? 2 : 0,
         child: InkWell(
@@ -8482,7 +8442,7 @@ class ParticipantSelectorCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppRadius.md),
               border: Border.all(
-                color: selected ? AppColors.primaryGreen : AppColors.border,
+                color: selected ? scheme.primary : scheme.outlineVariant,
                 width: selected ? 1.4 : 1,
               ),
             ),
@@ -8496,13 +8456,13 @@ class ParticipantSelectorCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                      color: selected ? Colors.white : AppColors.textPrimary,
+                      color: selected ? scheme.onPrimary : scheme.onSurface,
                     ),
                   ),
                 ),
                 if (selected) ...[
                   const SizedBox(width: AppSpacing.sm),
-                  const Icon(Icons.check_circle, size: 18, color: Colors.white),
+                  Icon(Icons.check_circle, size: 18, color: scheme.onPrimary),
                 ],
               ],
             ),
@@ -8524,10 +8484,11 @@ class _ParticipantSelectionAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return CircleAvatar(
       radius: 13,
-      backgroundColor: selected ? Colors.white : AppColors.lightGreen,
-      foregroundColor: selected ? AppColors.darkGreen : AppColors.darkGreen,
+      backgroundColor: selected ? scheme.onPrimary : scheme.primaryContainer,
+      foregroundColor: selected ? scheme.primary : scheme.onPrimaryContainer,
       child: Text(
         user.avatar,
         style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
@@ -8827,6 +8788,7 @@ class _PersonAmountRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.sm),
       padding: const EdgeInsets.symmetric(
@@ -8834,9 +8796,9 @@ class _PersonAmountRow extends StatelessWidget {
         vertical: 10,
       ),
       decoration: BoxDecoration(
-        color: AppColors.surfaceSoft,
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -9291,6 +9253,34 @@ Future<void> showStatementDialog(BuildContext context, String groupId) async {
   );
 }
 
+enum TransactionPaidTag { paid, unpaid }
+
+enum TransactionPaidFilter { all, paid, unpaid }
+
+extension TransactionPaidTagLabel on TransactionPaidTag {
+  String get label {
+    return switch (this) {
+      TransactionPaidTag.paid => 'Paid',
+      TransactionPaidTag.unpaid => 'Unpaid',
+    };
+  }
+
+  Tone get tone {
+    return switch (this) {
+      TransactionPaidTag.paid => Tone.success,
+      TransactionPaidTag.unpaid => Tone.warning,
+    };
+  }
+}
+
+String transactionPaidFilterLabel(TransactionPaidFilter filter) {
+  return switch (filter) {
+    TransactionPaidFilter.all => 'All',
+    TransactionPaidFilter.paid => 'Paid',
+    TransactionPaidFilter.unpaid => 'Unpaid',
+  };
+}
+
 class GroupStatementData {
   GroupStatementData({
     required this.rows,
@@ -9342,6 +9332,9 @@ class GroupStatementData {
           totalAmountMinor: expense.totalMinor,
           splitMode: enumLabel(expense.splitMode),
           yourShareMinor: userShare,
+          paidTag: expense.status == ExpenseStatus.active
+              ? TransactionPaidTag.paid
+              : TransactionPaidTag.unpaid,
           status: enumLabel(expense.status),
         ),
       );
@@ -9368,6 +9361,9 @@ class GroupStatementData {
           totalAmountMinor: settlement.amountMinor,
           splitMode: 'Payment',
           yourShareMinor: 0,
+          paidTag: settlement.status == PaymentStatus.paid
+              ? TransactionPaidTag.paid
+              : TransactionPaidTag.unpaid,
           status: enumLabel(settlement.status),
         ),
       );
@@ -9400,6 +9396,7 @@ class GroupStatementData {
           totalAmountMinor: amount,
           splitMode: enumLabel(adjustment.adjustmentType),
           yourShareMinor: userImpact,
+          paidTag: TransactionPaidTag.paid,
           status: 'Applied',
         ),
       );
@@ -9419,7 +9416,7 @@ class GroupStatementData {
   String toCsv() {
     final buffer = StringBuffer();
     buffer.writeln(
-      'Date,Type,Description,Paid By,Participants,Total Amount,Split Mode,Your Share,Status',
+      'Date,Type,Description,Paid By,Participants,Total Amount,Split Mode,Your Share,Paid Tag,Status',
     );
     for (final row in rows) {
       buffer.writeln(
@@ -9432,6 +9429,7 @@ class GroupStatementData {
           statementMoney(row.totalAmountMinor),
           row.splitMode,
           statementMoney(row.yourShareMinor),
+          row.paidTag.label,
           row.status,
         ].map(_csvCell).join(','),
       );
@@ -9450,7 +9448,7 @@ class GroupStatementData {
     final buffer = StringBuffer('Group Statement\n\n');
     for (final row in rows) {
       buffer.writeln(
-        '${statementDate(row.date)} | ${row.type} | ${row.description} | ${row.paidBy} | ${row.participants} | ${statementMoney(row.totalAmountMinor)} | ${row.splitMode} | ${statementMoney(row.yourShareMinor)} | ${row.status}',
+        '${statementDate(row.date)} | ${row.type} | ${row.description} | ${row.paidBy} | ${row.participants} | ${statementMoney(row.totalAmountMinor)} | ${row.splitMode} | ${statementMoney(row.yourShareMinor)} | ${row.paidTag.label} | ${row.status}',
       );
     }
     buffer
@@ -9474,6 +9472,7 @@ class GroupStatementRow {
     required this.totalAmountMinor,
     required this.splitMode,
     required this.yourShareMinor,
+    required this.paidTag,
     required this.status,
   });
 
@@ -9485,12 +9484,20 @@ class GroupStatementRow {
   final int totalAmountMinor;
   final String splitMode;
   final int yourShareMinor;
+  final TransactionPaidTag paidTag;
   final String status;
 }
 
-class GroupStatementTable extends StatelessWidget {
+class GroupStatementTable extends StatefulWidget {
   const GroupStatementTable({required this.statement, super.key});
 
+  final GroupStatementData statement;
+
+  @override
+  State<GroupStatementTable> createState() => _GroupStatementTableState();
+}
+
+class _GroupStatementTableState extends State<GroupStatementTable> {
   static const _columns = [
     ('Date', 112.0),
     ('Type', 112.0),
@@ -9500,18 +9507,65 @@ class GroupStatementTable extends StatelessWidget {
     ('Total Amount', 140.0),
     ('Split Mode', 120.0),
     ('Your Share', 130.0),
+    ('Paid Tag', 110.0),
     ('Status', 110.0),
   ];
 
-  static const _tableWidth = 1254.0;
+  static const _tableWidth = 1364.0;
 
-  final GroupStatementData statement;
+  final _horizontalScrollController = ScrollController();
+  var _filter = TransactionPaidFilter.all;
+
+  @override
+  void dispose() {
+    _horizontalScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final rows = widget.statement.rows
+        .where((row) {
+          return switch (_filter) {
+            TransactionPaidFilter.all => true,
+            TransactionPaidFilter.paid =>
+              row.paidTag == TransactionPaidTag.paid,
+            TransactionPaidFilter.unpaid =>
+              row.paidTag == TransactionPaidTag.unpaid,
+          };
+        })
+        .toList(growable: false);
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          alignment: WrapAlignment.spaceBetween,
+          children: [
+            Text(
+              'Transaction history',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            SegmentedButton<TransactionPaidFilter>(
+              segments: [
+                for (final filter in TransactionPaidFilter.values)
+                  ButtonSegment(
+                    value: filter,
+                    label: Text(transactionPaidFilterLabel(filter)),
+                  ),
+              ],
+              selected: {_filter},
+              onSelectionChanged: (value) =>
+                  setState(() => _filter = value.first),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         Expanded(
           child: DecoratedBox(
             decoration: BoxDecoration(
@@ -9521,8 +9575,10 @@ class GroupStatementTable extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Scrollbar(
+                controller: _horizontalScrollController,
                 thumbVisibility: true,
                 child: SingleChildScrollView(
+                  controller: _horizontalScrollController,
                   scrollDirection: Axis.horizontal,
                   child: SizedBox(
                     width: _tableWidth,
@@ -9530,17 +9586,17 @@ class GroupStatementTable extends StatelessWidget {
                       children: [
                         _StatementHeader(columns: _columns),
                         Expanded(
-                          child: statement.rows.isEmpty
+                          child: rows.isEmpty
                               ? const EmptyState(
                                   icon: Icons.description_outlined,
-                                  title: 'No statement rows',
+                                  title: 'No transactions',
                                   body:
-                                      'Expenses, settlements, and adjustments appear here.',
+                                      'Transactions matching this filter appear here.',
                                 )
                               : ListView.builder(
-                                  itemCount: statement.rows.length,
+                                  itemCount: rows.length,
                                   itemBuilder: (context, index) {
-                                    final row = statement.rows[index];
+                                    final row = rows[index];
                                     return _StatementTableRow(
                                       values: [
                                         statementDate(row.date),
@@ -9551,6 +9607,7 @@ class GroupStatementTable extends StatelessWidget {
                                         statementMoney(row.totalAmountMinor),
                                         row.splitMode,
                                         statementMoney(row.yourShareMinor),
+                                        row.paidTag.label,
                                         row.status,
                                       ],
                                       columns: _columns,
@@ -9568,7 +9625,7 @@ class GroupStatementTable extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _StatementTotals(statement: statement),
+        _StatementTotals(statement: widget.statement),
       ],
     );
   }
@@ -9639,13 +9696,27 @@ class _StatementTableRow extends StatelessWidget {
   }
 }
 
-class _StatementTotals extends StatelessWidget {
+class _StatementTotals extends StatefulWidget {
   const _StatementTotals({required this.statement});
 
   final GroupStatementData statement;
 
   @override
+  State<_StatementTotals> createState() => _StatementTotalsState();
+}
+
+class _StatementTotalsState extends State<_StatementTotals> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final statement = widget.statement;
     final totals = [
       (
         'Group total',
@@ -9678,8 +9749,10 @@ class _StatementTotals extends StatelessWidget {
     return SizedBox(
       height: 104,
       child: Scrollbar(
+        controller: _scrollController,
         thumbVisibility: true,
         child: SingleChildScrollView(
+          controller: _scrollController,
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
@@ -9795,17 +9868,18 @@ String _csvCell(String value) {
 }
 
 String giftPoolContributionRuleLabel(GiftPool pool) {
-  return switch (pool.contributionRule) {
+  final rule = switch (pool.contributionRule) {
     GiftPoolContributionRule.equal =>
       'Equal ${money(pool.equalContributionAmountMinor ?? 0)} each',
     GiftPoolContributionRule.threshold =>
       '${money(pool.minContributionAmountMinor ?? 0)} min · '
           '${money(pool.maxContributionAmountMinor ?? pool.targetAmountMinor)} max',
   };
+  return pool.allowOverTarget ? '$rule · no goal cap' : rule;
 }
 
 String giftPoolContributionRuleHelp(GiftPool pool) {
-  return switch (pool.contributionRule) {
+  final rule = switch (pool.contributionRule) {
     GiftPoolContributionRule.equal =>
       'Each contributor pays exactly ${money(pool.equalContributionAmountMinor ?? 0)} once.',
     GiftPoolContributionRule.threshold =>
@@ -9813,6 +9887,23 @@ String giftPoolContributionRuleHelp(GiftPool pool) {
           '${money(pool.minContributionAmountMinor ?? 0)} and '
           '${money(pool.maxContributionAmountMinor ?? pool.targetAmountMinor)}.',
   };
+  return pool.allowOverTarget
+      ? '$rule Contributions can continue after the pool passes its goal.'
+      : rule;
+}
+
+String giftPoolProgressText(GiftPool pool, int raised) {
+  final remaining = pool.targetAmountMinor - raised;
+  if (remaining > 0) {
+    return '${money(raised)} of ${money(pool.targetAmountMinor)} raised'
+        ' • ${money(remaining)} to go';
+  }
+  if (pool.allowOverTarget && raised > pool.targetAmountMinor) {
+    return '${money(raised)} raised'
+        ' • ${money(raised - pool.targetAmountMinor)} above goal';
+  }
+  return '${money(raised)} of ${money(pool.targetAmountMinor)} raised'
+      ' • target reached';
 }
 
 Future<void> showCreateGiftPoolDialog(BuildContext context) async {
@@ -9828,8 +9919,8 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
   final minAmount = TextEditingController(text: '250');
   final maxAmount = TextEditingController(text: '1100');
   final message = TextEditingController(text: 'Together from Sajha Kharcha.');
-  var template = 'Tihar';
   var contributionRule = GiftPoolContributionRule.equal;
+  var allowOverTarget = false;
   await showDialog<void>(
     context: context,
     builder: (dialogContext) {
@@ -9841,6 +9932,9 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
               : store
                     .giftPoolEligibleContributorIds(groupId!, recipientId!)
                     .length;
+          final fieldTextStyle = Theme.of(
+            context,
+          ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700);
           final equalAmountMinor = parseMoneyToMinor(equalAmount.text);
           final targetAmountMinor =
               contributionRule == GiftPoolContributionRule.equal
@@ -9874,6 +9968,7 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                     DropdownButtonFormField<String>(
                       initialValue: groupId,
                       decoration: const InputDecoration(labelText: 'Group'),
+                      style: fieldTextStyle,
                       items: [
                         for (final group in groups)
                           DropdownMenuItem(
@@ -9887,6 +9982,7 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                     DropdownButtonFormField<String>(
                       initialValue: recipientId,
                       decoration: const InputDecoration(labelText: 'Recipient'),
+                      style: fieldTextStyle,
                       items: [
                         for (final user in store.activeConnectionUsers())
                           DropdownMenuItem(
@@ -9899,23 +9995,8 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                     const SizedBox(height: 12),
                     TextField(
                       controller: title,
+                      style: fieldTextStyle,
                       decoration: const InputDecoration(labelText: 'Title'),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: template,
-                      decoration: const InputDecoration(labelText: 'Template'),
-                      items: [
-                        for (final item in const [
-                          'Dashain',
-                          'Tihar',
-                          'Birthday',
-                          'Wedding',
-                        ])
-                          DropdownMenuItem(value: item, child: Text(item)),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => template = value ?? template),
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -9946,6 +10027,7 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                     if (contributionRule == GiftPoolContributionRule.equal) ...[
                       TextField(
                         controller: equalAmount,
+                        style: fieldTextStyle,
                         keyboardType: TextInputType.number,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
@@ -9962,6 +10044,7 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                     ] else ...[
                       TextField(
                         controller: target,
+                        style: fieldTextStyle,
                         keyboardType: TextInputType.number,
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly,
@@ -9978,6 +10061,7 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                           Expanded(
                             child: TextField(
                               controller: minAmount,
+                              style: fieldTextStyle,
                               keyboardType: TextInputType.number,
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
@@ -9996,6 +10080,7 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                           Expanded(
                             child: TextField(
                               controller: maxAmount,
+                              style: fieldTextStyle,
                               keyboardType: TextInputType.number,
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
@@ -10010,9 +10095,21 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                         ],
                       ),
                     ],
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: allowOverTarget,
+                      title: const Text('Allow contributions above goal'),
+                      subtitle: const Text(
+                        'Keep the pool open even after it passes the target.',
+                      ),
+                      onChanged: (value) =>
+                          setState(() => allowOverTarget = value),
+                    ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: message,
+                      style: fieldTextStyle,
                       decoration: const InputDecoration(labelText: 'Message'),
                     ),
                   ],
@@ -10032,9 +10129,10 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                           groupId: groupId!,
                           recipientId: recipientId!,
                           title: title.text,
-                          template: template,
+                          template: 'Gift Pool',
                           targetAmountMinor: targetAmountMinor,
                           contributionRule: contributionRule,
+                          allowOverTarget: allowOverTarget,
                           equalContributionAmountMinor:
                               contributionRule == GiftPoolContributionRule.equal
                               ? equalAmountMinor
@@ -10089,7 +10187,9 @@ Future<void> showContributeToGiftPoolDialog(
           final raised = store.giftPoolTotal(pool.id);
           final remaining = pool.targetAmountMinor - raised;
           final amountMinor = parseMoneyToMinor(amount.text);
-          final contributionError = amount.text.trim().isEmpty || remaining <= 0
+          final contributionError =
+              amount.text.trim().isEmpty ||
+                  (remaining <= 0 && !pool.allowOverTarget)
               ? null
               : store.giftPoolContributionError(pool.id, amountMinor);
           final alreadyContributed =
@@ -10098,7 +10198,7 @@ Future<void> showContributeToGiftPoolDialog(
           final canContribute =
               amount.text.trim().isNotEmpty &&
               contributionError == null &&
-              remaining > 0;
+              (remaining > 0 || pool.allowOverTarget);
           return AlertDialog(
             title: const Text('Contribute to gift pool'),
             content: SizedBox(
@@ -10114,8 +10214,7 @@ Future<void> showContributeToGiftPoolDialog(
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${money(raised)} of ${money(pool.targetAmountMinor)} raised'
-                    '${remaining > 0 ? ' • ${money(remaining)} to go' : ' • target reached'}',
+                    giftPoolProgressText(pool, raised),
                     style: Theme.of(builderContext).textTheme.bodySmall
                         ?.copyWith(
                           color: Theme.of(
@@ -10140,7 +10239,9 @@ Future<void> showContributeToGiftPoolDialog(
                     autofocus: true,
                     readOnly:
                         pool.contributionRule == GiftPoolContributionRule.equal,
-                    enabled: remaining > 0 && !alreadyContributed,
+                    enabled:
+                        (remaining > 0 || pool.allowOverTarget) &&
+                        !alreadyContributed,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (_) => setState(() {}),
@@ -10301,8 +10402,8 @@ Future<void> showGiftPoolDetailsDialog(
               const SizedBox(height: 4),
               Text(
                 'For ${store.nameOf(pool.recipientId)} • '
-                '${money(raised)} of ${money(pool.targetAmountMinor)} raised '
-                'from ${contributions.length} '
+                '${giftPoolProgressText(pool, raised)} '
+                '• from ${contributions.length} '
                 '${contributions.length == 1 ? 'contribution' : 'contributions'}',
                 style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
                   color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
@@ -10392,7 +10493,7 @@ Future<void> showCreateDhukutiDialog(
   final store = StoreScope.of(context);
   final groups = store.visibleDhukutiGroups;
   String? groupId = initialGroupId ?? (groups.isEmpty ? null : groups.first.id);
-  final name = TextEditingController(text: 'New Digital Dhukuti');
+  final name = TextEditingController(text: 'New Saving Circle');
   final contribution = TextEditingController(text: '2000');
   final members = <String>{
     for (final user in store.activeConnectionUsers()) user.id,
@@ -10404,7 +10505,7 @@ Future<void> showCreateDhukutiDialog(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Create Dhukuti Pool'),
+            title: const Text('Create Saving Circle Pool'),
             content: SizedBox(
               width: 580,
               child: SingleChildScrollView(
@@ -10460,7 +10561,7 @@ Future<void> showCreateDhukutiDialog(
                     _ManualFormSection(
                       title: 'Members',
                       icon: Icons.group_outlined,
-                      subtitle: 'Choose who joins this Dhukuti schedule',
+                      subtitle: 'Choose who joins this Saving Circle schedule',
                       trailing: _CountPill(
                         label: '${members.length + 1} people',
                       ),

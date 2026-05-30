@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../design_system/app_colors.dart';
 import '../design_system/app_components.dart' as ds;
 import '../design_system/app_spacing.dart';
 import '../design_system/app_text_styles.dart';
@@ -185,11 +184,9 @@ class _HeroSummary extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
-        color: AppColors.lightGreen,
+        color: scheme.primaryContainer,
         borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(
-          color: AppColors.primaryGreen.withValues(alpha: 0.22),
-        ),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.22)),
       ),
       child: Column(
         children: [
@@ -203,7 +200,7 @@ class _HeroSummary extends StatelessWidget {
                   color: scheme.primary,
                   borderRadius: BorderRadius.circular(AppRadius.lg),
                 ),
-                child: Icon(icon, color: Colors.white, size: 28),
+                child: Icon(icon, color: scheme.onPrimary, size: 28),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
@@ -226,7 +223,7 @@ class _HeroSummary extends StatelessWidget {
           Text(
             money(data.amount),
             style: AppTextStyles.largeScreenTitle.copyWith(
-              color: AppColors.darkGreen,
+              color: scheme.onPrimaryContainer,
             ),
           ),
           const SizedBox(height: AppSpacing.md),

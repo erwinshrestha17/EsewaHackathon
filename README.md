@@ -1,6 +1,6 @@
 # Sajha Kharcha Flutter App
 
-Sajha Kharcha is a responsive Flutter app for Cache Flow's Challenge 10 PRD: social financial connections, group expenses, split modes, transparent balances, eSewa-style settlements, gift cards, group gift pools, and Digital Dhukuti.
+Sajha Kharcha is a responsive Flutter app for Cache Flow's Challenge 10 PRD: social financial connections, group expenses, split modes, transparent balances, eSewa-style settlements, gift cards, group gift pools, and Saving Circle.
 
 This repository intentionally implements the application locally in Flutter only. It does not call or modify a backend.
 
@@ -34,9 +34,9 @@ Use the account switcher in the top bar to move between seeded eSewa-style users
 
 ## Implemented Scope
 
-- P0: demo login, profile data, connection requests and safety actions, groups, roles, manual expenses, equal and exact splits, balances, settlement suggestions, idempotent eSewa-style settlement confirmation, direct gifts, activity logs, and seeded Dhukuti ledger.
-- P1: privacy controls, percentage/share/item splits, editable and voidable unlocked expenses, controlled receipt parser, gift pools, interactive Dhukuti creation/acceptance/schedule/contribution payment, settlement nudges, personal activity, and CSV statement export.
-- P2: Flutter cross-platform app, local cache projection, smart item assignment defaults, emergency Dhukuti exit workflow, admin review surfaces, analytics dashboard, and multi-group batch settlement for the current user.
+- P0: demo login, profile data, connection requests and safety actions, groups, roles, manual expenses, equal and exact splits, balances, settlement suggestions, idempotent eSewa-style settlement confirmation, direct gifts, activity logs, and seeded Saving Circle ledger.
+- P1: privacy controls, percentage/share/item splits, editable and voidable unlocked expenses, controlled receipt parser, gift pools, interactive Saving Circle creation/acceptance/schedule/contribution payment, settlement nudges, personal activity, and CSV statement export.
+- P2: Flutter cross-platform app, local cache projection, smart item assignment defaults, emergency Saving Circle exit workflow, admin review surfaces, analytics dashboard, and multi-group batch settlement for the current user.
 - P3: no P3 items are defined in the PRD.
 
 Backend-oriented stretch items such as Redis infrastructure, production OCR/cloud fallback, delivery infrastructure, and payment webhooks are outside this Flutter app.

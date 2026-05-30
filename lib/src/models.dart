@@ -648,6 +648,7 @@ class GiftPool {
     required this.template,
     required this.targetAmountMinor,
     required this.contributionRule,
+    required this.allowOverTarget,
     required this.message,
     required this.status,
     required this.createdAt,
@@ -664,6 +665,7 @@ class GiftPool {
   String template;
   int targetAmountMinor;
   GiftPoolContributionRule contributionRule;
+  bool allowOverTarget;
   int? equalContributionAmountMinor;
   int? minContributionAmountMinor;
   int? maxContributionAmountMinor;

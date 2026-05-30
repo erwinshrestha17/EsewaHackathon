@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../shared/design_system/app_colors.dart';
 import '../../../shared/design_system/app_components.dart' as ds;
 import '../../../shared/design_system/app_spacing.dart';
 import '../../../shared/design_system/app_text_styles.dart';
@@ -70,6 +69,7 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ds.AppCard(
       onTap: onTap,
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -80,8 +80,8 @@ class _ActionButton extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 19,
-              backgroundColor: AppColors.lightGreen,
-              foregroundColor: AppColors.darkGreen,
+              backgroundColor: scheme.primaryContainer,
+              foregroundColor: scheme.onPrimaryContainer,
               child: Icon(action.icon, size: 21),
             ),
             const Spacer(),

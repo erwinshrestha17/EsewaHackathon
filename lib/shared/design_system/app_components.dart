@@ -9,13 +9,14 @@ import 'app_text_styles.dart';
 
 enum AppStatusTone { neutral, success, warning, info, danger }
 
-Color appToneColor(AppStatusTone tone) {
+Color appToneColorFor(BuildContext context, AppStatusTone tone) {
+  final scheme = Theme.of(context).colorScheme;
   return switch (tone) {
     AppStatusTone.success => AppColors.success,
     AppStatusTone.warning => AppColors.warning,
     AppStatusTone.info => AppColors.info,
-    AppStatusTone.danger => AppColors.error,
-    AppStatusTone.neutral => AppColors.textSecondary,
+    AppStatusTone.danger => scheme.error,
+    AppStatusTone.neutral => scheme.onSurfaceVariant,
   };
 }
 
@@ -88,9 +89,10 @@ class DangerButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final style = FilledButton.styleFrom(
-      backgroundColor: AppColors.error,
-      foregroundColor: Colors.white,
+      backgroundColor: scheme.error,
+      foregroundColor: scheme.onError,
     );
     return SizedBox(
       width: double.infinity,
@@ -238,11 +240,11 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final toneColor = tone == null ? null : appToneColor(tone!);
-    final borderColor = toneColor?.withValues(alpha: 0.22) ?? AppColors.border;
-    final background =
-        toneColor?.withValues(alpha: 0.07) ??
-        Theme.of(context).colorScheme.surface;
+    final scheme = Theme.of(context).colorScheme;
+    final toneColor = tone == null ? null : appToneColorFor(context, tone!);
+    final borderColor =
+        toneColor?.withValues(alpha: 0.22) ?? scheme.outlineVariant;
+    final background = toneColor?.withValues(alpha: 0.07) ?? scheme.surface;
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(AppRadius.lg),
       side: BorderSide(color: borderColor),
@@ -320,10 +322,11 @@ class ProfileAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return CircleAvatar(
       radius: radius,
-      backgroundColor: backgroundColor ?? AppColors.lightGreen,
-      foregroundColor: AppColors.darkGreen,
+      backgroundColor: backgroundColor ?? scheme.primaryContainer,
+      foregroundColor: scheme.onPrimaryContainer,
       child: Text(
         label.isEmpty ? '?' : label.characters.first,
         style: TextStyle(fontSize: radius * 0.78, fontWeight: FontWeight.w900),
@@ -377,12 +380,13 @@ class TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       onTap: onTap,
       leading: CircleAvatar(
-        backgroundColor: AppColors.lightGreen,
-        foregroundColor: AppColors.darkGreen,
+        backgroundColor: scheme.primaryContainer,
+        foregroundColor: scheme.onPrimaryContainer,
         child: Icon(icon),
       ),
       title: Text(title, style: AppTextStyles.cardTitle),
@@ -390,7 +394,7 @@ class TransactionTile extends StatelessWidget {
       trailing: Text(
         money(amountMinor),
         style: AppTextStyles.cardTitle.copyWith(
-          color: amountMinor < 0 ? AppColors.error : AppColors.success,
+          color: amountMinor < 0 ? scheme.error : AppColors.success,
         ),
       ),
     );
@@ -411,11 +415,12 @@ class ActivityTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
-        backgroundColor: AppColors.surfaceSoft,
-        foregroundColor: AppColors.textSecondary,
+        backgroundColor: scheme.surfaceContainerHighest,
+        foregroundColor: scheme.onSurfaceVariant,
         child: Icon(icon),
       ),
       title: Text(title, style: AppTextStyles.cardTitle),
@@ -440,7 +445,7 @@ class BalanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = appToneColor(tone);
+    final color = appToneColorFor(context, tone);
     return AppCard(
       tone: tone,
       child: Row(
@@ -486,6 +491,7 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xl),
@@ -494,8 +500,8 @@ class EmptyState extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 28,
-              backgroundColor: AppColors.lightGreen,
-              foregroundColor: AppColors.darkGreen,
+              backgroundColor: scheme.primaryContainer,
+              foregroundColor: scheme.onPrimaryContainer,
               child: Icon(icon, size: 28),
             ),
             const SizedBox(height: AppSpacing.md),
@@ -545,6 +551,7 @@ class _LoadingSkeletonState extends State<LoadingSkeleton>
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
@@ -555,7 +562,7 @@ class _LoadingSkeletonState extends State<LoadingSkeleton>
               Container(
                 height: i == 0 ? 92 : 62,
                 decoration: BoxDecoration(
-                  color: AppColors.border.withValues(alpha: opacity),
+                  color: scheme.outlineVariant.withValues(alpha: opacity),
                   borderRadius: BorderRadius.circular(AppRadius.lg),
                 ),
               ),
@@ -628,7 +635,7 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = appToneColor(tone);
+    final color = appToneColorFor(context, tone);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -700,10 +707,11 @@ class AppBottomNavigationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
       ),
       child: NavigationBar(
         selectedIndex: selectedIndex,

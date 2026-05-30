@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../shared/design_system/app_colors.dart';
 import '../../../shared/design_system/app_spacing.dart';
 import '../../../shared/design_system/app_text_styles.dart';
 
@@ -29,10 +28,10 @@ class SettingsTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final activeColor = danger ? AppColors.error : scheme.primary;
+    final activeColor = danger ? scheme.error : scheme.primary;
     final foreground = enabled
         ? danger
-              ? AppColors.error
+              ? scheme.error
               : scheme.onSurface
         : scheme.onSurfaceVariant;
     final iconColor = enabled ? activeColor : scheme.onSurfaceVariant;
