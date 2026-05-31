@@ -231,7 +231,7 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
           'Backend API is required for signed-in actions.',
         );
       }
-      final token = await AuthScope.of(context).backendAccessToken();
+      final token = await AuthScope.read(context).backendAccessToken();
       if (token == null) {
         throw const BackendApiException('Sign in again to continue.');
       }
@@ -249,10 +249,10 @@ class _DhukutiCreateScreenState extends State<DhukutiCreateScreen> {
         },
       );
       final snapshot = await api.appBootstrap(accessToken: token);
-      widget.store.loadBackendSnapshot(snapshot);
       if (!context.mounted) {
         return;
       }
+      widget.store.loadBackendSnapshot(snapshot);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('$name invites sent.')));

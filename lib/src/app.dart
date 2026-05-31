@@ -106,6 +106,27 @@ Future<void> _reloadBackendProjection(
   return Future.value();
 }
 
+Future<bool> _reloadBackendProjectionSafely(
+  BuildContext context, {
+  required BackendApi api,
+  required String accessToken,
+}) async {
+  try {
+    await _reloadBackendProjection(
+      context,
+      api: api,
+      accessToken: accessToken,
+      wait: true,
+    );
+    return true;
+  } on BackendApiException catch (error) {
+    if (context.mounted) {
+      showSnack(context, error.message);
+    }
+  }
+  return false;
+}
+
 class SajhaKharchaApp extends StatefulWidget {
   const SajhaKharchaApp({super.key});
 
@@ -9217,152 +9238,167 @@ Future<void> showCreateGroupDialog(
   final name = TextEditingController();
   var category = GroupCategory.custom;
   final selected = <String>{};
-  await showDialog<void>(
-    context: rootContext,
-    builder: (dialogContext) {
-      return StatefulBuilder(
-        builder: (builderContext, setState) {
-          final connections = store.activeConnectionUsers();
-          return AlertDialog(
-            title: const Text('Create Expense Group'),
-            content: SizedBox(
-              width: 520,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Use this for meals, trips, rent, shopping, and other shared expenses.',
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: name,
-                      decoration: const InputDecoration(
-                        labelText: 'Group name',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<GroupCategory>(
-                      initialValue: category,
-                      decoration: const InputDecoration(labelText: 'Category'),
-                      items: [
-                        for (final item in GroupCategory.values)
-                          DropdownMenuItem(
-                            value: item,
-                            child: Text(enumLabel(item)),
-                          ),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => category = value ?? category),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: const [
-                        Chip(label: Text('Currency: NPR')),
-                        Chip(label: Text('Default split: Equal')),
-                        Chip(label: Text('Reminder: Every 2 days')),
-                        Chip(label: Text('eSewa settlement')),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Members',
-                        style: Theme.of(builderContext).textTheme.labelLarge,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'You will be added automatically as admin. Select only the people you want to invite.',
-                        style: Theme.of(builderContext).textTheme.bodySmall,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+  final created =
+      await showDialog<
+        ({BackendApi api, String accessToken, String groupId, String groupName})
+      >(
+        context: rootContext,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (builderContext, setState) {
+              final connections = store.activeConnectionUsers();
+              return AlertDialog(
+                title: const Text('Create Expense Group'),
+                content: SizedBox(
+                  width: 520,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        for (final user in connections)
-                          FilterChip(
-                            selected: selected.contains(user.id),
-                            avatar: UserAvatar(user: user, small: true),
-                            label: Text(user.displayName),
-                            onSelected: (checked) {
-                              setState(() {
-                                checked
-                                    ? selected.add(user.id)
-                                    : selected.remove(user.id);
-                              });
-                            },
+                        const Text(
+                          'Use this for meals, trips, rent, shopping, and other shared expenses.',
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: name,
+                          decoration: const InputDecoration(
+                            labelText: 'Group name',
                           ),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<GroupCategory>(
+                          initialValue: category,
+                          decoration: const InputDecoration(
+                            labelText: 'Category',
+                          ),
+                          items: [
+                            for (final item in GroupCategory.values)
+                              DropdownMenuItem(
+                                value: item,
+                                child: Text(enumLabel(item)),
+                              ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => category = value ?? category),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: const [
+                            Chip(label: Text('Currency: NPR')),
+                            Chip(label: Text('Default split: Equal')),
+                            Chip(label: Text('Reminder: Every 2 days')),
+                            Chip(label: Text('eSewa settlement')),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Members',
+                            style: Theme.of(
+                              builderContext,
+                            ).textTheme.labelLarge,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'You will be added automatically as admin. Select only the people you want to invite.',
+                            style: Theme.of(builderContext).textTheme.bodySmall,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final user in connections)
+                              FilterChip(
+                                selected: selected.contains(user.id),
+                                avatar: UserAvatar(user: user, small: true),
+                                label: Text(user.displayName),
+                                onSelected: (checked) {
+                                  setState(() {
+                                    checked
+                                        ? selected.add(user.id)
+                                        : selected.remove(user.id);
+                                  });
+                                },
+                              ),
+                          ],
+                        ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  final backendApi = BackendApi();
-                  final groupName = name.text.trim().isEmpty
-                      ? 'New Expense Group'
-                      : name.text.trim();
-                  try {
-                    final token = await _requireBackendAccessToken(
-                      rootContext,
-                      api: backendApi,
-                    );
-                    final response = await backendApi.createGroup(
-                      accessToken: token,
-                      group: {
-                        'name': groupName,
-                        'category': category.name,
-                        'memberIds': selected.toList(),
-                        'kind': GroupKind.expense.name,
-                      },
-                    );
-                    final groupId =
-                        ((response['group'] as Map<String, dynamic>?)?['id'] ??
-                                '')
-                            .toString();
-                    await _reloadBackendProjection(
-                      rootContext,
-                      api: backendApi,
-                      accessToken: token,
-                    );
-                    store.selectedGroupId = groupId.isEmpty ? null : groupId;
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-                    }
-                    if (rootContext.mounted) {
-                      onCreated?.call(GroupKind.expense);
-                      showSnack(rootContext, '$groupName created.');
-                    }
-                  } on BackendApiException catch (error) {
-                    if (rootContext.mounted) {
-                      showSnack(rootContext, error.message);
-                    }
-                  }
-                },
-                child: const Text('Create Expense Group'),
-              ),
-            ],
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () async {
+                      final backendApi = BackendApi();
+                      final groupName = name.text.trim().isEmpty
+                          ? 'New Expense Group'
+                          : name.text.trim();
+                      try {
+                        final token = await _requireBackendAccessToken(
+                          rootContext,
+                          api: backendApi,
+                        );
+                        final response = await backendApi.createGroup(
+                          accessToken: token,
+                          group: {
+                            'name': groupName,
+                            'category': category.name,
+                            'memberIds': selected.toList(),
+                            'kind': GroupKind.expense.name,
+                          },
+                        );
+                        final groupId =
+                            ((response['group']
+                                        as Map<String, dynamic>?)?['id'] ??
+                                    '')
+                                .toString();
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext, (
+                            api: backendApi,
+                            accessToken: token,
+                            groupId: groupId,
+                            groupName: groupName,
+                          ));
+                        }
+                      } on BackendApiException catch (error) {
+                        if (rootContext.mounted) {
+                          showSnack(rootContext, error.message);
+                        }
+                      }
+                    },
+                    child: const Text('Create Expense Group'),
+                  ),
+                ],
+              );
+            },
           );
         },
       );
-    },
-  );
+  if (created != null && rootContext.mounted) {
+    final reloaded = await _reloadBackendProjectionSafely(
+      rootContext,
+      api: created.api,
+      accessToken: created.accessToken,
+    );
+    if (reloaded && rootContext.mounted) {
+      store.selectedGroupId = created.groupId.isEmpty ? null : created.groupId;
+      onCreated?.call(GroupKind.expense);
+      showSnack(rootContext, '${created.groupName} created.');
+    }
+  }
   name.dispose();
 }
 
@@ -9377,212 +9413,235 @@ Future<void> showCreateDhukutiGroupDialog(
   var frequency = 'monthly';
   final selected = <String>{};
   var agreementAccepted = false;
-  await showDialog<void>(
-    context: rootContext,
-    builder: (dialogContext) {
-      return StatefulBuilder(
-        builder: (builderContext, setState) {
-          final connections = store.activeConnectionUsers();
-          final amount = parseMoneyToMinor(contribution.text);
-          final memberCount = selected.length + 1;
-          final expectedMonthlyTotal = amount * memberCount;
-          final canCreate =
-              agreementAccepted && selected.isNotEmpty && amount > 0;
-          return AlertDialog(
-            title: const Text('Create Community Savings Tracker Group'),
-            content: SizedBox(
-              width: 580,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Use this to track eSewa-paid monthly contributions, admin confirmations, expenses, and fund balance.',
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: name,
-                      decoration: const InputDecoration(
-                        labelText: 'Community fund group name',
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: contribution,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Contribution amount',
-                        prefixText: 'NPR ',
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: frequency,
-                      decoration: const InputDecoration(labelText: 'Frequency'),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'monthly',
-                          child: Text('Monthly'),
+  final created =
+      await showDialog<
+        ({
+          BackendApi api,
+          String accessToken,
+          String groupName,
+          String savingsId,
+        })
+      >(
+        context: rootContext,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (builderContext, setState) {
+              final connections = store.activeConnectionUsers();
+              final amount = parseMoneyToMinor(contribution.text);
+              final memberCount = selected.length + 1;
+              final expectedMonthlyTotal = amount * memberCount;
+              final canCreate =
+                  agreementAccepted && selected.isNotEmpty && amount > 0;
+              return AlertDialog(
+                title: const Text('Create Community Savings Tracker Group'),
+                content: SizedBox(
+                  width: 580,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'Use this to track eSewa-paid monthly contributions, admin confirmations, expenses, and fund balance.',
                         ),
-                        DropdownMenuItem(
-                          value: 'weekly',
-                          child: Text('Weekly'),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: name,
+                          decoration: const InputDecoration(
+                            labelText: 'Community fund group name',
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: contribution,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Contribution amount',
+                            prefixText: 'NPR ',
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: frequency,
+                          decoration: const InputDecoration(
+                            labelText: 'Frequency',
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'monthly',
+                              child: Text('Monthly'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'weekly',
+                              child: Text('Weekly'),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => frequency = value ?? frequency),
+                        ),
+                        const SizedBox(height: 12),
+                        _ManualFormSection(
+                          title: 'Members',
+                          icon: Icons.group_outlined,
+                          subtitle:
+                              'Choose who contributes to this community fund',
+                          trailing: _CountPill(label: '$memberCount people'),
+                          child: Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              ParticipantSelectorCard(
+                                user: store.currentUser,
+                                selected: true,
+                                enabled: false,
+                                onTap: () {},
+                              ),
+                              for (final user in connections)
+                                ParticipantSelectorCard(
+                                  user: user,
+                                  selected: selected.contains(user.id),
+                                  onTap: () {
+                                    setState(() {
+                                      selected.contains(user.id)
+                                          ? selected.remove(user.id)
+                                          : selected.add(user.id);
+                                    });
+                                  },
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(builderContext)
+                                .colorScheme
+                                .primaryContainer
+                                .withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            children: [
+                              _DialogReviewRow(
+                                label: 'Members',
+                                value: '$memberCount',
+                              ),
+                              _DialogReviewRow(
+                                label: 'Expected monthly total',
+                                value: money(expectedMonthlyTotal),
+                              ),
+                            ],
+                          ),
+                        ),
+                        CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: agreementAccepted,
+                          title: const Text(
+                            'I understand contributions are paid through eSewa and may still require admin reconciliation.',
+                          ),
+                          onChanged: (value) => setState(
+                            () => agreementAccepted = value ?? false,
+                          ),
                         ),
                       ],
-                      onChanged: (value) =>
-                          setState(() => frequency = value ?? frequency),
                     ),
-                    const SizedBox(height: 12),
-                    _ManualFormSection(
-                      title: 'Members',
-                      icon: Icons.group_outlined,
-                      subtitle: 'Choose who contributes to this community fund',
-                      trailing: _CountPill(label: '$memberCount people'),
-                      child: Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          ParticipantSelectorCard(
-                            user: store.currentUser,
-                            selected: true,
-                            enabled: false,
-                            onTap: () {},
-                          ),
-                          for (final user in connections)
-                            ParticipantSelectorCard(
-                              user: user,
-                              selected: selected.contains(user.id),
-                              onTap: () {
-                                setState(() {
-                                  selected.contains(user.id)
-                                      ? selected.remove(user.id)
-                                      : selected.add(user.id);
-                                });
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          builderContext,
-                        ).colorScheme.primaryContainer.withValues(alpha: 0.35),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        children: [
-                          _DialogReviewRow(
-                            label: 'Members',
-                            value: '$memberCount',
-                          ),
-                          _DialogReviewRow(
-                            label: 'Expected monthly total',
-                            value: money(expectedMonthlyTotal),
-                          ),
-                        ],
-                      ),
-                    ),
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: agreementAccepted,
-                      title: const Text(
-                        'I understand contributions are paid through eSewa and may still require admin reconciliation.',
-                      ),
-                      onChanged: (value) =>
-                          setState(() => agreementAccepted = value ?? false),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: canCreate
-                    ? () async {
-                        final backendApi = BackendApi();
-                        final groupName = name.text.trim().isEmpty
-                            ? 'New Community Fund Group'
-                            : name.text.trim();
-                        try {
-                          final token = await _requireBackendAccessToken(
-                            rootContext,
-                            api: backendApi,
-                          );
-                          final response = await backendApi.createGroup(
-                            accessToken: token,
-                            group: {
-                              'name': groupName,
-                              'category': GroupCategory.custom.name,
-                              'memberIds': selected.toList(),
-                              'kind': GroupKind.dhukuti.name,
-                              'template': 'Community Savings Tracker',
-                            },
-                          );
-                          final groupId =
-                              ((response['group']
-                                          as Map<String, dynamic>?)?['id'] ??
-                                      '')
-                                  .toString();
-                          final savingsResponse = await backendApi
-                              .createCommunitySavingsGroup(
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: canCreate
+                        ? () async {
+                            final backendApi = BackendApi();
+                            final groupName = name.text.trim().isEmpty
+                                ? 'New Community Fund Group'
+                                : name.text.trim();
+                            try {
+                              final token = await _requireBackendAccessToken(
+                                rootContext,
+                                api: backendApi,
+                              );
+                              final response = await backendApi.createGroup(
                                 accessToken: token,
                                 group: {
-                                  'groupId': groupId,
                                   'name': groupName,
-                                  'monthlyContributionAmount': amount,
-                                  'currency': 'Rs.',
+                                  'category': GroupCategory.custom.name,
+                                  'memberIds': selected.toList(),
+                                  'kind': GroupKind.dhukuti.name,
+                                  'template': 'Community Savings Tracker',
                                 },
                               );
-                          final savingsId =
-                              ((savingsResponse['group']
-                                          as Map<String, dynamic>?)?['id'] ??
-                                      '')
-                                  .toString();
-                          await _reloadBackendProjection(
-                            rootContext,
-                            api: backendApi,
-                            accessToken: token,
-                          );
-                          store
-                            ..selectedDhukutiPoolId = savingsId.isEmpty
-                                ? null
-                                : savingsId
-                            ..selectedGroupId = null;
-                          if (dialogContext.mounted) {
-                            Navigator.pop(dialogContext);
+                              final groupId =
+                                  ((response['group']
+                                              as Map<
+                                                String,
+                                                dynamic
+                                              >?)?['id'] ??
+                                          '')
+                                      .toString();
+                              final savingsResponse = await backendApi
+                                  .createCommunitySavingsGroup(
+                                    accessToken: token,
+                                    group: {
+                                      'groupId': groupId,
+                                      'name': groupName,
+                                      'monthlyContributionAmount': amount,
+                                      'currency': 'Rs.',
+                                    },
+                                  );
+                              final savingsId =
+                                  ((savingsResponse['group']
+                                              as Map<
+                                                String,
+                                                dynamic
+                                              >?)?['id'] ??
+                                          '')
+                                      .toString();
+                              if (dialogContext.mounted) {
+                                Navigator.pop(dialogContext, (
+                                  api: backendApi,
+                                  accessToken: token,
+                                  groupName: groupName,
+                                  savingsId: savingsId,
+                                ));
+                              }
+                            } on BackendApiException catch (error) {
+                              if (rootContext.mounted) {
+                                showSnack(rootContext, error.message);
+                              }
+                            }
                           }
-                          if (rootContext.mounted) {
-                            onCreated?.call(GroupKind.dhukuti);
-                            showSnack(
-                              rootContext,
-                              '$groupName tracker created.',
-                            );
-                          }
-                        } on BackendApiException catch (error) {
-                          if (rootContext.mounted) {
-                            showSnack(rootContext, error.message);
-                          }
-                        }
-                      }
-                    : null,
-                child: const Text('Create Tracker Group'),
-              ),
-            ],
+                        : null,
+                    child: const Text('Create Tracker Group'),
+                  ),
+                ],
+              );
+            },
           );
         },
       );
-    },
-  );
+  if (created != null && rootContext.mounted) {
+    final reloaded = await _reloadBackendProjectionSafely(
+      rootContext,
+      api: created.api,
+      accessToken: created.accessToken,
+    );
+    if (reloaded && rootContext.mounted) {
+      store
+        ..selectedDhukutiPoolId = created.savingsId.isEmpty
+            ? null
+            : created.savingsId
+        ..selectedGroupId = null;
+      onCreated?.call(GroupKind.dhukuti);
+      showSnack(rootContext, '${created.groupName} tracker created.');
+    }
+  }
   name.dispose();
   contribution.dispose();
 }
@@ -13030,7 +13089,8 @@ Future<void> showCreateDhukutiDialog(
   BuildContext context, {
   String? initialGroupId,
 }) async {
-  final store = StoreScope.of(context);
+  final rootContext = context;
+  final store = StoreScope.read(rootContext);
   final groups = store.visibleDhukutiGroups;
   String? groupId = initialGroupId ?? (groups.isEmpty ? null : groups.first.id);
   final name = TextEditingController(text: 'New Community Fund');
@@ -13039,160 +13099,181 @@ Future<void> showCreateDhukutiDialog(
     for (final user in store.activeConnectionUsers()) user.id,
   };
   var frequency = 'monthly';
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: const Text('Create Community Savings Tracker'),
-            content: SizedBox(
-              width: 580,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: groupId,
-                      decoration: const InputDecoration(
-                        labelText: 'Linked group',
-                      ),
-                      items: [
-                        for (final group in groups)
-                          DropdownMenuItem(
-                            value: group.id,
-                            child: Text(group.name),
+  final created =
+      await showDialog<
+        ({BackendApi api, String accessToken, String savingsId})
+      >(
+        context: rootContext,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setState) {
+              return AlertDialog(
+                title: const Text('Create Community Savings Tracker'),
+                content: SizedBox(
+                  width: 580,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        DropdownButtonFormField<String>(
+                          initialValue: groupId,
+                          decoration: const InputDecoration(
+                            labelText: 'Linked group',
                           ),
-                        if (initialGroupId != null &&
-                            !groups.any((group) => group.id == initialGroupId))
-                          DropdownMenuItem(
-                            value: initialGroupId,
-                            child: Text(store.groupById(initialGroupId).name),
+                          items: [
+                            for (final group in groups)
+                              DropdownMenuItem(
+                                value: group.id,
+                                child: Text(group.name),
+                              ),
+                            if (initialGroupId != null &&
+                                !groups.any(
+                                  (group) => group.id == initialGroupId,
+                                ))
+                              DropdownMenuItem(
+                                value: initialGroupId,
+                                child: Text(
+                                  store.groupById(initialGroupId).name,
+                                ),
+                              ),
+                          ],
+                          onChanged: (value) => setState(() => groupId = value),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: name,
+                          decoration: const InputDecoration(labelText: 'Name'),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: contribution,
+                          decoration: const InputDecoration(
+                            labelText: 'Contribution amount',
+                            prefixText: 'NPR ',
                           ),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: frequency,
+                          decoration: const InputDecoration(
+                            labelText: 'Frequency',
+                          ),
+                          items: [
+                            for (final item in const ['monthly', 'weekly'])
+                              DropdownMenuItem(value: item, child: Text(item)),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => frequency = value ?? frequency),
+                        ),
+                        const SizedBox(height: 12),
+                        _ManualFormSection(
+                          title: 'Members',
+                          icon: Icons.group_outlined,
+                          subtitle:
+                              'Choose who contributes to this community fund',
+                          trailing: _CountPill(
+                            label: '${members.length + 1} people',
+                          ),
+                          child: Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              ParticipantSelectorCard(
+                                user: store.currentUser,
+                                selected: true,
+                                enabled: false,
+                                onTap: () {},
+                              ),
+                              for (final user in store.activeConnectionUsers())
+                                ParticipantSelectorCard(
+                                  user: user,
+                                  selected: members.contains(user.id),
+                                  onTap: () {
+                                    setState(() {
+                                      members.contains(user.id)
+                                          ? members.remove(user.id)
+                                          : members.add(user.id);
+                                    });
+                                  },
+                                ),
+                            ],
+                          ),
+                        ),
                       ],
-                      onChanged: (value) => setState(() => groupId = value),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: name,
-                      decoration: const InputDecoration(labelText: 'Name'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: contribution,
-                      decoration: const InputDecoration(
-                        labelText: 'Contribution amount',
-                        prefixText: 'NPR ',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: frequency,
-                      decoration: const InputDecoration(labelText: 'Frequency'),
-                      items: [
-                        for (final item in const ['monthly', 'weekly'])
-                          DropdownMenuItem(value: item, child: Text(item)),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => frequency = value ?? frequency),
-                    ),
-                    const SizedBox(height: 12),
-                    _ManualFormSection(
-                      title: 'Members',
-                      icon: Icons.group_outlined,
-                      subtitle: 'Choose who contributes to this community fund',
-                      trailing: _CountPill(
-                        label: '${members.length + 1} people',
-                      ),
-                      child: Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          ParticipantSelectorCard(
-                            user: store.currentUser,
-                            selected: true,
-                            enabled: false,
-                            onTap: () {},
-                          ),
-                          for (final user in store.activeConnectionUsers())
-                            ParticipantSelectorCard(
-                              user: user,
-                              selected: members.contains(user.id),
-                              onTap: () {
-                                setState(() {
-                                  members.contains(user.id)
-                                      ? members.remove(user.id)
-                                      : members.add(user.id);
-                                });
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: groupId == null
-                    ? null
-                    : () async {
-                        final backendApi = BackendApi();
-                        try {
-                          final token = await _requireBackendAccessToken(
-                            context,
-                            api: backendApi,
-                          );
-                          final response = await backendApi
-                              .createCommunitySavingsGroup(
-                                accessToken: token,
-                                group: {
-                                  'groupId': groupId!,
-                                  'name': name.text.trim().isEmpty
-                                      ? 'New Community Fund'
-                                      : name.text.trim(),
-                                  'monthlyContributionAmount':
-                                      parseMoneyToMinor(contribution.text),
-                                  'currency': 'Rs.',
-                                  'frequency': frequency,
-                                },
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: groupId == null
+                        ? null
+                        : () async {
+                            final backendApi = BackendApi();
+                            try {
+                              final token = await _requireBackendAccessToken(
+                                rootContext,
+                                api: backendApi,
                               );
-                          final savingsId =
-                              ((response['group']
-                                          as Map<String, dynamic>?)?['id'] ??
-                                      '')
-                                  .toString();
-                          await _reloadBackendProjection(
-                            context,
-                            api: backendApi,
-                            accessToken: token,
-                          );
-                          store.selectedDhukutiPoolId = savingsId.isEmpty
-                              ? null
-                              : savingsId;
-                          if (context.mounted) {
-                            Navigator.pop(dialogContext);
-                          }
-                        } on BackendApiException catch (error) {
-                          if (context.mounted) {
-                            showSnack(context, error.message);
-                          }
-                        }
-                      },
-                child: const Text('Create'),
-              ),
-            ],
+                              final response = await backendApi
+                                  .createCommunitySavingsGroup(
+                                    accessToken: token,
+                                    group: {
+                                      'groupId': groupId!,
+                                      'name': name.text.trim().isEmpty
+                                          ? 'New Community Fund'
+                                          : name.text.trim(),
+                                      'monthlyContributionAmount':
+                                          parseMoneyToMinor(contribution.text),
+                                      'currency': 'Rs.',
+                                      'frequency': frequency,
+                                    },
+                                  );
+                              final savingsId =
+                                  ((response['group']
+                                              as Map<
+                                                String,
+                                                dynamic
+                                              >?)?['id'] ??
+                                          '')
+                                      .toString();
+                              if (dialogContext.mounted) {
+                                Navigator.pop(dialogContext, (
+                                  api: backendApi,
+                                  accessToken: token,
+                                  savingsId: savingsId,
+                                ));
+                              }
+                            } on BackendApiException catch (error) {
+                              if (rootContext.mounted) {
+                                showSnack(rootContext, error.message);
+                              }
+                            }
+                          },
+                    child: const Text('Create'),
+                  ),
+                ],
+              );
+            },
           );
         },
       );
-    },
-  );
+  if (created != null && rootContext.mounted) {
+    final reloaded = await _reloadBackendProjectionSafely(
+      rootContext,
+      api: created.api,
+      accessToken: created.accessToken,
+    );
+    if (reloaded && rootContext.mounted) {
+      store.selectedDhukutiPoolId = created.savingsId.isEmpty
+          ? null
+          : created.savingsId;
+    }
+  }
   name.dispose();
   contribution.dispose();
 }
