@@ -87,8 +87,19 @@ Other generated targets are available too:
 ```sh
 flutter run -d chrome --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
 flutter run -d ios
-flutter run -d android
+flutter run -d android --dart-define=BACKEND_API_BASE_URL=http://10.0.2.2:3000
 ```
+
+For Android Studio emulator runs, add this to the Flutter run configuration's
+additional run args:
+
+```sh
+--dart-define=BACKEND_API_BASE_URL=http://10.0.2.2:3000
+```
+
+`10.0.2.2` is the Android emulator alias for the development machine's
+localhost. Do not use `127.0.0.1` for the Android emulator unless the backend is
+running inside the emulator itself.
 
 For Flutter web on Linux VMs, containers, or another machine on your network,
 `127.0.0.1` must be the backend as seen by the browser. If the backend runs on a

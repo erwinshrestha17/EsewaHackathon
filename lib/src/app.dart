@@ -6758,6 +6758,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
       return;
     }
 
+    _expandManualEntrySheet();
     setState(() {
       _runningOcr = true;
       _scanFailed = false;
@@ -6838,14 +6839,18 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
     });
 
     if (_scannedItems.isNotEmpty) {
-      unawaited(
-        _sheetController.animateTo(
-          _ManualEntrySheet.expandedExtent,
-          duration: const Duration(milliseconds: 360),
-          curve: Curves.easeOutCubic,
-        ),
-      );
+      _expandManualEntrySheet();
     }
+  }
+
+  void _expandManualEntrySheet() {
+    unawaited(
+      _sheetController.animateTo(
+        _ManualEntrySheet.expandedExtent,
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeOutCubic,
+      ),
+    );
   }
 
   List<_ExpenseItemDraft> _draftsFromScan(ReceiptScanResult result) {

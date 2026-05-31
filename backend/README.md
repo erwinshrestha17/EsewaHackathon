@@ -94,7 +94,13 @@ Run Flutter against the backend auth/API layer with:
 ```bash
 flutter run -d macos --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
 flutter run -d chrome --dart-define=BACKEND_API_BASE_URL=http://127.0.0.1:3000
+flutter run -d android --dart-define=BACKEND_API_BASE_URL=http://10.0.2.2:3000
 ```
+
+For Android Studio emulator runs, add
+`--dart-define=BACKEND_API_BASE_URL=http://10.0.2.2:3000` to the Flutter run
+configuration's additional run args. `10.0.2.2` is the emulator alias for the
+development machine's localhost; `127.0.0.1` points at the emulator itself.
 
 On Linux web, make sure `BACKEND_API_BASE_URL` is reachable from the browser,
 not just from the terminal. For VMs, containers, or another device on the LAN,
