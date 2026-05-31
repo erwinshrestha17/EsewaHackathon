@@ -969,45 +969,49 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
                       const SizedBox(width: 12),
                     ],
                   ),
-            body: Row(
-              children: [
-                if (wide)
-                  NavigationRail(
-                    selectedIndex: _index,
-                    onDestinationSelected: _handleDestinationSelected,
-                    labelType: NavigationRailLabelType.all,
-                    destinations: [
-                      for (final destination in _destinations)
-                        NavigationRailDestination(
-                          icon: Icon(destination.icon),
-                          selectedIcon: Icon(destination.selectedIcon),
-                          label: Text(context.t(destination.label)),
+            body: SafeArea(
+              top: _index == 0,
+              bottom: false,
+              child: Row(
+                children: [
+                  if (wide)
+                    NavigationRail(
+                      selectedIndex: _index,
+                      onDestinationSelected: _handleDestinationSelected,
+                      labelType: NavigationRailLabelType.all,
+                      destinations: [
+                        for (final destination in _destinations)
+                          NavigationRailDestination(
+                            icon: Icon(destination.icon),
+                            selectedIcon: Icon(destination.selectedIcon),
+                            label: Text(context.t(destination.label)),
+                          ),
+                      ],
+                    ),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        if (incomingConnection case final connection?)
+                          _IncomingConnectionBanner(
+                            connection: connection,
+                            onReview: () {
+                              _dismissIncomingConnectionBanner(connection.id);
+                              _go(2);
+                            },
+                            onDismiss: () =>
+                                _dismissIncomingConnectionBanner(connection.id),
+                          ),
+                        Expanded(
+                          child: KeyedSubtree(
+                            key: ValueKey('shell-screen-$_index-$_visitSerial'),
+                            child: body,
+                          ),
                         ),
-                    ],
+                      ],
+                    ),
                   ),
-                Expanded(
-                  child: Column(
-                    children: [
-                      if (incomingConnection case final connection?)
-                        _IncomingConnectionBanner(
-                          connection: connection,
-                          onReview: () {
-                            _dismissIncomingConnectionBanner(connection.id);
-                            _go(2);
-                          },
-                          onDismiss: () =>
-                              _dismissIncomingConnectionBanner(connection.id),
-                        ),
-                      Expanded(
-                        child: KeyedSubtree(
-                          key: ValueKey('shell-screen-$_index-$_visitSerial'),
-                          child: body,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
             bottomNavigationBar: wide
                 ? null
@@ -5275,8 +5279,14 @@ class AppScrollView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final safePadding = MediaQuery.paddingOf(context);
     return ListView.separated(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.xl + safePadding.left,
+        AppSpacing.xl,
+        AppSpacing.xl + safePadding.right,
+        AppSpacing.xl + safePadding.bottom,
+      ),
       itemCount: children.length,
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.lg),
       itemBuilder: (context, index) => children[index],

@@ -68,8 +68,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth > 760 ? 720.0 : double.infinity;
+        final safePadding = MediaQuery.paddingOf(context);
         return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          padding: EdgeInsets.fromLTRB(
+            16 + safePadding.left,
+            16,
+            16 + safePadding.right,
+            24 + safePadding.bottom,
+          ),
           children: [
             Center(
               child: ConstrainedBox(

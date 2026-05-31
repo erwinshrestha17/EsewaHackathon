@@ -133,8 +133,14 @@ class DhukutiScrollView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final safePadding = MediaQuery.paddingOf(context);
     return ListView.separated(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.xl + safePadding.left,
+        AppSpacing.xl,
+        AppSpacing.xl + safePadding.right,
+        AppSpacing.xl + safePadding.bottom,
+      ),
       itemCount: children.length,
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.lg),
       itemBuilder: (context, index) => children[index],
