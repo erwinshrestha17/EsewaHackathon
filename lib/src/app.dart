@@ -5661,7 +5661,7 @@ class GroupActivityTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    final actor = item.actorId == null ? 'System' : store.nameOf(item.actorId!);
+    final actor = activityUserName(store, item.actorId, fallback: 'System');
     final amount = activityAmount(store, item);
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -5800,12 +5800,12 @@ IconData activityIcon(ActivityLog item) {
 
 String activityDescription(AppStore store, ActivityLog item) {
   final amount = activityAmount(store, item);
-  final actor = item.actorId == null ? 'System' : store.nameOf(item.actorId!);
+  final actor = activityUserName(store, item.actorId, fallback: 'System');
   if (item.eventType == 'settlement_paid' && amount != null) {
     final settlement = settlementForActivity(store, item);
     if (settlement != null) {
-      final payer = store.nameOf(settlement.payerId);
-      final payee = store.nameOf(settlement.payeeId);
+      final payer = activityUserName(store, settlement.payerId);
+      final payee = activityUserName(store, settlement.payeeId);
       if (settlement.payeeId == store.currentUserId) {
         return '$payer paid you ${friendlyMoney(settlement.amountMinor)}';
       }
@@ -5819,7 +5819,7 @@ String activityDescription(AppStore store, ActivityLog item) {
   if (item.eventType == 'settlement_pending') {
     final settlement = settlementForActivity(store, item);
     if (settlement != null) {
-      return 'Payment pending from ${store.nameOf(settlement.payerId)}';
+      return 'Payment pending from ${activityUserName(store, settlement.payerId)}';
     }
     return 'Payment pending';
   }
@@ -5842,12 +5842,53 @@ String activityDescription(AppStore store, ActivityLog item) {
     return 'Group balance updated by ${friendlyMoney(amount)}';
   }
   if (item.eventType == 'member_added') {
-    return '${store.nameOf(item.entityId)} joined the group';
+    final member = groupMemberForActivity(store, item);
+    final memberName = activityUserName(
+      store,
+      member?.userId ?? item.entityId,
+      fallback: 'A member',
+    );
+    return '$memberName joined the group';
   }
   if (item.eventType == 'member_removed') {
-    return '${store.nameOf(item.entityId)} left the group';
+    final member = groupMemberForActivity(store, item);
+    final memberName = activityUserName(
+      store,
+      member?.userId ?? item.entityId,
+      fallback: 'A member',
+    );
+    return '$memberName left the group';
   }
   return item.body;
+}
+
+String activityUserName(
+  AppStore store,
+  String? userId, {
+  String fallback = 'Someone',
+}) {
+  if (userId == null || userId.trim().isEmpty) {
+    return fallback;
+  }
+  return store.userByIdOrNull(userId)?.displayName ?? fallback;
+}
+
+GroupMember? groupMemberForActivity(AppStore store, ActivityLog item) {
+  if (item.entityType != 'group_member') {
+    return null;
+  }
+  for (final member in store.groupMembers) {
+    if (member.id == item.entityId) {
+      return member;
+    }
+  }
+  for (final member in store.groupMembers) {
+    if (member.userId == item.entityId &&
+        (item.groupId == null || member.groupId == item.groupId)) {
+      return member;
+    }
+  }
+  return null;
 }
 
 Expense? expenseForActivity(AppStore store, ActivityLog item) {

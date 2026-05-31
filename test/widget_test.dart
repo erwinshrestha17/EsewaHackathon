@@ -1862,6 +1862,51 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Group activity resolves backend group member ids', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 9000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final store = AppStore.seeded();
+    final member = store.groupMembers.firstWhere(
+      (item) => item.groupId == 'g-dashain' && item.userId == 'u-arjun',
+    );
+    store.activity.insert(
+      0,
+      ActivityLog(
+        id: 'activity-backend-member',
+        actorId: store.currentUserId,
+        actorType: 'user',
+        eventType: 'member_added',
+        entityType: 'group_member',
+        entityId: member.id,
+        title: 'Member added',
+        body: 'Arjun joined the group.',
+        createdAt: DateTime(2099),
+        groupId: 'g-dashain',
+      ),
+    );
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: MaterialApp(
+          home: GroupDetail(
+            group: store.groupById('g-dashain'),
+            activityTimelineLimit: 5,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Arjun Karki joined the group'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Add expense item list row has only Name and Amount fields', (
     tester,
   ) async {
