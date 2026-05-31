@@ -1,3 +1,5 @@
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -519,6 +521,27 @@ void main() {
     expect(textTheme.bodySmall?.color, AppColors.textSecondary);
     expect(inputTheme.labelStyle?.color, AppColors.textSecondary);
     expect(inputTheme.hintStyle?.color, AppColors.textSecondary);
+  });
+
+  testWidgets('app scroll behavior accepts trackpad and mouse gestures', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      AuthScope(
+        notifier: AuthController(backendApi: _FakeBackendApi()),
+        child: StoreScope(notifier: AppStore(), child: const SajhaKharchaApp()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final behavior = tester
+        .widget<MaterialApp>(find.byType(MaterialApp))
+        .scrollBehavior;
+
+    expect(behavior, isNotNull);
+    expect(behavior!.dragDevices, contains(PointerDeviceKind.trackpad));
+    expect(behavior.dragDevices, contains(PointerDeviceKind.mouse));
+    expect(behavior.dragDevices, contains(PointerDeviceKind.touch));
   });
 
   Future<void> pumpGroupsForAddExpense(

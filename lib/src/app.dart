@@ -151,6 +151,7 @@ class _SajhaKharchaAppState extends State<SajhaKharchaApp> {
         return MaterialApp(
           title: 'Sajha Kharcha',
           debugShowCheckedModeBanner: false,
+          scrollBehavior: const _SajhaScrollBehavior(),
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
           themeMode: _materialThemeMode(_settingsController.state.themeMode),
@@ -174,6 +175,20 @@ class _SajhaKharchaAppState extends State<SajhaKharchaApp> {
       AppThemeMode.dark => ThemeMode.dark,
     };
   }
+}
+
+class _SajhaScrollBehavior extends MaterialScrollBehavior {
+  const _SajhaScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.invertedStylus,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.unknown,
+  };
 }
 
 TransactionResult _successResult({
@@ -7343,17 +7358,8 @@ class _ScanStatusPill extends StatelessWidget {
   }
 }
 
-class _ManualSheetScrollBehavior extends MaterialScrollBehavior {
+class _ManualSheetScrollBehavior extends _SajhaScrollBehavior {
   const _ManualSheetScrollBehavior();
-
-  @override
-  Set<PointerDeviceKind> get dragDevices => const {
-    PointerDeviceKind.touch,
-    PointerDeviceKind.mouse,
-    PointerDeviceKind.stylus,
-    PointerDeviceKind.invertedStylus,
-    PointerDeviceKind.trackpad,
-  };
 }
 
 enum _BillLineKind { item, serviceCharge, tax, discount, rounding }
