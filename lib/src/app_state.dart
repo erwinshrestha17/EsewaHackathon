@@ -20,6 +20,8 @@ class AppStore extends ChangeNotifier {
   final List<Group> groups = <Group>[];
   final List<GroupMember> groupMembers = <GroupMember>[];
   final List<Expense> expenses = <Expense>[];
+  final List<ExpenseReview> expenseReviews = <ExpenseReview>[];
+  final List<RecurringExpense> recurringExpenses = <RecurringExpense>[];
   final List<Settlement> settlements = <Settlement>[];
   final List<Adjustment> adjustments = <Adjustment>[];
   final List<PaymentTransaction> payments = <PaymentTransaction>[];
@@ -165,6 +167,15 @@ class AppStore extends ChangeNotifier {
     return null;
   }
 
+  Expense? expenseByIdOrNull(String id) {
+    for (final expense in expenses) {
+      if (expense.id == id) {
+        return expense;
+      }
+    }
+    return null;
+  }
+
   DhukutiPool poolById(String id) =>
       dhukutiPools.firstWhere((pool) => pool.id == id);
 
@@ -187,6 +198,10 @@ class AppStore extends ChangeNotifier {
   DateTime get _now => DateTime.now();
 
   void loadBackendSnapshot(Map<String, dynamic> snapshot) {
+    final localExpenseReviews = List<ExpenseReview>.from(expenseReviews);
+    final localRecurringExpenses = List<RecurringExpense>.from(
+      recurringExpenses,
+    );
     _clearBackendBackedState();
 
     for (final row in _rows(snapshot, 'users')) {
@@ -419,6 +434,59 @@ class AppStore extends ChangeNotifier {
         ),
       );
     }
+    for (final row in _rows(snapshot, 'expenseReviews')) {
+      expenseReviews.add(
+        ExpenseReview(
+          id: _string(row, 'id'),
+          expenseId: _string(row, 'expenseId'),
+          userId: _string(row, 'userId'),
+          status: _enumValue(
+            ExpenseReviewStatus.values,
+            row['status'],
+            ExpenseReviewStatus.pending,
+          ),
+          note: _string(row, 'note'),
+          expenseItemId: _nullableString(row['expenseItemId']),
+          createdAt: _date(row['createdAt']),
+          updatedAt: _date(row['updatedAt']),
+        ),
+      );
+    }
+    _restoreLocalExpenseReviews(localExpenseReviews);
+    for (final row in _rows(snapshot, 'recurringExpenses')) {
+      recurringExpenses.add(
+        RecurringExpense(
+          id: _string(row, 'id'),
+          groupId: _string(row, 'groupId'),
+          title: _string(row, 'title'),
+          amountMinor: _int(row, 'amountMinor'),
+          payerId: _string(row, 'payerId'),
+          category: _string(row, 'category', fallback: 'custom'),
+          splitMode: _enumValue(
+            SplitMode.values,
+            row['splitMode'],
+            SplitMode.equal,
+          ),
+          frequency: _enumValue(
+            RecurringExpenseFrequency.values,
+            row['frequency'],
+            RecurringExpenseFrequency.monthly,
+          ),
+          nextDueAt: _date(row['nextDueAt']),
+          note: _string(row, 'note'),
+          active: _bool(row, 'active', fallback: true),
+          lastPostedAt: _optionalDate(row['lastPostedAt']),
+          sourceExpenseId: _nullableString(row['sourceExpenseId']),
+          createdBy: _string(row, 'createdBy'),
+          createdAt: _date(row['createdAt']),
+          participantIds: _stringList(
+            row['participantIds'] ?? row['participants'],
+          ),
+          customAmounts: _intMap(row['customAmounts']),
+        ),
+      );
+    }
+    _restoreLocalRecurringExpenses(localRecurringExpenses);
 
     for (final row in _rows(snapshot, 'payments')) {
       payments.add(
@@ -651,6 +719,8 @@ class AppStore extends ChangeNotifier {
     groups.clear();
     groupMembers.clear();
     expenses.clear();
+    expenseReviews.clear();
+    recurringExpenses.clear();
     settlements.clear();
     adjustments.clear();
     payments.clear();
@@ -667,6 +737,46 @@ class AppStore extends ChangeNotifier {
     notifications.clear();
     selectedGroupId = null;
     selectedDhukutiPoolId = null;
+  }
+
+  void _restoreLocalExpenseReviews(List<ExpenseReview> localReviews) {
+    if (localReviews.isEmpty) {
+      return;
+    }
+    final expenseIds = expenses.map((expense) => expense.id).toSet();
+    final userIds = users.map((user) => user.id).toSet();
+    final existingKeys = {
+      for (final review in expenseReviews)
+        '${review.expenseId}:${review.userId}',
+    };
+    for (final review in localReviews) {
+      final key = '${review.expenseId}:${review.userId}';
+      if (!expenseIds.contains(review.expenseId) ||
+          !userIds.contains(review.userId) ||
+          existingKeys.contains(key)) {
+        continue;
+      }
+      expenseReviews.add(review);
+      existingKeys.add(key);
+    }
+  }
+
+  void _restoreLocalRecurringExpenses(List<RecurringExpense> localSchedules) {
+    if (localSchedules.isEmpty) {
+      return;
+    }
+    final groupIds = groups.map((group) => group.id).toSet();
+    final userIds = users.map((user) => user.id).toSet();
+    final existingIds = recurringExpenses.map((item) => item.id).toSet();
+    for (final schedule in localSchedules) {
+      if (!groupIds.contains(schedule.groupId) ||
+          !userIds.contains(schedule.payerId) ||
+          existingIds.contains(schedule.id)) {
+        continue;
+      }
+      recurringExpenses.add(schedule);
+      existingIds.add(schedule.id);
+    }
   }
 
   void _loadDhukutiMembersFromGroupMemberships() {
@@ -775,6 +885,35 @@ class AppStore extends ChangeNotifier {
       return value.round();
     }
     return int.tryParse(value.toString());
+  }
+
+  List<String> _stringList(Object? value) {
+    if (value is List) {
+      return [
+        for (final item in value)
+          if (item.toString().trim().isNotEmpty) item.toString().trim(),
+      ];
+    }
+    final text = value?.toString().trim() ?? '';
+    if (text.isEmpty) {
+      return const <String>[];
+    }
+    return text
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+
+  Map<String, int> _intMap(Object? value) {
+    if (value is! Map) {
+      return const <String, int>{};
+    }
+    return <String, int>{
+      for (final entry in value.entries)
+        if (entry.key.toString().trim().isNotEmpty)
+          entry.key.toString().trim(): _intOrNull(entry.value) ?? 0,
+    };
   }
 
   double _double(
@@ -1182,6 +1321,8 @@ class AppStore extends ChangeNotifier {
 
   static const qrInviteTtl = Duration(minutes: 5);
   static const _qrInvitePrefix = 'SAJHA-KHARCHA-QR-';
+  static const groupInviteTtl = Duration(days: 7);
+  static const _groupInvitePrefix = 'SAJHA-KHARCHA-GROUP-';
 
   String qrInviteCodeFor(AppUser user, {DateTime? issuedAt}) {
     final issued = issuedAt ?? _now;
@@ -1232,6 +1373,103 @@ class AppStore extends ChangeNotifier {
     }
     return (
       userId: targetId,
+      issuedAt: DateTime.fromMillisecondsSinceEpoch(issuedMillis),
+    );
+  }
+
+  String groupInviteCodeFor(String groupId, {DateTime? issuedAt}) {
+    final group = groupById(groupId);
+    final issued = issuedAt ?? _now;
+    return '$_groupInvitePrefix${group.id}::$currentUserId::${issued.millisecondsSinceEpoch}';
+  }
+
+  String? groupInviteValidationError(String code) {
+    final invite = _groupInvitePayload(code);
+    if (invite == null) {
+      return 'That group invite code is not valid.';
+    }
+    final group = groupByIdOrNull(invite.groupId);
+    if (group == null) {
+      return 'No group matched that invite.';
+    }
+    if (group.isDisbanded) {
+      return 'This group is no longer available.';
+    }
+    if (isActiveGroupMember(group.id, currentUserId)) {
+      return 'You are already in this group.';
+    }
+    if (!isActiveGroupMember(group.id, invite.inviterId)) {
+      return 'This group invite is no longer active.';
+    }
+    final now = _now;
+    if (invite.issuedAt.isAfter(now.add(const Duration(seconds: 30)))) {
+      return 'That group invite code is not valid.';
+    }
+    if (now.difference(invite.issuedAt) > groupInviteTtl) {
+      return 'This group invite expired. Ask for a new invite.';
+    }
+    if (!canInviteOrGift(invite.inviterId, currentUserId)) {
+      return 'Connect with ${nameOf(invite.inviterId)} before joining this group.';
+    }
+    return null;
+  }
+
+  String acceptGroupInvite(String code) {
+    final validationError = groupInviteValidationError(code);
+    if (validationError != null) {
+      return validationError;
+    }
+    final invite = _groupInvitePayload(code)!;
+    final group = groupById(invite.groupId);
+    groupMembers.add(
+      GroupMember(
+        id: _id('gm'),
+        groupId: group.id,
+        userId: currentUserId,
+        role: MemberRole.member,
+        status: MemberStatus.active,
+        joinedAt: _now,
+      ),
+    );
+    _activity(
+      actorId: currentUserId,
+      groupId: group.id,
+      eventType: 'group_invite_accepted',
+      entityType: 'group_member',
+      entityId: currentUserId,
+      title: 'Invite accepted',
+      body:
+          '${nameOf(currentUserId)} joined ${group.name} from ${nameOf(invite.inviterId)}\'s invite.',
+    );
+    _notify(
+      invite.inviterId,
+      'group_invite',
+      'Group invite accepted',
+      '${nameOf(currentUserId)} joined ${group.name}.',
+    );
+    notifyListeners();
+    return 'Joined ${group.name}.';
+  }
+
+  ({String groupId, String inviterId, DateTime issuedAt})? _groupInvitePayload(
+    String code,
+  ) {
+    final value = code.trim();
+    if (!value.startsWith(_groupInvitePrefix)) {
+      return null;
+    }
+    final payload = value.substring(_groupInvitePrefix.length);
+    final parts = payload.split('::');
+    if (parts.length != 3) {
+      return null;
+    }
+    final issuedMillis = int.tryParse(parts[2]);
+    if (parts[0].isEmpty || parts[1].isEmpty || issuedMillis == null) {
+      return null;
+    }
+    return (
+      groupId: parts[0],
+      inviterId: parts[1],
       issuedAt: DateTime.fromMillisecondsSinceEpoch(issuedMillis),
     );
   }
@@ -1333,6 +1571,69 @@ class AppStore extends ChangeNotifier {
       );
     }
     notifyListeners();
+    return groupId;
+  }
+
+  List<GroupTemplateSuggestion> get expenseGroupTemplateSuggestions {
+    return const <GroupTemplateSuggestion>[
+      GroupTemplateSuggestion(
+        id: 'apartment-monthly',
+        name: 'Apartment Monthly',
+        category: GroupCategory.apartment,
+        template: 'Apartment Monthly',
+        description: 'Rent, utilities, groceries, and repeated house bills.',
+        memberLimit: 3,
+        recurringTitle: 'Monthly rent and utilities',
+        recurringAmountMinor: 850000,
+      ),
+      GroupTemplateSuggestion(
+        id: 'trek-crew',
+        name: 'Trek Crew',
+        category: GroupCategory.trek,
+        template: 'New Year Trek',
+        description: 'Transport, permits, rooms, meals, and gear rentals.',
+        memberLimit: 4,
+      ),
+      GroupTemplateSuggestion(
+        id: 'festival-feast',
+        name: 'Festival Feast',
+        category: GroupCategory.festival,
+        template: 'Dashain Khasi Split',
+        description: 'Khasi, masala, transport, gifts, and family meals.',
+        memberLimit: 5,
+      ),
+    ];
+  }
+
+  String createGroupFromTemplate(String templateId) {
+    final template = expenseGroupTemplateSuggestions.firstWhere(
+      (item) => item.id == templateId,
+      orElse: () => throw ArgumentError('Template not found.'),
+    );
+    final members = activeConnectionUsers()
+        .take(template.memberLimit)
+        .map((user) => user.id)
+        .toList();
+    final groupId = createGroup(
+      name: template.name,
+      category: template.category,
+      memberIds: members,
+      template: template.template,
+    );
+    if (template.hasRecurringSeed) {
+      createRecurringExpense(
+        groupId: groupId,
+        title: template.recurringTitle!,
+        amountMinor: template.recurringAmountMinor,
+        payerId: currentUserId,
+        category: template.category.name,
+        splitMode: SplitMode.equal,
+        participantIds: <String>[currentUserId, ...members],
+        frequency: template.recurringFrequency,
+        nextDueAt: DateTime(_now.year, _now.month + 1, 1),
+        note: 'Started from the ${template.template} template.',
+      );
+    }
     return groupId;
   }
 
@@ -1869,6 +2170,240 @@ class AppStore extends ChangeNotifier {
     return expenseId;
   }
 
+  List<RecurringExpense> recurringExpensesForGroup(String groupId) {
+    return recurringExpenses.where((item) => item.groupId == groupId).toList()
+      ..sort((a, b) => a.nextDueAt.compareTo(b.nextDueAt));
+  }
+
+  List<RecurringExpense> dueRecurringExpensesForGroup(String groupId) {
+    return recurringExpensesForGroup(
+      groupId,
+    ).where((item) => item.active && !item.nextDueAt.isAfter(_now)).toList();
+  }
+
+  String createRecurringExpense({
+    required String groupId,
+    required String title,
+    required int amountMinor,
+    required String payerId,
+    required String category,
+    required SplitMode splitMode,
+    required List<String> participantIds,
+    required RecurringExpenseFrequency frequency,
+    required DateTime nextDueAt,
+    String note = '',
+    String? sourceExpenseId,
+    Map<String, int>? customAmounts,
+  }) {
+    final group = groupByIdOrNull(groupId);
+    if (group == null || group.isDisbanded) {
+      throw ArgumentError('Group is no longer available.');
+    }
+    if (amountMinor <= 0) {
+      throw ArgumentError('Recurring amount must be greater than zero.');
+    }
+    final participants = participantIds.toSet().toList();
+    if (participants.isEmpty) {
+      throw ArgumentError('Choose at least one participant.');
+    }
+    final activeIds = membersForGroup(
+      groupId,
+      activeOnly: true,
+    ).map((member) => member.userId).toSet();
+    if (!activeIds.contains(payerId) ||
+        !participants.every(activeIds.contains)) {
+      throw ArgumentError(
+        'Payer and participants must be active group members.',
+      );
+    }
+    final cleanCustomAmounts = customAmounts == null
+        ? <String, int>{}
+        : <String, int>{
+            for (final participantId in participants)
+              participantId: customAmounts[participantId] ?? 0,
+          };
+    final safeSplitMode =
+        splitMode == SplitMode.custom && cleanCustomAmounts.isNotEmpty
+        ? SplitMode.custom
+        : SplitMode.equal;
+    if (safeSplitMode == SplitMode.custom) {
+      validateCustomShares(
+        amountMinor,
+        participants.map((id) => cleanCustomAmounts[id] ?? 0),
+      );
+    }
+    final schedule = RecurringExpense(
+      id: _id('recurring'),
+      groupId: groupId,
+      title: title.trim().isEmpty ? 'Recurring expense' : title.trim(),
+      amountMinor: amountMinor,
+      payerId: payerId,
+      category: category,
+      splitMode: safeSplitMode,
+      frequency: frequency,
+      nextDueAt: nextDueAt,
+      note: note.trim(),
+      sourceExpenseId: sourceExpenseId,
+      createdBy: currentUserId,
+      createdAt: _now,
+      participantIds: participants,
+      customAmounts: cleanCustomAmounts,
+    );
+    recurringExpenses.add(schedule);
+    _activity(
+      actorId: currentUserId,
+      groupId: groupId,
+      eventType: 'recurring_expense_created',
+      entityType: 'recurring_expense',
+      entityId: schedule.id,
+      title: 'Recurring expense scheduled',
+      body:
+          '${schedule.title} will repeat ${enumLabel(frequency).toLowerCase()} for ${money(amountMinor)}.',
+    );
+    notifyListeners();
+    return schedule.id;
+  }
+
+  String createRecurringFromExpense(
+    String expenseId, {
+    RecurringExpenseFrequency frequency = RecurringExpenseFrequency.monthly,
+    DateTime? nextDueAt,
+  }) {
+    final expense = expenseByIdOrNull(expenseId);
+    if (expense == null) {
+      throw ArgumentError('Expense not found.');
+    }
+    final participantIds = expense.shares
+        .where((share) => share.amountMinor > 0)
+        .map((share) => share.userId)
+        .toList();
+    final customAmounts = <String, int>{
+      for (final share in expense.shares) share.userId: share.amountMinor,
+    };
+    return createRecurringExpense(
+      groupId: expense.groupId,
+      title: expense.title,
+      amountMinor: expense.totalMinor,
+      payerId: expense.payers.isEmpty
+          ? expense.payerId
+          : expense.payers.first.userId,
+      category: expense.category,
+      splitMode: SplitMode.custom,
+      participantIds: participantIds,
+      frequency: frequency,
+      nextDueAt:
+          nextDueAt ?? _nextRecurringDueDate(expense.expenseDate, frequency),
+      note: expense.note,
+      sourceExpenseId: expense.id,
+      customAmounts: customAmounts,
+    );
+  }
+
+  String? postRecurringExpense(String recurringExpenseId) {
+    RecurringExpense? schedule;
+    for (final item in recurringExpenses) {
+      if (item.id == recurringExpenseId) {
+        schedule = item;
+        break;
+      }
+    }
+    if (schedule == null) {
+      return 'Recurring expense not found.';
+    }
+    if (!schedule.active) {
+      return 'This recurring expense is paused.';
+    }
+    final group = groupByIdOrNull(schedule.groupId);
+    if (group == null || group.isDisbanded) {
+      return 'Group is no longer available.';
+    }
+    if (schedule.nextDueAt.isAfter(_now)) {
+      return '${schedule.title} is not due yet.';
+    }
+    final usesCustom =
+        schedule.splitMode == SplitMode.custom &&
+        schedule.customAmounts.isNotEmpty;
+    final expenseId = addExpense(
+      groupId: schedule.groupId,
+      title: schedule.title,
+      totalMinor: schedule.amountMinor,
+      payerId: schedule.payerId,
+      category: schedule.category,
+      splitMode: usesCustom ? SplitMode.custom : SplitMode.equal,
+      participantIds: schedule.participantIds,
+      customAmounts: usesCustom ? schedule.customAmounts : null,
+      note: schedule.note.isEmpty
+          ? 'Posted from recurring schedule.'
+          : schedule.note,
+    );
+    schedule
+      ..lastPostedAt = _now
+      ..nextDueAt = _nextRecurringDueDate(
+        schedule.nextDueAt,
+        schedule.frequency,
+      );
+    _activity(
+      actorId: currentUserId,
+      groupId: schedule.groupId,
+      eventType: 'recurring_expense_posted',
+      entityType: 'expense',
+      entityId: expenseId,
+      title: 'Recurring expense posted',
+      body:
+          '${schedule.title} was posted and the next due date moved to ${dateLabel(schedule.nextDueAt)}.',
+    );
+    notifyListeners();
+    return null;
+  }
+
+  String? pauseRecurringExpense(String recurringExpenseId) {
+    RecurringExpense? schedule;
+    for (final item in recurringExpenses) {
+      if (item.id == recurringExpenseId) {
+        schedule = item;
+        break;
+      }
+    }
+    if (schedule == null) {
+      return 'Recurring expense not found.';
+    }
+    schedule.active = false;
+    _activity(
+      actorId: currentUserId,
+      groupId: schedule.groupId,
+      eventType: 'recurring_expense_paused',
+      entityType: 'recurring_expense',
+      entityId: schedule.id,
+      title: 'Recurring expense paused',
+      body: '${schedule.title} will not post automatically.',
+    );
+    notifyListeners();
+    return null;
+  }
+
+  DateTime _nextRecurringDueDate(
+    DateTime from,
+    RecurringExpenseFrequency frequency,
+  ) {
+    switch (frequency) {
+      case RecurringExpenseFrequency.weekly:
+        return from.add(const Duration(days: 7));
+      case RecurringExpenseFrequency.monthly:
+        final daysInTargetMonth = DateTime(from.year, from.month + 2, 0).day;
+        final day = from.day > daysInTargetMonth ? daysInTargetMonth : from.day;
+        return DateTime(
+          from.year,
+          from.month + 1,
+          day,
+          from.hour,
+          from.minute,
+          from.second,
+          from.millisecond,
+          from.microsecond,
+        );
+    }
+  }
+
   bool editExpenseTitle(String expenseId, String title, String note) {
     final expense = expenses.firstWhere((item) => item.id == expenseId);
     if (expense.lockedAt != null) {
@@ -1923,6 +2458,255 @@ class AppStore extends ChangeNotifier {
     );
     notifyListeners();
     return true;
+  }
+
+  Set<String> affectedUsersForExpense(Expense expense) {
+    return <String>{
+      for (final share in expense.shares) share.userId,
+      for (final payer in expense.payers) payer.userId,
+      if (expense.payers.isEmpty) expense.payerId,
+    };
+  }
+
+  List<ExpenseReview> reviewsForExpense(String expenseId) {
+    return expenseReviews
+        .where((review) => review.expenseId == expenseId)
+        .toList()
+      ..sort((a, b) => a.updatedAt.compareTo(b.updatedAt));
+  }
+
+  ExpenseReview? expenseReviewForUser(String expenseId, String userId) {
+    for (final review in expenseReviews) {
+      if (review.expenseId == expenseId && review.userId == userId) {
+        return review;
+      }
+    }
+    return null;
+  }
+
+  ExpenseReviewStatus expenseReviewStatusForUser(
+    Expense expense,
+    String userId,
+  ) {
+    final explicit = expenseReviewForUser(expense.id, userId);
+    if (explicit != null) {
+      return explicit.status;
+    }
+    if (userId == expense.createdBy) {
+      return ExpenseReviewStatus.accepted;
+    }
+    return affectedUsersForExpense(expense).contains(userId)
+        ? ExpenseReviewStatus.pending
+        : ExpenseReviewStatus.accepted;
+  }
+
+  ExpenseReviewSummary reviewSummaryForExpense(Expense expense) {
+    final affectedUsers = affectedUsersForExpense(expense);
+    if (affectedUsers.isEmpty) {
+      return const ExpenseReviewSummary(
+        total: 0,
+        accepted: 0,
+        pending: 0,
+        correctionRequested: 0,
+        itemDisputed: 0,
+      );
+    }
+
+    var accepted = 0;
+    var pending = 0;
+    var correctionRequested = 0;
+    var itemDisputed = 0;
+    for (final userId in affectedUsers) {
+      switch (expenseReviewStatusForUser(expense, userId)) {
+        case ExpenseReviewStatus.accepted:
+          accepted += 1;
+        case ExpenseReviewStatus.pending:
+          pending += 1;
+        case ExpenseReviewStatus.correctionRequested:
+          correctionRequested += 1;
+        case ExpenseReviewStatus.itemDisputed:
+          itemDisputed += 1;
+      }
+    }
+
+    return ExpenseReviewSummary(
+      total: affectedUsers.length,
+      accepted: accepted,
+      pending: pending,
+      correctionRequested: correctionRequested,
+      itemDisputed: itemDisputed,
+    );
+  }
+
+  String? acceptExpenseSplit(String expenseId) {
+    final expense = expenseByIdOrNull(expenseId);
+    final blocked = _expenseReviewBlockedReason(expense);
+    if (blocked != null) {
+      return blocked;
+    }
+    _setExpenseReview(
+      expense!,
+      currentUserId,
+      ExpenseReviewStatus.accepted,
+      note: '',
+      expenseItemId: null,
+    );
+    _activity(
+      actorId: currentUserId,
+      groupId: expense.groupId,
+      eventType: 'expense_split_accepted',
+      entityType: 'expense',
+      entityId: expense.id,
+      title: 'Split accepted',
+      body: '${nameOf(currentUserId)} accepted ${expense.title}.',
+    );
+    notifyListeners();
+    return null;
+  }
+
+  String? requestExpenseCorrection(String expenseId, String note) {
+    final expense = expenseByIdOrNull(expenseId);
+    final blocked = _expenseReviewBlockedReason(expense);
+    if (blocked != null) {
+      return blocked;
+    }
+    final cleanNote = note.trim();
+    if (cleanNote.length < 4) {
+      return 'Add a short reason for the correction request.';
+    }
+    _setExpenseReview(
+      expense!,
+      currentUserId,
+      ExpenseReviewStatus.correctionRequested,
+      note: cleanNote,
+      expenseItemId: null,
+    );
+    _activity(
+      actorId: currentUserId,
+      groupId: expense.groupId,
+      eventType: 'expense_correction_requested',
+      entityType: 'expense',
+      entityId: expense.id,
+      title: 'Correction requested',
+      body: '${nameOf(currentUserId)} requested a correction: $cleanNote',
+    );
+    _notifyExpenseCreator(
+      expense,
+      'expense_correction_requested',
+      'Correction requested',
+      '${nameOf(currentUserId)} requested a correction on ${expense.title}.',
+    );
+    notifyListeners();
+    return null;
+  }
+
+  String? disputeExpenseItem({
+    required String expenseId,
+    required String expenseItemId,
+    required String note,
+  }) {
+    final expense = expenseByIdOrNull(expenseId);
+    final blocked = _expenseReviewBlockedReason(expense);
+    if (blocked != null) {
+      return blocked;
+    }
+    ExpenseItem? disputedItem;
+    for (final item in expense!.items) {
+      if (item.id == expenseItemId) {
+        disputedItem = item;
+        break;
+      }
+    }
+    if (disputedItem == null) {
+      return 'Choose an item to dispute.';
+    }
+    final cleanNote = note.trim();
+    if (cleanNote.length < 4) {
+      return 'Add a short reason for the item dispute.';
+    }
+    _setExpenseReview(
+      expense,
+      currentUserId,
+      ExpenseReviewStatus.itemDisputed,
+      note: cleanNote,
+      expenseItemId: expenseItemId,
+    );
+    _activity(
+      actorId: currentUserId,
+      groupId: expense.groupId,
+      eventType: 'expense_item_disputed',
+      entityType: 'expense',
+      entityId: expense.id,
+      title: 'Item disputed',
+      body:
+          '${nameOf(currentUserId)} disputed ${disputedItem.label} on ${expense.title}: $cleanNote',
+    );
+    _notifyExpenseCreator(
+      expense,
+      'expense_item_disputed',
+      'Item assignment disputed',
+      '${nameOf(currentUserId)} disputed ${disputedItem.label} on ${expense.title}.',
+    );
+    notifyListeners();
+    return null;
+  }
+
+  String? _expenseReviewBlockedReason(Expense? expense) {
+    if (expense == null) {
+      return 'Expense not found.';
+    }
+    if (expense.status != ExpenseStatus.active) {
+      return 'Only active expenses can be reviewed.';
+    }
+    if (expense.lockedAt != null) {
+      return 'This expense is locked. Use an adjustment for corrections.';
+    }
+    if (!affectedUsersForExpense(expense).contains(currentUserId)) {
+      return 'Only included members can review this expense.';
+    }
+    return null;
+  }
+
+  void _setExpenseReview(
+    Expense expense,
+    String userId,
+    ExpenseReviewStatus status, {
+    required String note,
+    required String? expenseItemId,
+  }) {
+    final existing = expenseReviewForUser(expense.id, userId);
+    if (existing == null) {
+      expenseReviews.add(
+        ExpenseReview(
+          id: _id('expense-review'),
+          expenseId: expense.id,
+          userId: userId,
+          status: status,
+          note: note,
+          expenseItemId: expenseItemId,
+          createdAt: _now,
+          updatedAt: _now,
+        ),
+      );
+      return;
+    }
+    existing
+      ..status = status
+      ..note = note
+      ..expenseItemId = expenseItemId
+      ..updatedAt = _now;
+  }
+
+  void _notifyExpenseCreator(
+    Expense expense,
+    String type,
+    String title,
+    String body,
+  ) {
+    if (expense.createdBy == currentUserId) {
+      return;
+    }
+    _notify(expense.createdBy, type, title, body);
   }
 
   String createZeroSumAdjustment({
@@ -1998,6 +2782,182 @@ class AppStore extends ChangeNotifier {
       balances: balancesForGroup(groupId),
       settlements: settlements,
     );
+  }
+
+  SmartSettlementPlan smartSettlementPlanForGroup(String groupId) {
+    var blockedExpenseCount = 0;
+    var reviewIssueCount = 0;
+    for (final expense in expenses.where(
+      (item) => item.groupId == groupId && item.status == ExpenseStatus.active,
+    )) {
+      final summary = reviewSummaryForExpense(expense);
+      if (summary.hasConcerns) {
+        reviewIssueCount += 1;
+      } else if (!summary.isFinal) {
+        blockedExpenseCount += 1;
+      }
+    }
+    return SmartSettlementPlan(
+      groupId: groupId,
+      suggestions: suggestionsForGroup(groupId),
+      blockedExpenseCount: blockedExpenseCount,
+      reviewIssueCount: reviewIssueCount,
+    );
+  }
+
+  List<GroupLedgerEntry> groupLedgerEntries(String groupId) {
+    final entries = <GroupLedgerEntry>[];
+    for (final expense in expenses.where((item) => item.groupId == groupId)) {
+      final payerNames = expense.payers.isEmpty
+          ? nameOf(expense.payerId)
+          : expense.payers.map((payer) => nameOf(payer.userId)).join(' + ');
+      entries.add(
+        GroupLedgerEntry(
+          id: expense.id,
+          groupId: groupId,
+          type: 'Expense',
+          title: expense.title,
+          subtitle:
+              'Paid by $payerNames • ${enumLabel(expense.splitMode)} split',
+          createdAt: expense.createdAt,
+          amountMinor: expense.totalMinor,
+          status: enumLabel(expense.status),
+          actorId: expense.createdBy,
+          affectsBalance: expense.status == ExpenseStatus.active,
+        ),
+      );
+    }
+    for (final settlement in settlements.where(
+      (item) => item.groupId == groupId,
+    )) {
+      entries.add(
+        GroupLedgerEntry(
+          id: settlement.id,
+          groupId: groupId,
+          type: 'Settlement',
+          title: settlement.isExternal
+              ? 'Cash/bank settlement'
+              : 'eSewa settlement',
+          subtitle:
+              '${nameOf(settlement.payerId)} paid ${nameOf(settlement.payeeId)}',
+          createdAt: settlement.paidAt ?? settlement.createdAt,
+          amountMinor: settlement.amountMinor,
+          status: enumLabel(settlement.status),
+          actorId: settlement.payerId,
+          affectsBalance: settlement.status == PaymentStatus.paid,
+        ),
+      );
+    }
+    for (final adjustment in adjustments.where(
+      (item) => item.groupId == groupId,
+    )) {
+      final total = adjustment.entries.fold<int>(
+        0,
+        (sum, entry) => sum + entry.amountMinor,
+      );
+      entries.add(
+        GroupLedgerEntry(
+          id: adjustment.id,
+          groupId: groupId,
+          type: 'Adjustment',
+          title: adjustment.reason,
+          subtitle: enumLabel(adjustment.adjustmentType),
+          createdAt: adjustment.createdAt,
+          amountMinor: total ~/ 2,
+          status: 'Posted',
+          actorId: adjustment.createdBy,
+        ),
+      );
+    }
+    for (final schedule in recurringExpenses.where(
+      (item) => item.groupId == groupId,
+    )) {
+      entries.add(
+        GroupLedgerEntry(
+          id: schedule.id,
+          groupId: groupId,
+          type: 'Recurring',
+          title: schedule.title,
+          subtitle:
+              '${enumLabel(schedule.frequency)} • next ${dateLabel(schedule.nextDueAt)}',
+          createdAt: schedule.createdAt,
+          amountMinor: schedule.amountMinor,
+          status: schedule.active ? 'Active' : 'Paused',
+          actorId: schedule.createdBy,
+          affectsBalance: false,
+        ),
+      );
+    }
+    entries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return entries;
+  }
+
+  List<GroupInsight> groupInsights(String groupId) {
+    final groupExpenses = expenses
+        .where(
+          (item) =>
+              item.groupId == groupId && item.status == ExpenseStatus.active,
+        )
+        .toList();
+    final plan = smartSettlementPlanForGroup(groupId);
+    final recurring = recurringExpensesForGroup(
+      groupId,
+    ).where((item) => item.active).toList();
+    final dueRecurring = recurring
+        .where((item) => !item.nextDueAt.isAfter(_now))
+        .length;
+    final personalShare = groupExpenses.fold<int>(0, (sum, expense) {
+      final share = expense.shares
+          .where((item) => item.userId == currentUserId)
+          .fold<int>(0, (shareSum, item) => shareSum + item.amountMinor);
+      return sum + share;
+    });
+    final largestExpense = groupExpenses.isEmpty
+        ? null
+        : (groupExpenses..sort((a, b) => b.totalMinor.compareTo(a.totalMinor)))
+              .first;
+    return <GroupInsight>[
+      GroupInsight(
+        title: 'Settlement readiness',
+        metric: plan.statusLabel,
+        body: plan.isReady
+            ? '${plan.routeCount} optimized route(s) can clear ${money(plan.totalAmountMinor)}.'
+            : plan.reviewIssueCount > 0
+            ? '${plan.reviewIssueCount} expense(s) need corrections before settlement feels final.'
+            : plan.blockedExpenseCount > 0
+            ? '${plan.blockedExpenseCount} expense(s) are waiting for member review.'
+            : 'No open settlement route is needed right now.',
+        tone: plan.isReady || !plan.hasRoutes ? 'success' : 'warning',
+      ),
+      GroupInsight(
+        title: 'Recurring rhythm',
+        metric: '${recurring.length} active',
+        body: dueRecurring > 0
+            ? '$dueRecurring recurring expense(s) are due to post.'
+            : recurring.isEmpty
+            ? 'Create a schedule for rent, utilities, subscriptions, or shared chores.'
+            : 'Next scheduled bills are visible in the recurring section.',
+        tone: dueRecurring > 0 ? 'warning' : 'info',
+      ),
+      GroupInsight(
+        title: 'Your share',
+        metric: money(personalShare),
+        body: groupExpenses.isEmpty
+            ? 'Your group share starts after the first expense.'
+            : 'Total active expense share assigned to you in this group.',
+        tone: personalShare == 0 ? 'neutral' : 'info',
+      ),
+      GroupInsight(
+        title: 'Largest bill',
+        metric: largestExpense == null
+            ? 'None'
+            : money(largestExpense.totalMinor),
+        body: largestExpense == null
+            ? 'No active expense has been posted yet.'
+            : '${largestExpense.title} is the largest active entry.',
+        tone: largestExpense == null ? 'neutral' : 'info',
+      ),
+    ];
   }
 
   int get totalOwedByCurrentUser {
@@ -3192,6 +4152,13 @@ class AppStore extends ChangeNotifier {
         );
       }
     }
+    for (final schedule in recurringExpenses.where(
+      (item) => item.groupId == groupId,
+    )) {
+      buffer.writeln(
+        'recurring,${schedule.createdAt.toIso8601String()},${schedule.title},${nameOf(schedule.payerId)},,${schedule.amountMinor},${schedule.active ? 'Active' : 'Paused'}',
+      );
+    }
     return buffer.toString();
   }
 
@@ -3202,6 +4169,7 @@ class AppStore extends ChangeNotifier {
           .length,
       'groups': groups.length,
       'expenses': expenses.length,
+      'recurringExpenses': recurringExpenses.length,
       'settlements': settlements.length,
       'gifts': gifts.length,
       'dhukutiContributions': dhukutiContributions
@@ -3762,6 +4730,18 @@ class AppStore extends ChangeNotifier {
         'u-arjun': npr(1890),
         'u-laxmi': npr(1890),
       },
+    );
+    createRecurringExpense(
+      groupId: apartment.id,
+      title: 'Monthly utilities',
+      amountMinor: npr(5400),
+      payerId: 'u-laxmi',
+      category: 'household',
+      splitMode: SplitMode.equal,
+      participantIds: const <String>['u-sita', 'u-arjun', 'u-laxmi'],
+      frequency: RecurringExpenseFrequency.monthly,
+      nextDueAt: DateTime(2026, 6, 1),
+      note: 'Reusable monthly apartment bill.',
     );
 
     final firstSuggestion = suggestionsForGroup(dashain.id).firstWhere(

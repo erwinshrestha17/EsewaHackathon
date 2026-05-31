@@ -587,6 +587,157 @@ void main() {
     );
   });
 
+  test(
+    'expense reviews track acceptance correction requests and item disputes',
+    () {
+      final store = AppStore.seeded();
+      final expenseId = store.addExpense(
+        groupId: 'g-dashain',
+        title: 'Reviewable receipt',
+        totalMinor: npr(300),
+        payerId: 'u-sita',
+        category: 'festival',
+        splitMode: SplitMode.item,
+        participantIds: const ['u-sita', 'u-arjun'],
+        receiptItems: [
+          ParsedReceiptItem(label: 'Momo', amountMinor: npr(200)),
+          ParsedReceiptItem(label: 'Tea', amountMinor: npr(100)),
+        ],
+        itemAssignments: const {
+          0: ['u-sita', 'u-arjun'],
+          1: ['u-arjun'],
+        },
+      );
+      final expense = store.expenses.firstWhere((item) => item.id == expenseId);
+
+      var summary = store.reviewSummaryForExpense(expense);
+      expect(summary.accepted, 1); // creator is implicitly accepted
+      expect(summary.pending, 1);
+      expect(summary.isFinal, isFalse);
+
+      store.currentUserId = 'u-arjun';
+      expect(store.acceptExpenseSplit(expenseId), isNull);
+      summary = store.reviewSummaryForExpense(expense);
+      expect(summary.isFinal, isTrue);
+
+      expect(
+        store.requestExpenseCorrection(expenseId, 'Tea should be Sita only'),
+        isNull,
+      );
+      summary = store.reviewSummaryForExpense(expense);
+      expect(summary.correctionRequested, 1);
+      expect(summary.hasConcerns, isTrue);
+
+      expect(
+        store.disputeExpenseItem(
+          expenseId: expenseId,
+          expenseItemId: expense.items.first.id,
+          note: 'I did not eat momo',
+        ),
+        isNull,
+      );
+      summary = store.reviewSummaryForExpense(expense);
+      expect(summary.itemDisputed, 1);
+      expect(
+        store.activity.map((item) => item.eventType),
+        containsAll([
+          'expense_split_accepted',
+          'expense_correction_requested',
+          'expense_item_disputed',
+        ]),
+      );
+    },
+  );
+
+  test(
+    'recurring expenses feed smart settlements insights and group ledger',
+    () {
+      final store = AppStore.seeded();
+      final groupId = store.createGroup(
+        name: 'Recurring lunch test',
+        category: GroupCategory.custom,
+        memberIds: const ['u-arjun'],
+      );
+      store.addExpense(
+        groupId: groupId,
+        title: 'Shared lunch',
+        totalMinor: npr(400),
+        payerId: 'u-sita',
+        category: 'custom',
+        splitMode: SplitMode.equal,
+        participantIds: const ['u-sita', 'u-arjun'],
+      );
+
+      var plan = store.smartSettlementPlanForGroup(groupId);
+      expect(plan.hasRoutes, isTrue);
+      expect(plan.blockedExpenseCount, 1);
+      expect(plan.statusLabel, 'Review pending');
+
+      store.switchUser('u-arjun');
+      final expense = store.expenses.last;
+      expect(store.acceptExpenseSplit(expense.id), isNull);
+      plan = store.smartSettlementPlanForGroup(groupId);
+      expect(plan.isReady, isTrue);
+
+      store.switchUser('u-sita');
+      final beforeExpenseCount = store.expenses.length;
+      final scheduleId = store.createRecurringExpense(
+        groupId: groupId,
+        title: 'Monthly internet',
+        amountMinor: npr(1800),
+        payerId: 'u-sita',
+        category: 'household',
+        splitMode: SplitMode.equal,
+        participantIds: const ['u-sita', 'u-arjun'],
+        frequency: RecurringExpenseFrequency.monthly,
+        nextDueAt: DateTime.now().subtract(const Duration(days: 1)),
+      );
+
+      expect(store.dueRecurringExpensesForGroup(groupId), hasLength(1));
+      expect(store.postRecurringExpense(scheduleId), isNull);
+      expect(store.expenses.length, beforeExpenseCount + 1);
+
+      final schedule = store.recurringExpenses.singleWhere(
+        (item) => item.id == scheduleId,
+      );
+      expect(schedule.lastPostedAt, isNotNull);
+      expect(schedule.nextDueAt.isAfter(DateTime.now()), isTrue);
+
+      final ledgerTypes = store
+          .groupLedgerEntries(groupId)
+          .map((entry) => entry.type)
+          .toSet();
+      expect(ledgerTypes, containsAll(<String>{'Expense', 'Recurring'}));
+      expect(
+        store.groupInsights(groupId).map((insight) => insight.title),
+        containsAll(<String>{'Settlement readiness', 'Recurring rhythm'}),
+      );
+      expect(store.groupStatementCsv(groupId), contains('recurring,'));
+    },
+  );
+
+  test('templates seed recurring schedules and group invite codes', () {
+    final store = AppStore.seeded();
+    final groupId = store.createGroupFromTemplate('apartment-monthly');
+
+    expect(store.groupById(groupId).template, 'Apartment Monthly');
+    expect(
+      store.recurringExpensesForGroup(groupId).single.title,
+      'Monthly rent and utilities',
+    );
+
+    final invite = store.groupInviteCodeFor(groupId);
+    store.switchUser('u-pasang');
+
+    expect(store.groupInviteValidationError(invite), isNull);
+    expect(store.acceptGroupInvite(invite), 'Joined Apartment Monthly.');
+    expect(store.isActiveGroupMember(groupId, 'u-pasang'), isTrue);
+    expect(
+      store.activityForGroup(groupId).map((item) => item.eventType),
+      contains('group_invite_accepted'),
+    );
+  });
+
   test('item receipt expenses support item-level share units', () {
     final store = AppStore.seeded();
     final expenseId = store.addExpense(

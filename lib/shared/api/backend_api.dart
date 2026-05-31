@@ -267,6 +267,25 @@ class BackendApi {
     );
   }
 
+  Future<Map<String, dynamic>> createGroupInvite({
+    required String accessToken,
+    required String groupId,
+    int? expiresInHours,
+  }) {
+    return _post('/api/groups/$groupId/invites', {
+      'expiresInHours': expiresInHours,
+    }, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> acceptGroupInvite({
+    required String accessToken,
+    required String code,
+  }) {
+    return _post('/api/groups/invites/accept', {
+      'code': code,
+    }, accessToken: accessToken);
+  }
+
   Future<Map<String, dynamic>> notifications({required String accessToken}) {
     return get('/api/notifications', accessToken: accessToken);
   }
@@ -404,6 +423,57 @@ class BackendApi {
     return _post('/api/expenses/group/$groupId/$expenseId/void', {
       'reason': reason,
     }, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> reviewExpense({
+    required String accessToken,
+    required String groupId,
+    required String expenseId,
+    required String status,
+    String? note,
+    String? expenseItemId,
+  }) {
+    return _post('/api/expenses/group/$groupId/$expenseId/reviews', {
+      'status': status,
+      'note': note,
+      'expenseItemId': expenseItemId,
+    }, accessToken: accessToken);
+  }
+
+  Future<Map<String, dynamic>> createRecurringExpense({
+    required String accessToken,
+    required String groupId,
+    required Map<String, Object?> recurringExpense,
+  }) {
+    return _post(
+      '/api/expenses/group/$groupId/recurring',
+      recurringExpense,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> postRecurringExpense({
+    required String accessToken,
+    required String groupId,
+    required String recurringExpenseId,
+  }) {
+    return _post(
+      '/api/expenses/group/$groupId/recurring/$recurringExpenseId/post',
+      {},
+      accessToken: accessToken,
+    );
+  }
+
+  Future<Map<String, dynamic>> pauseRecurringExpense({
+    required String accessToken,
+    required String groupId,
+    required String recurringExpenseId,
+  }) {
+    return _post(
+      '/api/expenses/group/$groupId/recurring/$recurringExpenseId/pause',
+      {},
+      accessToken: accessToken,
+    );
   }
 
   Future<Map<String, dynamic>> createAdjustment({

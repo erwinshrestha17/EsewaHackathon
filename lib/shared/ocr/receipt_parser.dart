@@ -94,22 +94,51 @@ final _dateRe = RegExp(
 const _serviceWords = [
   'service charge',
   'service chrg',
+  'service chg',
+  'serv charge',
+  'serv chrg',
+  'serv chg',
   's.charge',
+  's. charge',
+  's.chg',
+  's. chg',
   'svc',
   'service',
 ];
-const _taxWords = ['vat', 'g.s.t', 'gst', 'tax'];
-const _discountWords = ['discount', 'disc.', 'less', 'promo', 'coupon', 'off'];
+const _taxWords = ['vat', 'v.a.t', 'g.s.t', 'gst', 'tax'];
+const _discountWords = [
+  'discount',
+  'disc.',
+  'disc',
+  'disct',
+  'less',
+  'promo',
+  'coupon',
+  'off',
+];
 const _totalWords = [
   'grand total',
+  'g.total',
+  'g total',
   'net amount',
+  'net amt',
   'net payable',
   'amount payable',
   'total payable',
   'total amount',
+  'total amt',
+  'due amount',
+  'balance due',
   'total',
 ];
-const _subtotalWords = ['subtotal', 'sub total', 'sub-total', 'taxable'];
+const _subtotalWords = [
+  'subtotal',
+  'sub total',
+  'sub-total',
+  'sub ttl',
+  'subttl',
+  'taxable',
+];
 const _baseAmountWords = [
   'base amount',
   'basic amount',
@@ -129,13 +158,21 @@ const _totalsRegionWords = [
   'basiq amount',
   'basis amount',
   'grand total',
+  'g.total',
+  'g total',
   'sub total',
   'subtotal',
+  'sub ttl',
+  'subttl',
   'net amount',
+  'net amt',
   'net payable',
   'total amount',
+  'total amt',
   'amount payable',
   'total payable',
+  'due amount',
+  'balance due',
   'tender',
   'change',
   'total qty',
@@ -355,8 +392,14 @@ ReceiptScanResult _parseColumnar(List<List<OcrWord>> rows, _Header header) {
     } else if (lower.contains('service')) {
       serviceMinor += minor;
     } else if (lower.contains('net amount') ||
+        lower.contains('net amt') ||
         lower.contains('grand total') ||
+        lower.contains('g.total') ||
+        lower.contains('g total') ||
         lower.contains('total amount') ||
+        lower.contains('total amt') ||
+        lower.contains('due amount') ||
+        lower.contains('balance due') ||
         lower.contains('amount payable')) {
       declaredTotalMinor = minor;
     }

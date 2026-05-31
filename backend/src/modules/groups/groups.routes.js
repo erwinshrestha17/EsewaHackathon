@@ -4,7 +4,9 @@ import { requireGroupAdmin, requireGroupMember } from '../../middleware/role.mid
 import { requireBody } from '../../middleware/validate.middleware.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import {
+  acceptGroupInvite,
   addMember,
+  createGroupInvite,
   createGroup,
   deactivateGroup,
   getGroup,
@@ -32,6 +34,14 @@ groupsRouter.post(
   }),
 );
 
+groupsRouter.post(
+  '/invites/accept',
+  requireBody(['code']),
+  asyncHandler(async (req, res) => {
+    res.json(await acceptGroupInvite(req.userProfile.id, req.body));
+  }),
+);
+
 groupsRouter.get(
   '/:groupId',
   requireGroupMember(),
@@ -54,6 +64,16 @@ groupsRouter.delete(
   asyncHandler(async (req, res) => {
     await deactivateGroup(req.group, req.userProfile.id);
     res.status(204).end();
+  }),
+);
+
+groupsRouter.post(
+  '/:groupId/invites',
+  requireGroupMember(),
+  asyncHandler(async (req, res) => {
+    res.status(201).json({
+      invite: await createGroupInvite(req.group, req.userProfile.id, req.body),
+    });
   }),
 );
 

@@ -68,6 +68,10 @@ export async function createAdjustment(group, userId, body) {
     type: 'adjustment_changed',
     payload: { operation: 'created', adjustmentId: adjustment.id, actorId: userId },
   });
+  await publishGroupEvent(group.id, {
+    type: 'group_ledger_changed',
+    payload: { operation: 'adjustment_created', adjustmentId: adjustment.id, actorId: userId },
+  });
   return getAdjustment(adjustment.id);
 }
 

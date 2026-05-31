@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_paddle_ocr/flutter_paddle_ocr.dart';
+import 'package:image/image.dart' as image;
 
 import 'ocr_exception.dart';
 import 'receipt_parser.dart';
+import 'receipt_scan_quality.dart';
 // dart:io-backed model download on mobile; a throwing stub on web (where the
 // bundled paddleocr-js models are used instead).
 import 'model_bootstrap_stub.dart'
@@ -17,6 +19,8 @@ import 'web_ocr_runtime_stub.dart'
 
 export 'ocr_exception.dart';
 export 'receipt_parser.dart' show ReceiptScanItem, ReceiptScanResult;
+
+enum ReceiptOcrMode { fast, accurate }
 
 /// Runs PaddleOCR fully on-device (no backend) and turns the recognized text
 /// into a structured bill the expense flow can pre-fill.
@@ -46,23 +50,55 @@ class ReceiptOcrService {
   Future<ReceiptScanResult> scanReceipt(
     Uint8List bytes, {
     void Function(String message)? onStatus,
+    ReceiptOcrMode mode = ReceiptOcrMode.accurate,
   }) {
     return _synchronized(() async {
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
         return _scanReceiptWithMacosVision(bytes, onStatus: onStatus);
       }
       final engine = await _ensureEngine(onStatus);
-      onStatus?.call('Reading the bill…');
-      final List<OcrResult> regions;
-      try {
-        regions = await engine.recognize(bytes, runClassification: !kIsWeb);
-      } catch (error) {
-        throw ReceiptOcrException('Could not read the bill: $error');
+      final variants = _receiptImageVariants(bytes, mode: mode);
+      final attempts = <_ReceiptScanAttempt>[];
+      Object? firstError;
+
+      for (var index = 0; index < variants.length; index++) {
+        final variant = variants[index];
+        onStatus?.call(
+          index == 0
+              ? 'Reading the bill…'
+              : 'Trying the ${variant.label} OCR pass…',
+        );
+        try {
+          final regions = await engine.recognize(
+            variant.bytes,
+            runClassification: !kIsWeb,
+          );
+          final result = parseReceipt([
+            for (final region in regions)
+              if (region.text.trim().isNotEmpty) _wordFromRegion(region),
+          ]);
+          attempts.add(_ReceiptScanAttempt(variant.label, result));
+          if (mode == ReceiptOcrMode.accurate &&
+              index == 0 &&
+              _isStrongScan(result)) {
+            return result;
+          }
+        } catch (error) {
+          firstError ??= error;
+        }
       }
-      return parseReceipt([
-        for (final region in regions)
-          if (region.text.trim().isNotEmpty) _wordFromRegion(region),
-      ]);
+
+      if (attempts.isEmpty) {
+        throw ReceiptOcrException('Could not read the bill: $firstError');
+      }
+      attempts.sort((a, b) {
+        final score = b.score.compareTo(a.score);
+        if (score != 0) {
+          return score;
+        }
+        return b.result.confidence.compareTo(a.result.confidence);
+      });
+      return attempts.first.result;
     });
   }
 
@@ -173,4 +209,84 @@ class ReceiptOcrService {
     onStatus?.call('Loading the OCR engine…');
     return PaddleOcr.create(source: source);
   }
+}
+
+class _ReceiptImageVariant {
+  const _ReceiptImageVariant(this.label, this.bytes);
+
+  final String label;
+  final Uint8List bytes;
+}
+
+class _ReceiptScanAttempt {
+  _ReceiptScanAttempt(this.variantLabel, this.result)
+    : score = receiptScanQualityScore(result);
+
+  final String variantLabel;
+  final ReceiptScanResult result;
+  final double score;
+}
+
+List<_ReceiptImageVariant> _receiptImageVariants(
+  Uint8List bytes, {
+  required ReceiptOcrMode mode,
+}) {
+  if (mode == ReceiptOcrMode.fast) {
+    return [_ReceiptImageVariant('original', bytes)];
+  }
+
+  final variants = <_ReceiptImageVariant>[
+    _ReceiptImageVariant('original', bytes),
+  ];
+  final decoded = image.decodeImage(bytes);
+  if (decoded == null) {
+    return variants;
+  }
+
+  final resized = _resizeForOcr(decoded);
+  final highContrast = image.Image.from(resized);
+  image.grayscale(highContrast);
+  image.normalize(highContrast, min: 0, max: 255);
+  image.adjustColor(highContrast, contrast: 1.35, brightness: 1.04);
+  variants.add(
+    _ReceiptImageVariant(
+      'high-contrast',
+      image.encodeJpg(highContrast, quality: 96),
+    ),
+  );
+
+  final thresholded = image.Image.from(resized);
+  image.grayscale(thresholded);
+  image.normalize(thresholded, min: 0, max: 255);
+  image.luminanceThreshold(thresholded, threshold: 0.58);
+  variants.add(
+    _ReceiptImageVariant(
+      'threshold',
+      image.encodeJpg(thresholded, quality: 96),
+    ),
+  );
+
+  return variants;
+}
+
+image.Image _resizeForOcr(image.Image source) {
+  const maxLongSide = 2200;
+  final longSide = source.width > source.height ? source.width : source.height;
+  if (longSide <= maxLongSide) {
+    return source;
+  }
+  final scale = maxLongSide / longSide;
+  return image.copyResize(
+    source,
+    width: (source.width * scale).round(),
+    height: (source.height * scale).round(),
+    interpolation: image.Interpolation.average,
+  );
+}
+
+bool _isStrongScan(ReceiptScanResult result) {
+  return result.confidence >= 0.88 &&
+      result.items.length >= 2 &&
+      receiptScanHasUsefulItems(result) &&
+      receiptScanTotalsAreConsistent(result);
 }

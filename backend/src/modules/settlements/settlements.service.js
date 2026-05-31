@@ -31,6 +31,53 @@ function rawPayload(value) {
   }
 }
 
+async function rows(query) {
+  const { data, error } = await query;
+  assertDb(error);
+  return data ?? [];
+}
+
+async function assertGroupExpensesFinal(groupId) {
+  const expenses = await rows(
+    db()
+      .from('expenses')
+      .select('id, title, payer_id, created_by')
+      .eq('group_id', groupId)
+      .eq('status', 'active')
+      .is('locked_at', null),
+  );
+  const expenseIds = expenses.map((expense) => expense.id);
+  if (expenseIds.length === 0) {
+    return;
+  }
+  const [payers, shares, reviews] = await Promise.all([
+    rows(db().from('expense_payers').select('expense_id, user_id').in('expense_id', expenseIds)),
+    rows(db().from('expense_shares').select('expense_id, user_id').in('expense_id', expenseIds)),
+    rows(db().from('expense_reviews').select('*').in('expense_id', expenseIds)),
+  ]);
+  const reviewsByExpenseAndUser = new Map(
+    reviews.map((review) => [`${review.expense_id}:${review.user_id}`, review]),
+  );
+  for (const expense of expenses) {
+    const affectedUsers = new Set([
+      expense.payer_id,
+      ...payers
+        .filter((row) => row.expense_id === expense.id)
+        .map((row) => row.user_id),
+      ...shares
+        .filter((row) => row.expense_id === expense.id)
+        .map((row) => row.user_id),
+    ].filter(Boolean));
+    for (const userId of affectedUsers) {
+      const review = reviewsByExpenseAndUser.get(`${expense.id}:${userId}`);
+      const status = review?.status ?? (userId === expense.created_by ? 'accepted' : 'pending');
+      if (status !== 'accepted') {
+        throw new ApiError(409, 'Resolve expense reviews before settling this group.');
+      }
+    }
+  }
+}
+
 export async function listSettlements(userId, group) {
   let query = db()
     .from('settlements')
@@ -45,6 +92,7 @@ export async function listSettlements(userId, group) {
 
 export async function createSettlement(group, userId, body) {
   requireFields(body, ['payerId', 'payeeId', 'amountMinor']);
+  await assertGroupExpensesFinal(group.id);
   const amountMinor = parseMoneyMinor(body.amountMinor, 'amountMinor');
   const { data, error } = await db()
     .from('settlements')
@@ -80,6 +128,10 @@ export async function createSettlement(group, userId, body) {
   await publishGroupEvent(group.id, {
     type: 'settlement_changed',
     payload: { operation: 'created', settlementId: data.id, actorId: userId },
+  });
+  await publishGroupEvent(group.id, {
+    type: 'group_ledger_changed',
+    payload: { operation: 'settlement_created', settlementId: data.id, actorId: userId },
   });
   return settlementDto(data);
 }
@@ -121,6 +173,7 @@ export async function confirmSettlement(group, userId, settlementId, body = {}) 
   if (current.operation_type !== 'external_settlement' && current.payer_id !== userId) {
     throw new ApiError(403, 'Only the payer can confirm this settlement.');
   }
+  await assertGroupExpensesFinal(group.id);
   const payment = await createSettlementPayment(current, userId, body);
   const { data, error } = await db()
     .from('settlements')
@@ -158,6 +211,10 @@ export async function confirmSettlement(group, userId, settlementId, body = {}) 
     type: 'settlement_changed',
     payload: { operation: 'confirmed', settlementId: data.id, actorId: userId },
   });
+  await publishGroupEvent(group.id, {
+    type: 'group_ledger_changed',
+    payload: { operation: 'settlement_confirmed', settlementId: data.id, actorId: userId },
+  });
   return settlementDto(data);
 }
 
@@ -192,6 +249,10 @@ export async function cancelSettlement(group, userId, settlementId) {
   await publishGroupEvent(group.id, {
     type: 'settlement_changed',
     payload: { operation: 'cancelled', settlementId: data.id, actorId: userId },
+  });
+  await publishGroupEvent(group.id, {
+    type: 'group_ledger_changed',
+    payload: { operation: 'settlement_cancelled', settlementId: data.id, actorId: userId },
   });
   return settlementDto(data);
 }

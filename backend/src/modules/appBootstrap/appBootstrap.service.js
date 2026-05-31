@@ -124,6 +124,47 @@ function mapExpense(row, profileIds, groupIds) {
   };
 }
 
+function mapExpenseReview(row, profileIds) {
+  return {
+    id: row.id,
+    expenseId: row.expense_id,
+    userId: profileIds.get(row.user_id) ?? row.user_id,
+    status: row.status,
+    note: row.note ?? '',
+    expenseItemId: row.expense_item_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapRecurringExpense(row, profileIds, groupIds) {
+  const customAmounts = Object.fromEntries(
+    Object.entries(row.custom_amounts ?? {}).map(([userId, amount]) => [
+      profileIds.get(userId) ?? userId,
+      Number(amount),
+    ]),
+  );
+  return {
+    id: row.id,
+    groupId: groupIds.get(row.group_id) ?? row.group_id,
+    title: row.title,
+    amountMinor: row.amount_minor,
+    payerId: profileIds.get(row.payer_id) ?? row.payer_id,
+    category: row.category,
+    splitMode: row.split_mode,
+    frequency: row.frequency,
+    nextDueAt: row.next_due_at,
+    note: row.note ?? '',
+    active: row.active,
+    lastPostedAt: row.last_posted_at,
+    sourceExpenseId: row.source_expense_id,
+    createdBy: profileIds.get(row.created_by) ?? row.created_by,
+    createdAt: row.created_at,
+    participantIds: (row.participant_ids ?? []).map((id) => profileIds.get(id) ?? id),
+    customAmounts,
+  };
+}
+
 function mapPayment(row, profileIds) {
   return {
     id: row.id,
@@ -206,6 +247,7 @@ export async function appBootstrap(currentUserId) {
   const [
     groupMembers,
     expenses,
+    recurringExpenses,
     settlements,
     adjustments,
     userGifts,
@@ -235,6 +277,15 @@ export async function appBootstrap(currentUserId) {
             .select('*')
             .in('group_id', visibleGroupIds)
             .order('created_at', { ascending: true }),
+        )
+      : [],
+    visibleGroupIds.length
+      ? rows(
+          db()
+            .from('recurring_expenses')
+            .select('*')
+            .in('group_id', visibleGroupIds)
+            .order('next_due_at', { ascending: true }),
         )
       : [],
     visibleGroupIds.length
@@ -324,10 +375,11 @@ export async function appBootstrap(currentUserId) {
     rowsIn('connection_reports', 'connection_id', connectionIds),
   ]);
   const expenseIds = expenses.map((row) => row.id);
-  const [expensePayers, expenseShares, expenseItems] = await Promise.all([
+  const [expensePayers, expenseShares, expenseItems, expenseReviews] = await Promise.all([
     rowsIn('expense_payers', 'expense_id', expenseIds),
     rowsIn('expense_shares', 'expense_id', expenseIds),
     rowsIn('expense_items', 'expense_id', expenseIds),
+    rowsIn('expense_reviews', 'expense_id', expenseIds),
   ]);
   expenseItems.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   const gifts = mergeById(userGifts, groupGifts);
@@ -390,6 +442,13 @@ export async function appBootstrap(currentUserId) {
     ...expensePayers.map((row) => row.user_id),
     ...expenseShares.map((row) => row.user_id),
     ...expenseItemAssignments.map((row) => row.user_id),
+    ...expenseReviews.map((row) => row.user_id),
+    ...recurringExpenses.flatMap((row) => [
+      row.payer_id,
+      row.created_by,
+      ...(row.participant_ids ?? []),
+      ...Object.keys(row.custom_amounts ?? {}),
+    ]),
     ...payments.map((row) => row.actor_id),
     ...settlements.flatMap((row) => [row.payer_id, row.payee_id]),
     ...adjustments.map((row) => row.created_by),
@@ -429,6 +488,10 @@ export async function appBootstrap(currentUserId) {
     groups: groups.map((row) => mapGroup(row, profileIds)),
     groupMembers: groupMembers.map((row) => mapGroupMember(row, profileIds, groupIds)),
     expenses: expenses.map((row) => mapExpense(row, profileIds, groupIds)),
+    expenseReviews: expenseReviews.map((row) => mapExpenseReview(row, profileIds)),
+    recurringExpenses: recurringExpenses.map((row) =>
+      mapRecurringExpense(row, profileIds, groupIds),
+    ),
     expensePayers: expensePayers.map((row) => ({
       id: row.id,
       expenseId: row.expense_id,

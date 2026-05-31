@@ -117,4 +117,73 @@ void main() {
     expect(captured.headers['authorization'], 'Bearer access-token');
     expect(response['users'], isA<List<dynamic>>());
   });
+
+  test(
+    'group review recurring and invite actions call backend endpoints',
+    () async {
+      final requests = <http.Request>[];
+      final api = BackendApi(
+        baseUrl: 'http://127.0.0.1:3000',
+        client: MockClient((request) async {
+          requests.add(request);
+          return http.Response('{"ok":true,"invite":{"code":"SKG-123"}}', 200);
+        }),
+      );
+
+      await api.createGroupInvite(
+        accessToken: 'access-token',
+        groupId: 'group-1',
+      );
+      await api.acceptGroupInvite(accessToken: 'access-token', code: 'SKG-123');
+      await api.reviewExpense(
+        accessToken: 'access-token',
+        groupId: 'group-1',
+        expenseId: 'expense-1',
+        status: 'correction_requested',
+        note: 'Wrong item',
+      );
+      await api.createRecurringExpense(
+        accessToken: 'access-token',
+        groupId: 'group-1',
+        recurringExpense: {
+          'title': 'Rent',
+          'amountMinor': 3000000,
+          'payerId': 'user-1',
+        },
+      );
+      await api.postRecurringExpense(
+        accessToken: 'access-token',
+        groupId: 'group-1',
+        recurringExpenseId: 'recurring-1',
+      );
+      await api.pauseRecurringExpense(
+        accessToken: 'access-token',
+        groupId: 'group-1',
+        recurringExpenseId: 'recurring-1',
+      );
+
+      expect(requests.map((request) => request.method), [
+        'POST',
+        'POST',
+        'POST',
+        'POST',
+        'POST',
+        'POST',
+      ]);
+      expect(requests.map((request) => request.url.path), [
+        '/api/groups/group-1/invites',
+        '/api/groups/invites/accept',
+        '/api/expenses/group/group-1/expense-1/reviews',
+        '/api/expenses/group/group-1/recurring',
+        '/api/expenses/group/group-1/recurring/recurring-1/post',
+        '/api/expenses/group/group-1/recurring/recurring-1/pause',
+      ]);
+      expect(jsonDecode(requests[2].body), {
+        'status': 'correction_requested',
+        'note': 'Wrong item',
+        'expenseItemId': null,
+      });
+      expect(jsonDecode(requests[4].body), <String, dynamic>{});
+    },
+  );
 }

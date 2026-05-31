@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import { requireFields, assertChoice } from '../../middleware/validate.middleware.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { logActivity, createNotification } from '../common/audit.js';
@@ -8,6 +10,28 @@ import { publishGroupEvent } from '../realtime/realtime.service.js';
 const groupKinds = ['expense', 'dhukuti'];
 const memberRoles = ['admin', 'member', 'treasurer'];
 const memberStatuses = ['active', 'invited', 'removed'];
+
+function inviteDto(row) {
+  return {
+    id: row.id,
+    groupId: row.group_id,
+    inviterId: row.inviter_id,
+    code: row.code,
+    expiresAt: row.expires_at,
+    acceptedBy: row.accepted_by,
+    acceptedAt: row.accepted_at,
+    revokedAt: row.revoked_at,
+    createdAt: row.created_at,
+  };
+}
+
+function normalizeInviteCode(value) {
+  return value?.toString().trim().toUpperCase() ?? '';
+}
+
+function inviteCode() {
+  return `SKG-${randomBytes(6).toString('base64url').toUpperCase()}`;
+}
 
 export async function listGroups(userId) {
   const { data, error } = await db()
@@ -220,6 +244,132 @@ export async function addMember(group, actorId, body) {
     payload: { operation: 'member_added', actorId, memberId: data.id },
   });
   return memberDto(data);
+}
+
+export async function createGroupInvite(group, actorId, body = {}) {
+  const hours = Math.min(Math.max(Number(body.expiresInHours) || 168, 1), 168);
+  const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await db()
+    .from('group_invites')
+    .insert({
+      group_id: group.id,
+      inviter_id: actorId,
+      code: inviteCode(),
+      expires_at: expiresAt,
+    })
+    .select()
+    .single();
+  assertDb(error);
+  await logActivity({
+    groupId: group.id,
+    actorId,
+    action: 'group_invite_created',
+    entityType: 'group_invite',
+    entityId: data.id,
+    title: 'Group invite created',
+    body: `An invite was created for ${group.name}.`,
+    metadata: { expiresAt },
+  });
+  await publishGroupEvent(group.id, {
+    type: 'group_invite_changed',
+    payload: { operation: 'created', inviteId: data.id, actorId },
+  });
+  await publishGroupEvent(group.id, {
+    type: 'group_ledger_changed',
+    payload: { operation: 'group_invite_created', inviteId: data.id, actorId },
+  });
+  return inviteDto(data);
+}
+
+export async function acceptGroupInvite(userId, body) {
+  requireFields(body, ['code']);
+  const code = normalizeInviteCode(body.code);
+  const invite = await single(
+    db().from('group_invites').select('*').eq('code', code).is('revoked_at', null),
+    'Group invite not found.',
+  );
+  if (new Date(invite.expires_at).getTime() <= Date.now()) {
+    throw new ApiError(410, 'This group invite has expired.');
+  }
+  if (invite.accepted_by && invite.accepted_by !== userId) {
+    throw new ApiError(409, 'This group invite has already been used.');
+  }
+  const group = await single(
+    db().from('groups').select('*').eq('id', invite.group_id).eq('is_active', true),
+    'Group not found.',
+  );
+  const { data: member, error: memberError } = await db()
+    .from('group_members')
+    .upsert(
+      {
+        group_id: group.id,
+        user_id: userId,
+        role: 'member',
+        status: 'active',
+        joined_at: new Date().toISOString(),
+        removed_at: null,
+      },
+      { onConflict: 'group_id,user_id' },
+    )
+    .select('*, profiles(*)')
+    .single();
+  assertDb(memberError);
+  const { data: updatedInvite, error: inviteError } = await db()
+    .from('group_invites')
+    .update({
+      accepted_by: userId,
+      accepted_at: invite.accepted_at ?? new Date().toISOString(),
+    })
+    .eq('id', invite.id)
+    .select()
+    .single();
+  assertDb(inviteError);
+  await createNotification({
+    userId: invite.inviter_id,
+    title: 'Invite accepted',
+    body: `${member.profiles?.full_name ?? 'A member'} joined ${group.name}.`,
+    type: 'group_invite_accepted',
+    metadata: { groupId: group.id, inviteId: invite.id },
+  });
+  await logActivity({
+    groupId: group.id,
+    actorId: userId,
+    action: 'group_invite_accepted',
+    entityType: 'group_member',
+    entityId: member.id,
+    title: 'Invite accepted',
+    body: `${member.profiles?.full_name ?? 'A member'} joined ${group.name}.`,
+    metadata: { inviteId: invite.id },
+  });
+  await publishGroupEvent(
+    group.id,
+    {
+      type: 'group_invite_changed',
+      payload: { operation: 'accepted', inviteId: invite.id, actorId: userId },
+    },
+    { extraUserIds: [userId] },
+  );
+  await publishGroupEvent(
+    group.id,
+    {
+      type: 'group_changed',
+      payload: { operation: 'member_joined', memberId: member.id, actorId: userId },
+    },
+    { extraUserIds: [userId] },
+  );
+  await publishGroupEvent(
+    group.id,
+    {
+      type: 'group_ledger_changed',
+      payload: { operation: 'group_invite_accepted', inviteId: invite.id, actorId: userId },
+    },
+    { extraUserIds: [userId] },
+  );
+  return {
+    group: groupDto(group),
+    member: memberDto(member),
+    invite: inviteDto(updatedInvite),
+  };
 }
 
 export async function updateMember(group, actorId, memberId, body) {

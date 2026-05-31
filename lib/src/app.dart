@@ -682,7 +682,7 @@ Future<void> showExternalSettlementRequestDialog(
       showSnack(context, 'Approval request sent to $payeeName.');
     }
   } on BackendApiException catch (error) {
-    if (store.allowLocalMutations) {
+    if (!backendApi.isConfigured && store.allowLocalMutations) {
       final settlement = store.createOrReuseExternalSettlement(suggestion);
       showSnack(
         context,
@@ -754,7 +754,7 @@ Future<void> showApproveExternalSettlementDialog(
       );
     }
   } on BackendApiException catch (error) {
-    if (store.allowLocalMutations) {
+    if (!backendApi.isConfigured && store.allowLocalMutations) {
       final localError = store.approveExternalSettlement(settlementId);
       showSnack(
         context,
@@ -2924,6 +2924,13 @@ class _ExpenseGroupsOverview extends StatelessWidget {
         ),
         _ExpenseGroupsSnapshot(store: store, groups: groups),
         SectionPanel(
+          title: 'Smart templates',
+          child: _GroupTemplateSuggestions(
+            store: store,
+            onCreated: onSelectGroup,
+          ),
+        ),
+        SectionPanel(
           title: 'Today',
           child: Column(
             children: [
@@ -3009,6 +3016,47 @@ class _ExpenseGroupsOverview extends StatelessWidget {
                 )
               : ActivityList(items: recentActivity),
         ),
+      ],
+    );
+  }
+}
+
+class _GroupTemplateSuggestions extends StatelessWidget {
+  const _GroupTemplateSuggestions({
+    required this.store,
+    required this.onCreated,
+  });
+
+  final AppStore store;
+  final ValueChanged<String> onCreated;
+
+  @override
+  Widget build(BuildContext context) {
+    final templates = store.expenseGroupTemplateSuggestions;
+    return Column(
+      children: [
+        for (final template in templates)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(
+              child: Icon(iconForCategory(template.category)),
+            ),
+            title: Text(template.name),
+            subtitle: Text(template.description),
+            trailing: OutlinedButton.icon(
+              onPressed: () {
+                final groupId = store.createGroupFromTemplate(template.id);
+                onCreated(groupId);
+                showSnack(
+                  context,
+                  '${store.groupById(groupId).name} created from template.',
+                );
+              },
+              icon: const Icon(Icons.auto_awesome_outlined),
+              label: const Text('Use'),
+              style: compactOutlinedButtonStyle(),
+            ),
+          ),
       ],
     );
   }
@@ -3386,6 +3434,10 @@ class GroupDetail extends StatelessWidget {
     final canRename = store.canRenameGroup(group.id, store.currentUserId);
     final balances = store.balancesForGroup(group.id);
     final suggestions = store.suggestionsForGroup(group.id);
+    final smartPlan = store.smartSettlementPlanForGroup(group.id);
+    final insights = store.groupInsights(group.id);
+    final recurringSchedules = store.recurringExpensesForGroup(group.id);
+    final ledgerEntries = store.groupLedgerEntries(group.id);
     final youOweMinor = suggestions
         .where((item) => item.payerId == store.currentUserId)
         .fold<int>(0, (sum, item) => sum + item.amountMinor);
@@ -3425,6 +3477,13 @@ class GroupDetail extends StatelessWidget {
             ),
             OutlinedButton.icon(
               onPressed: isCurrentMember
+                  ? () => showGroupInviteDialog(context, group.id)
+                  : null,
+              icon: const Icon(Icons.qr_code_2_outlined),
+              label: const Text('Invite'),
+            ),
+            OutlinedButton.icon(
+              onPressed: isCurrentMember
                   ? () => showLeaveGroupDialog(context, group.id)
                   : null,
               icon: const Icon(Icons.logout),
@@ -3449,6 +3508,21 @@ class GroupDetail extends StatelessWidget {
         youOweMinor: youOweMinor,
         youAreOwedMinor: youAreOwedMinor,
         netMinor: netBalance,
+      ),
+      SectionPanel(
+        title: 'Smart settlement plan',
+        child: _SmartSettlementPanel(store: store, plan: smartPlan),
+      ),
+      SectionPanel(
+        title: 'Group insights',
+        child: _GroupInsightsPanel(insights: insights),
+      ),
+      SectionPanel(
+        title: 'Recurring expenses',
+        child: _RecurringExpensesPanel(
+          schedules: recurringSchedules,
+          canManage: canAddExpense,
+        ),
       ),
       SectionPanel(
         title: 'Spending habits',
@@ -3665,6 +3739,8 @@ class GroupDetail extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
+                          _ExpenseReviewSummaryLine(expense: expense),
+                          const SizedBox(height: 4),
                           Text(dateTimeLabel(expense.createdAt)),
                         ],
                       ),
@@ -3708,9 +3784,63 @@ class GroupDetail extends StatelessWidget {
                               ],
                             ),
                           ),
+                        _ExpenseReviewPanel(expense: expense),
                         OverflowBar(
                           alignment: MainAxisAlignment.start,
                           children: [
+                            if (_canCurrentUserReviewExpense(store, expense))
+                              TextButton.icon(
+                                onPressed: () async {
+                                  final error = await _submitExpenseReview(
+                                    context,
+                                    expense,
+                                    ExpenseReviewStatus.accepted,
+                                  );
+                                  showSnack(
+                                    context,
+                                    error ?? 'Split accepted.',
+                                  );
+                                },
+                                icon: const Icon(Icons.check_circle_outline),
+                                label: const Text('Accept split'),
+                              ),
+                            if (_canCurrentUserReviewExpense(store, expense))
+                              TextButton.icon(
+                                onPressed: () =>
+                                    showExpenseCorrectionRequestDialog(
+                                      context,
+                                      expense,
+                                    ),
+                                icon: const Icon(Icons.rate_review_outlined),
+                                label: const Text('Request correction'),
+                              ),
+                            if (_canCurrentUserReviewExpense(store, expense) &&
+                                expense.items.isNotEmpty)
+                              TextButton.icon(
+                                onPressed: () => showExpenseItemDisputeDialog(
+                                  context,
+                                  expense,
+                                ),
+                                icon: const Icon(Icons.report_problem_outlined),
+                                label: const Text('Dispute item'),
+                              ),
+                            if (canAddExpense &&
+                                expense.status == ExpenseStatus.active)
+                              TextButton.icon(
+                                onPressed: () async {
+                                  final error =
+                                      await _createRecurringFromExpense(
+                                        context,
+                                        expense,
+                                      );
+                                  showSnack(
+                                    context,
+                                    error ?? 'Monthly repeat scheduled.',
+                                  );
+                                },
+                                icon: const Icon(Icons.repeat_outlined),
+                                label: const Text('Repeat monthly'),
+                              ),
                             TextButton.icon(
                               onPressed: () =>
                                   showEditExpenseDialog(context, expense),
@@ -3769,6 +3899,10 @@ class GroupDetail extends StatelessWidget {
               ),
       ),
       SectionPanel(
+        title: 'Group ledger',
+        child: _GroupLedgerPanel(entries: ledgerEntries.take(8).toList()),
+      ),
+      SectionPanel(
         title: 'Activity Timeline',
         child: GroupActivitySummary(
           groupId: group.id,
@@ -3793,6 +3927,723 @@ class GroupDetail extends StatelessWidget {
       ],
     );
   }
+}
+
+class _SmartSettlementPanel extends StatelessWidget {
+  const _SmartSettlementPanel({required this.store, required this.plan});
+
+  final AppStore store;
+  final SmartSettlementPlan plan;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = plan.isReady || !plan.hasRoutes
+        ? Tone.success
+        : plan.reviewIssueCount > 0
+        ? Tone.warning
+        : Tone.info;
+    final summary = !plan.hasRoutes
+        ? 'Every visible balance is clear.'
+        : plan.isReady
+        ? '${plan.routeCount} optimized route(s) can clear ${friendlyMoney(plan.totalAmountMinor)}.'
+        : plan.reviewIssueCount > 0
+        ? '${plan.reviewIssueCount} expense(s) have correction or item disputes.'
+        : '${plan.blockedExpenseCount} expense(s) are waiting for member review.';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            StatusPill(label: plan.statusLabel, tone: tone),
+            Text(summary, style: AppTextStyles.bodySecondary),
+          ],
+        ),
+        if (plan.suggestions.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          for (final suggestion in plan.suggestions.take(3))
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const CircleAvatar(child: Icon(Icons.route_outlined)),
+              title: Text(
+                '${store.nameOf(suggestion.payerId)} pays ${store.nameOf(suggestion.payeeId)}',
+              ),
+              subtitle: Text(
+                suggestion.hasPending
+                    ? 'Payment already pending'
+                    : 'Recommended settlement route',
+              ),
+              trailing: StatusPill(
+                label: friendlyMoney(suggestion.amountMinor),
+                tone: suggestion.hasPending ? Tone.warning : Tone.info,
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _GroupInsightsPanel extends StatelessWidget {
+  const _GroupInsightsPanel({required this.insights});
+
+  final List<GroupInsight> insights;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (final insight in insights)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(
+              backgroundColor: toneColor(
+                context,
+                _toneFromInsight(insight.tone),
+              ).withValues(alpha: 0.12),
+              foregroundColor: toneColor(
+                context,
+                _toneFromInsight(insight.tone),
+              ),
+              child: Icon(_insightIcon(insight.title)),
+            ),
+            title: Text(insight.title),
+            subtitle: Text(insight.body),
+            trailing: StatusPill(
+              label: insight.metric,
+              tone: _toneFromInsight(insight.tone),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+DateTime _nextRecurringDueDate(
+  DateTime from,
+  RecurringExpenseFrequency frequency,
+) {
+  switch (frequency) {
+    case RecurringExpenseFrequency.weekly:
+      return from.add(const Duration(days: 7));
+    case RecurringExpenseFrequency.monthly:
+      final daysInTargetMonth = DateTime(from.year, from.month + 2, 0).day;
+      final day = from.day > daysInTargetMonth ? daysInTargetMonth : from.day;
+      return DateTime(
+        from.year,
+        from.month + 1,
+        day,
+        from.hour,
+        from.minute,
+        from.second,
+        from.millisecond,
+        from.microsecond,
+      );
+  }
+}
+
+Map<String, Object?> _recurringPayloadFromExpense(
+  Expense expense, {
+  RecurringExpenseFrequency frequency = RecurringExpenseFrequency.monthly,
+}) {
+  final customAmounts = <String, int>{
+    for (final share in expense.shares) share.userId: share.amountMinor,
+  };
+  return {
+    'title': expense.title,
+    'amountMinor': expense.totalMinor,
+    'payerId': expense.payers.isEmpty
+        ? expense.payerId
+        : expense.payers.first.userId,
+    'category': expense.category,
+    'splitMode': SplitMode.custom.name,
+    'frequency': frequency.name,
+    'nextDueAt': _nextRecurringDueDate(
+      expense.expenseDate,
+      frequency,
+    ).toIso8601String(),
+    'note': expense.note,
+    'sourceExpenseId': expense.id,
+    'participantIds': expense.shares
+        .where((share) => share.amountMinor > 0)
+        .map((share) => share.userId)
+        .toList(),
+    'customAmounts': customAmounts,
+  };
+}
+
+Future<String?> _createRecurringFromExpense(
+  BuildContext context,
+  Expense expense,
+) async {
+  final backendApi = BackendApi();
+  if (backendApi.isConfigured) {
+    try {
+      final token = await _requireBackendAccessToken(context, api: backendApi);
+      await backendApi.createRecurringExpense(
+        accessToken: token,
+        groupId: expense.groupId,
+        recurringExpense: _recurringPayloadFromExpense(expense),
+      );
+      await _reloadBackendProjection(
+        context,
+        api: backendApi,
+        accessToken: token,
+        wait: true,
+      );
+      return null;
+    } on BackendApiException catch (error) {
+      return error.message;
+    }
+  }
+
+  try {
+    StoreScope.read(context).createRecurringFromExpense(expense.id);
+    return null;
+  } on ArgumentError catch (error) {
+    return error.message.toString();
+  }
+}
+
+Future<String?> _postRecurringExpense(
+  BuildContext context,
+  RecurringExpense schedule,
+) async {
+  final backendApi = BackendApi();
+  if (backendApi.isConfigured) {
+    try {
+      final token = await _requireBackendAccessToken(context, api: backendApi);
+      await backendApi.postRecurringExpense(
+        accessToken: token,
+        groupId: schedule.groupId,
+        recurringExpenseId: schedule.id,
+      );
+      await _reloadBackendProjection(
+        context,
+        api: backendApi,
+        accessToken: token,
+        wait: true,
+      );
+      return null;
+    } on BackendApiException catch (error) {
+      return error.message;
+    }
+  }
+  return StoreScope.read(context).postRecurringExpense(schedule.id);
+}
+
+Future<String?> _pauseRecurringExpense(
+  BuildContext context,
+  RecurringExpense schedule,
+) async {
+  final backendApi = BackendApi();
+  if (backendApi.isConfigured) {
+    try {
+      final token = await _requireBackendAccessToken(context, api: backendApi);
+      await backendApi.pauseRecurringExpense(
+        accessToken: token,
+        groupId: schedule.groupId,
+        recurringExpenseId: schedule.id,
+      );
+      await _reloadBackendProjection(
+        context,
+        api: backendApi,
+        accessToken: token,
+        wait: true,
+      );
+      return null;
+    } on BackendApiException catch (error) {
+      return error.message;
+    }
+  }
+  return StoreScope.read(context).pauseRecurringExpense(schedule.id);
+}
+
+class _RecurringExpensesPanel extends StatelessWidget {
+  const _RecurringExpensesPanel({
+    required this.schedules,
+    required this.canManage,
+  });
+
+  final List<RecurringExpense> schedules;
+  final bool canManage;
+
+  @override
+  Widget build(BuildContext context) {
+    if (schedules.isEmpty) {
+      return const EmptyState(
+        icon: Icons.repeat_outlined,
+        title: 'No recurring expenses',
+        body:
+            'Repeat a rent, utility, subscription, or routine bill from an existing expense.',
+      );
+    }
+    return Column(
+      children: [
+        for (final schedule in schedules)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const CircleAvatar(child: Icon(Icons.repeat_outlined)),
+            title: Text(schedule.title),
+            subtitle: Text(
+              '${friendlyMoney(schedule.amountMinor)} • ${enumLabel(schedule.frequency)} • next ${dateLabel(schedule.nextDueAt)}',
+            ),
+            trailing: Wrap(
+              spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                StatusPill(
+                  label: schedule.active ? 'Active' : 'Paused',
+                  tone: schedule.active ? Tone.success : Tone.neutral,
+                ),
+                if (canManage &&
+                    schedule.active &&
+                    !schedule.nextDueAt.isAfter(DateTime.now()))
+                  TextButton(
+                    onPressed: () async {
+                      final error = await _postRecurringExpense(
+                        context,
+                        schedule,
+                      );
+                      showSnack(context, error ?? '${schedule.title} posted.');
+                    },
+                    child: const Text('Post due'),
+                  ),
+                if (canManage && schedule.active)
+                  IconButton.outlined(
+                    tooltip: 'Pause recurring expense',
+                    onPressed: () async {
+                      final error = await _pauseRecurringExpense(
+                        context,
+                        schedule,
+                      );
+                      showSnack(context, error ?? '${schedule.title} paused.');
+                    },
+                    icon: const Icon(Icons.pause_outlined),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _GroupLedgerPanel extends StatelessWidget {
+  const _GroupLedgerPanel({required this.entries});
+
+  final List<GroupLedgerEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    if (entries.isEmpty) {
+      return const EmptyState(
+        icon: Icons.history_toggle_off,
+        title: 'No ledger entries',
+        body:
+            'Expenses, settlements, adjustments, and recurring schedules will appear here.',
+      );
+    }
+    return Column(
+      children: [
+        for (final entry in entries)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(child: Icon(_ledgerIcon(entry.type))),
+            title: Text(entry.title),
+            subtitle: Text(
+              '${entry.type} • ${entry.subtitle}\n${dateTimeLabel(entry.createdAt)}',
+            ),
+            isThreeLine: true,
+            trailing: StatusPill(
+              label: entry.amountMinor == 0
+                  ? entry.status
+                  : friendlyMoney(entry.amountMinor),
+              tone: _ledgerTone(entry),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+Tone _toneFromInsight(String tone) {
+  return switch (tone) {
+    'success' => Tone.success,
+    'warning' => Tone.warning,
+    'danger' => Tone.danger,
+    'neutral' => Tone.neutral,
+    _ => Tone.info,
+  };
+}
+
+IconData _insightIcon(String title) {
+  final normalized = title.toLowerCase();
+  if (normalized.contains('settlement')) {
+    return Icons.payments_outlined;
+  }
+  if (normalized.contains('recurring')) {
+    return Icons.repeat_outlined;
+  }
+  if (normalized.contains('share')) {
+    return Icons.pie_chart_outline;
+  }
+  return Icons.insights_outlined;
+}
+
+IconData _ledgerIcon(String type) {
+  return switch (type) {
+    'Expense' => Icons.receipt_long_outlined,
+    'Settlement' => Icons.payments_outlined,
+    'Adjustment' => Icons.tune_outlined,
+    'Recurring' => Icons.repeat_outlined,
+    _ => Icons.history,
+  };
+}
+
+Tone _ledgerTone(GroupLedgerEntry entry) {
+  if (entry.status == 'Active' || entry.status == 'Paid') {
+    return Tone.success;
+  }
+  if (entry.status == 'Pending') {
+    return Tone.warning;
+  }
+  if (!entry.affectsBalance) {
+    return Tone.neutral;
+  }
+  return Tone.info;
+}
+
+class _ExpenseReviewSummaryLine extends StatelessWidget {
+  const _ExpenseReviewSummaryLine({required this.expense});
+
+  final Expense expense;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final summary = store.reviewSummaryForExpense(expense);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        StatusPill(
+          label: _expenseReviewSummaryLabel(summary),
+          tone: _expenseReviewTone(summary),
+        ),
+        Text(
+          summary.isFinal ? 'Socially final' : 'Waiting for member review',
+          style: AppTextStyles.bodySecondary,
+        ),
+      ],
+    );
+  }
+}
+
+class _ExpenseReviewPanel extends StatelessWidget {
+  const _ExpenseReviewPanel({required this.expense});
+
+  final Expense expense;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final affectedUsers = store.affectedUsersForExpense(expense).toList()
+      ..sort((a, b) => store.nameOf(a).compareTo(store.nameOf(b)));
+    final reviews = {
+      for (final review in store.reviewsForExpense(expense.id))
+        review.userId: review,
+    };
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 10, bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _ManualSectionHeader(
+            icon: Icons.verified_user_outlined,
+            title: 'Member review',
+            subtitle:
+                'Accept, request a correction, or dispute item assignment',
+          ),
+          const SizedBox(height: 8),
+          for (final userId in affectedUsers)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: UserAvatar(user: store.userById(userId), small: true),
+              title: Text(store.nameOf(userId)),
+              subtitle: _reviewSubtitle(
+                store,
+                expense,
+                userId,
+                reviews[userId],
+              ),
+              trailing: StatusPill(
+                label: enumLabel(
+                  store.expenseReviewStatusForUser(expense, userId),
+                ),
+                tone: _expenseReviewStatusTone(
+                  store.expenseReviewStatusForUser(expense, userId),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _reviewSubtitle(
+    AppStore store,
+    Expense expense,
+    String userId,
+    ExpenseReview? review,
+  ) {
+    if (review == null) {
+      return expense.createdBy == userId
+          ? const Text('Created the expense')
+          : const Text('No response yet');
+    }
+    final item = review.expenseItemId == null
+        ? null
+        : expense.items
+              .where((item) => item.id == review.expenseItemId)
+              .firstOrNull;
+    final parts = [
+      if (item != null) item.label,
+      if (review.note.trim().isNotEmpty) review.note.trim(),
+    ];
+    return parts.isEmpty ? null : Text(parts.join(' • '));
+  }
+}
+
+bool _canCurrentUserReviewExpense(AppStore store, Expense expense) {
+  return expense.status == ExpenseStatus.active &&
+      expense.lockedAt == null &&
+      store.affectedUsersForExpense(expense).contains(store.currentUserId);
+}
+
+String _expenseReviewSummaryLabel(ExpenseReviewSummary summary) {
+  if (summary.hasConcerns) {
+    return summary.label;
+  }
+  if (summary.isFinal) {
+    return 'Accepted';
+  }
+  return 'Review pending';
+}
+
+Tone _expenseReviewTone(ExpenseReviewSummary summary) {
+  if (summary.hasConcerns) {
+    return Tone.warning;
+  }
+  if (summary.isFinal) {
+    return Tone.success;
+  }
+  return Tone.info;
+}
+
+Tone _expenseReviewStatusTone(ExpenseReviewStatus status) {
+  return switch (status) {
+    ExpenseReviewStatus.accepted => Tone.success,
+    ExpenseReviewStatus.pending => Tone.info,
+    ExpenseReviewStatus.correctionRequested ||
+    ExpenseReviewStatus.itemDisputed => Tone.warning,
+  };
+}
+
+String _expenseReviewStatusWireValue(ExpenseReviewStatus status) {
+  return switch (status) {
+    ExpenseReviewStatus.accepted => 'accepted',
+    ExpenseReviewStatus.pending => 'pending',
+    ExpenseReviewStatus.correctionRequested => 'correction_requested',
+    ExpenseReviewStatus.itemDisputed => 'item_disputed',
+  };
+}
+
+Future<String?> _submitExpenseReview(
+  BuildContext context,
+  Expense expense,
+  ExpenseReviewStatus status, {
+  String note = '',
+  String? expenseItemId,
+}) async {
+  final backendApi = BackendApi();
+  if (backendApi.isConfigured) {
+    try {
+      final token = await _requireBackendAccessToken(context, api: backendApi);
+      await backendApi.reviewExpense(
+        accessToken: token,
+        groupId: expense.groupId,
+        expenseId: expense.id,
+        status: _expenseReviewStatusWireValue(status),
+        note: note,
+        expenseItemId: expenseItemId,
+      );
+      await _reloadBackendProjection(
+        context,
+        api: backendApi,
+        accessToken: token,
+        wait: true,
+      );
+      return null;
+    } on BackendApiException catch (error) {
+      return error.message;
+    }
+  }
+
+  final store = StoreScope.read(context);
+  return switch (status) {
+    ExpenseReviewStatus.accepted => store.acceptExpenseSplit(expense.id),
+    ExpenseReviewStatus.correctionRequested => store.requestExpenseCorrection(
+      expense.id,
+      note,
+    ),
+    ExpenseReviewStatus.itemDisputed => store.disputeExpenseItem(
+      expenseId: expense.id,
+      expenseItemId: expenseItemId ?? '',
+      note: note,
+    ),
+    ExpenseReviewStatus.pending => null,
+  };
+}
+
+Future<void> showExpenseCorrectionRequestDialog(
+  BuildContext context,
+  Expense expense,
+) async {
+  final reason = TextEditingController();
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Request correction'),
+      content: SizedBox(
+        width: 460,
+        child: TextField(
+          controller: reason,
+          minLines: 3,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            labelText: 'What needs to change?',
+            hintText: 'Example: I was assigned an item I did not have.',
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final error = await _submitExpenseReview(
+              context,
+              expense,
+              ExpenseReviewStatus.correctionRequested,
+              note: reason.text,
+            );
+            if (error != null) {
+              showSnack(context, error);
+              return;
+            }
+            Navigator.pop(dialogContext);
+            showSnack(context, 'Correction request sent.');
+          },
+          child: const Text('Send request'),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> showExpenseItemDisputeDialog(
+  BuildContext context,
+  Expense expense,
+) async {
+  if (expense.items.isEmpty) {
+    showSnack(context, 'This expense has no item assignments to dispute.');
+    return;
+  }
+  var selectedItemId = expense.items.first.id;
+  final reason = TextEditingController();
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Dispute item assignment'),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: selectedItemId,
+                decoration: const InputDecoration(labelText: 'Item'),
+                items: [
+                  for (final item in expense.items)
+                    DropdownMenuItem(
+                      value: item.id,
+                      child: Text(
+                        '${item.label} • ${money(item.totalAmountMinor)}',
+                      ),
+                    ),
+                ],
+                onChanged: (value) =>
+                    setState(() => selectedItemId = value ?? selectedItemId),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reason,
+                minLines: 3,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'Why is this item wrong?',
+                  hintText: 'Example: This item belongs to Maya only.',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final error = await _submitExpenseReview(
+                context,
+                expense,
+                ExpenseReviewStatus.itemDisputed,
+                note: reason.text,
+                expenseItemId: selectedItemId,
+              );
+              if (error != null) {
+                showSnack(context, error);
+                return;
+              }
+              Navigator.pop(dialogContext);
+              showSnack(context, 'Item dispute recorded.');
+            },
+            child: const Text('Submit dispute'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class GiftsScreen extends StatefulWidget {
@@ -5884,8 +6735,29 @@ String activityDescription(AppStore store, ActivityLog item) {
   if (item.eventType == 'expense_voided') {
     return 'Expense removed from group balance';
   }
+  if (item.eventType == 'expense_split_accepted') {
+    return '$actor accepted the split';
+  }
+  if (item.eventType == 'expense_correction_requested') {
+    return '$actor requested an expense correction';
+  }
+  if (item.eventType == 'expense_item_disputed') {
+    return '$actor disputed an item assignment';
+  }
+  if (item.eventType == 'recurring_expense_created') {
+    return '$actor scheduled a recurring expense';
+  }
+  if (item.eventType == 'recurring_expense_posted') {
+    return 'Recurring expense posted to the ledger';
+  }
+  if (item.eventType == 'recurring_expense_paused') {
+    return 'Recurring expense paused';
+  }
   if (item.eventType == 'adjustment_created' && amount != null) {
     return 'Group balance updated by ${friendlyMoney(amount)}';
+  }
+  if (item.eventType == 'group_invite_accepted') {
+    return '$actor joined from a group invite';
   }
   if (item.eventType == 'member_added') {
     final member = groupMemberForActivity(store, item);
@@ -5982,6 +6854,13 @@ int? activityAmount(AppStore store, ActivityLog item) {
         return adjustment.entries
             .where((entry) => entry.direction == 'credit')
             .fold<int>(0, (sum, entry) => sum + entry.amountMinor);
+      }
+    }
+  }
+  if (item.entityType == 'recurring_expense') {
+    for (final schedule in store.recurringExpenses) {
+      if (schedule.id == item.entityId) {
+        return schedule.amountMinor;
       }
     }
   }
@@ -6147,6 +7026,12 @@ void showSnack(BuildContext context, String message) {
     ..showSnackBar(SnackBar(content: Text(message)));
 }
 
+bool _looksLikeGroupInviteCode(String code) {
+  final value = code.trim();
+  return value.toUpperCase().startsWith('SKG-') ||
+      value.startsWith('SAJHA-KHARCHA-GROUP-');
+}
+
 class _ScanQrDialog extends StatefulWidget {
   const _ScanQrDialog({required this.store, required this.onResult});
 
@@ -6288,6 +7173,24 @@ class _ScanQrDialogState extends State<_ScanQrDialog> {
       _message = null;
     });
 
+    if (_looksLikeGroupInviteCode(code)) {
+      final message = await _acceptGroupInviteCode(code);
+      if (message == null) {
+        return;
+      }
+      try {
+        await _scannerController.stop();
+      } catch (_) {
+        // The scanner may already be stopped while the dialog is closing.
+      }
+      if (!mounted) {
+        return;
+      }
+      Navigator.pop(context);
+      widget.onResult(message);
+      return;
+    }
+
     final validationError = widget.store.qrInviteValidationError(code);
     if (validationError != null) {
       if (!mounted) {
@@ -6311,6 +7214,52 @@ class _ScanQrDialogState extends State<_ScanQrDialog> {
     }
     Navigator.pop(context);
     widget.onResult(message);
+  }
+
+  Future<String?> _acceptGroupInviteCode(String code) async {
+    final backendApi = BackendApi();
+    if (backendApi.isConfigured && code.toUpperCase().startsWith('SKG-')) {
+      try {
+        final token = await _requireBackendAccessToken(
+          context,
+          api: backendApi,
+        );
+        await backendApi.acceptGroupInvite(accessToken: token, code: code);
+        await _reloadBackendProjection(
+          context,
+          api: backendApi,
+          accessToken: token,
+          wait: true,
+        );
+        return 'Joined group from invite.';
+      } on BackendApiException catch (error) {
+        if (!mounted) {
+          return null;
+        }
+        setState(() {
+          _handlingScan = false;
+          _message = error.message;
+        });
+        return null;
+      }
+    }
+
+    final message = widget.store.acceptGroupInvite(code);
+    if (message.startsWith('That group invite') ||
+        message.startsWith('No group matched') ||
+        message.startsWith('This group invite') ||
+        message.startsWith('You are already') ||
+        message.startsWith('Connect with')) {
+      if (!mounted) {
+        return null;
+      }
+      setState(() {
+        _handlingScan = false;
+        _message = message;
+      });
+      return null;
+    }
+    return message;
   }
 
   Widget _buildScannerError(
@@ -6735,6 +7684,7 @@ class _AddExpenseOcrScreenState extends State<_AddExpenseOcrScreen> {
     try {
       final result = await _ocrService.scanReceipt(
         bytes,
+        mode: manual ? ReceiptOcrMode.accurate : ReceiptOcrMode.fast,
         onStatus: (message) {
           if (mounted && _runningOcr) {
             setState(() => _scanMessage = message);
@@ -8686,6 +9636,15 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
     final scheme = Theme.of(context).colorScheme;
     final item = widget.item;
     final lowConfidence = item.confidence < 0.85;
+    final assignedAll =
+        item.assignedTo.isEmpty ||
+        widget.selectedParticipants.every(item.assignedTo.contains);
+    final currentUserIsParticipant = widget.selectedParticipants.contains(
+      store.currentUserId,
+    );
+    final assignmentSummary = assignedAll
+        ? 'Everyone shares this item.'
+        : 'Assigned to ${item.assignedTo.map(store.nameOf).join(', ')}.';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -8750,18 +9709,48 @@ class _ExpenseItemDraftRowState extends State<_ExpenseItemDraftRow> {
             'Assign participants',
             style: Theme.of(context).textTheme.labelLarge,
           ),
+          const SizedBox(height: 4),
+          Text(assignmentSummary, style: AppTextStyles.bodySecondary),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
+              FilterChip(
+                selected: assignedAll,
+                avatar: const Icon(Icons.group_outlined, size: 18),
+                label: const Text('Everyone'),
+                onSelected: (_) {
+                  item.assignedTo.clear();
+                  widget.onChanged();
+                },
+              ),
+              ActionChip(
+                avatar: currentUserIsParticipant
+                    ? UserAvatar(user: store.currentUser, small: true)
+                    : const Icon(Icons.person_off_outlined, size: 18),
+                label: const Text('Only me'),
+                onPressed: currentUserIsParticipant
+                    ? () {
+                        item.assignedTo
+                          ..clear()
+                          ..add(store.currentUserId);
+                        widget.onChanged();
+                      }
+                    : null,
+              ),
               for (final id in widget.selectedParticipants)
                 FilterChip(
-                  selected: item.assignedTo.contains(id),
+                  selected: assignedAll || item.assignedTo.contains(id),
                   avatar: UserAvatar(user: store.userById(id), small: true),
                   label: Text(store.nameOf(id)),
                   onSelected: (selected) {
-                    if (selected) {
+                    if (assignedAll && !selected) {
+                      item.assignedTo
+                        ..clear()
+                        ..addAll(widget.selectedParticipants)
+                        ..remove(id);
+                    } else if (selected) {
                       item.assignedTo.add(id);
                     } else {
                       item.assignedTo.remove(id);
@@ -11820,6 +12809,83 @@ Future<void> showStatementDialog(BuildContext context, String groupId) async {
         ],
       );
     },
+  );
+}
+
+Future<void> showGroupInviteDialog(BuildContext context, String groupId) async {
+  final store = StoreScope.of(context);
+  final group = store.groupById(groupId);
+  final backendApi = BackendApi();
+  String code;
+  String? expiresAt;
+  if (backendApi.isConfigured) {
+    try {
+      final token = await _requireBackendAccessToken(context, api: backendApi);
+      final response = await backendApi.createGroupInvite(
+        accessToken: token,
+        groupId: groupId,
+      );
+      final invite = response['invite'] as Map<String, dynamic>? ?? {};
+      code = invite['code']?.toString() ?? '';
+      expiresAt = invite['expiresAt']?.toString();
+      if (code.isEmpty) {
+        throw const BackendApiException(
+          'Backend did not return an invite code.',
+        );
+      }
+    } on BackendApiException catch (error) {
+      if (context.mounted) {
+        showSnack(context, error.message);
+      }
+      return;
+    }
+  } else {
+    code = store.groupInviteCodeFor(groupId);
+  }
+  if (!context.mounted) {
+    return;
+  }
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Group invite'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _InviteQrView(code: code, label: group.name, size: 220),
+            const SizedBox(height: 12),
+            SelectableText(
+              code,
+              textAlign: TextAlign.center,
+              style: Theme.of(dialogContext).textTheme.bodySmall,
+            ),
+            if (expiresAt != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Expires ${dateLabel(DateTime.tryParse(expiresAt) ?? DateTime.now())}',
+                style: AppTextStyles.caption,
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        OutlinedButton.icon(
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: code));
+            showSnack(context, 'Group invite copied.');
+          },
+          icon: const Icon(Icons.copy_outlined),
+          label: const Text('Copy code'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
   );
 }
 

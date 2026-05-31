@@ -59,6 +59,24 @@ void main() {
     expect(result.totalMinor, 14300);
   });
 
+  test('recognizes abbreviated receipt adjustment and total labels', () {
+    final result = parse([
+      ('Newa Cafe', 0.94),
+      ('Buff Momo 250', 0.91),
+      ('Lassi 150', 0.91),
+      ('S. Chg 40', 0.88),
+      ('V.A.T 57', 0.88),
+      ('Disc 20', 0.86),
+      ('Net Amt 477', 0.92),
+    ]);
+
+    expect(result.items.map((i) => i.label).toList(), ['Buff Momo', 'Lassi']);
+    expect(result.serviceChargeMinor, 4000);
+    expect(result.taxMinor, 5700);
+    expect(result.discountMinor, -2000);
+    expect(result.totalMinor, 47700);
+  });
+
   test('subtotal and total lines are not items', () {
     final result = parse([('Subtotal 500', 0.9), ('Total 500', 0.9)]);
     expect(result.items, isEmpty);

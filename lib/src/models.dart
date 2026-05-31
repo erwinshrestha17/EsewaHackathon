@@ -32,6 +32,15 @@ enum SplitMode { equal, custom, item }
 
 enum ExpenseStatus { draft, active, voided }
 
+enum RecurringExpenseFrequency { weekly, monthly }
+
+enum ExpenseReviewStatus {
+  pending,
+  accepted,
+  correctionRequested,
+  itemDisputed,
+}
+
 enum PaymentStatus {
   pending,
   paid,
@@ -313,6 +322,33 @@ class GroupLeaveDecision {
       type == GroupLeaveDecisionType.canLeave;
 }
 
+class GroupTemplateSuggestion {
+  const GroupTemplateSuggestion({
+    required this.id,
+    required this.name,
+    required this.category,
+    required this.template,
+    required this.description,
+    required this.memberLimit,
+    this.recurringTitle,
+    this.recurringAmountMinor = 0,
+    this.recurringFrequency = RecurringExpenseFrequency.monthly,
+  });
+
+  final String id;
+  final String name;
+  final GroupCategory category;
+  final String template;
+  final String description;
+  final int memberLimit;
+  final String? recurringTitle;
+  final int recurringAmountMinor;
+  final RecurringExpenseFrequency recurringFrequency;
+
+  bool get hasRecurringSeed =>
+      recurringTitle != null && recurringAmountMinor > 0;
+}
+
 class DhukutiExitDecision {
   const DhukutiExitDecision({
     required this.type,
@@ -484,6 +520,99 @@ class Expense {
   final List<ExpensePayer> payers;
   final List<ExpenseShare> shares;
   final List<ExpenseItem> items;
+}
+
+class ExpenseReview {
+  ExpenseReview({
+    required this.id,
+    required this.expenseId,
+    required this.userId,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt,
+    this.note = '',
+    this.expenseItemId,
+  });
+
+  final String id;
+  final String expenseId;
+  final String userId;
+  ExpenseReviewStatus status;
+  String note;
+  String? expenseItemId;
+  final DateTime createdAt;
+  DateTime updatedAt;
+}
+
+class ExpenseReviewSummary {
+  const ExpenseReviewSummary({
+    required this.total,
+    required this.accepted,
+    required this.pending,
+    required this.correctionRequested,
+    required this.itemDisputed,
+  });
+
+  final int total;
+  final int accepted;
+  final int pending;
+  final int correctionRequested;
+  final int itemDisputed;
+
+  bool get isFinal => total > 0 && accepted == total;
+  bool get hasConcerns => correctionRequested > 0 || itemDisputed > 0;
+
+  String get label {
+    if (hasConcerns) {
+      final concernCount = correctionRequested + itemDisputed;
+      return '$concernCount issue${concernCount == 1 ? '' : 's'} raised';
+    }
+    if (isFinal) {
+      return 'Accepted by all';
+    }
+    return '$accepted/$total accepted';
+  }
+}
+
+class RecurringExpense {
+  RecurringExpense({
+    required this.id,
+    required this.groupId,
+    required this.title,
+    required this.amountMinor,
+    required this.payerId,
+    required this.category,
+    required this.splitMode,
+    required this.frequency,
+    required this.nextDueAt,
+    required this.createdBy,
+    required this.createdAt,
+    List<String>? participantIds,
+    this.note = '',
+    this.active = true,
+    this.lastPostedAt,
+    this.sourceExpenseId,
+    Map<String, int>? customAmounts,
+  }) : participantIds = participantIds ?? <String>[],
+       customAmounts = customAmounts ?? <String, int>{};
+
+  final String id;
+  final String groupId;
+  String title;
+  int amountMinor;
+  String payerId;
+  String category;
+  SplitMode splitMode;
+  RecurringExpenseFrequency frequency;
+  DateTime nextDueAt;
+  String note;
+  bool active;
+  DateTime? lastPostedAt;
+  String? sourceExpenseId;
+  final String createdBy;
+  final DateTime createdAt;
+  final List<String> participantIds;
+  final Map<String, int> customAmounts;
 }
 
 class PaymentTransaction {
@@ -872,6 +1001,46 @@ class ActivityLog {
   final String? groupId;
 }
 
+class GroupLedgerEntry {
+  const GroupLedgerEntry({
+    required this.id,
+    required this.groupId,
+    required this.type,
+    required this.title,
+    required this.subtitle,
+    required this.createdAt,
+    required this.amountMinor,
+    required this.status,
+    this.actorId,
+    this.affectsBalance = true,
+  });
+
+  final String id;
+  final String groupId;
+  final String type;
+  final String title;
+  final String subtitle;
+  final DateTime createdAt;
+  final int amountMinor;
+  final String status;
+  final String? actorId;
+  final bool affectsBalance;
+}
+
+class GroupInsight {
+  const GroupInsight({
+    required this.title,
+    required this.body,
+    required this.metric,
+    this.tone = 'info',
+  });
+
+  final String title;
+  final String body;
+  final String metric;
+  final String tone;
+}
+
 class NotificationItem {
   NotificationItem({
     required this.id,
@@ -908,6 +1077,45 @@ class SettlementSuggestion {
   final String? pendingSettlementId;
 
   bool get hasPending => pendingSettlementId != null;
+}
+
+class SmartSettlementPlan {
+  const SmartSettlementPlan({
+    required this.groupId,
+    required this.suggestions,
+    required this.blockedExpenseCount,
+    required this.reviewIssueCount,
+  });
+
+  final String groupId;
+  final List<SettlementSuggestion> suggestions;
+  final int blockedExpenseCount;
+  final int reviewIssueCount;
+
+  int get routeCount => suggestions.length;
+
+  int get totalAmountMinor => suggestions.fold<int>(
+    0,
+    (sum, suggestion) => sum + suggestion.amountMinor,
+  );
+
+  bool get hasRoutes => suggestions.isNotEmpty;
+
+  bool get isReady =>
+      hasRoutes && blockedExpenseCount == 0 && reviewIssueCount == 0;
+
+  String get statusLabel {
+    if (!hasRoutes) {
+      return 'Settled';
+    }
+    if (reviewIssueCount > 0) {
+      return 'Needs correction';
+    }
+    if (blockedExpenseCount > 0) {
+      return 'Review pending';
+    }
+    return 'Ready';
+  }
 }
 
 class ParsedReceiptItem {

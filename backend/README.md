@@ -132,6 +132,8 @@ is `false`, copy `backend/.env.example` to `backend/.env` and fill
 - `GET /api/groups/:groupId`
 - `PATCH /api/groups/:groupId`
 - `DELETE /api/groups/:groupId`
+- `POST /api/groups/:groupId/invites`
+- `POST /api/groups/invites/accept`
 - `POST /api/groups/:groupId/leave`
 - `GET /api/groups/:groupId/members`
 - `POST /api/groups/:groupId/members`
@@ -150,8 +152,14 @@ is `false`, copy `backend/.env.example` to `backend/.env` and fill
 - `GET /api/app/ws` (WebSocket upgrade)
 - `GET /api/expenses/group/:groupId`
 - `POST /api/expenses/group/:groupId`
+- `GET /api/expenses/group/:groupId/recurring`
+- `POST /api/expenses/group/:groupId/recurring`
+- `POST /api/expenses/group/:groupId/recurring/:recurringExpenseId/post`
+- `POST /api/expenses/group/:groupId/recurring/:recurringExpenseId/pause`
 - `PATCH /api/expenses/group/:groupId/:expenseId`
 - `POST /api/expenses/group/:groupId/:expenseId/void`
+- `GET /api/expenses/group/:groupId/:expenseId/reviews`
+- `POST /api/expenses/group/:groupId/:expenseId/reviews`
 - `POST /api/adjustments/group/:groupId`
 - `GET /api/settlements`
 - `POST /api/settlements/group/:groupId`

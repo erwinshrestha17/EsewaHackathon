@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'receipt_parser.dart';
+import 'receipt_scan_quality.dart';
 
 /// Keeps live camera OCR from accepting a single noisy frame.
 class LiveReceiptScanStabilizer {
@@ -25,8 +26,8 @@ class LiveReceiptScanStabilizer {
     final candidate = _LiveScanCandidate(result, capturedAt);
     _candidates.add(candidate);
 
-    final consistentTotal = liveReceiptTotalsAreConsistent(result);
-    if (manual && consistentTotal && liveReceiptHasUsefulItems(result)) {
+    final consistentTotal = receiptScanTotalsAreConsistent(result);
+    if (manual && consistentTotal && receiptScanHasUsefulItems(result)) {
       return result;
     }
 
@@ -42,7 +43,7 @@ class LiveReceiptScanStabilizer {
 
     if (matchingCandidates.length < 2 ||
         !consistentTotal ||
-        !liveReceiptHasUsefulItems(result)) {
+        !receiptScanHasUsefulItems(result)) {
       return null;
     }
 
@@ -55,34 +56,6 @@ class LiveReceiptScanStabilizer {
     });
     return matchingCandidates.first.result;
   }
-}
-
-bool liveReceiptHasUsefulItems(ReceiptScanResult result) {
-  if (result.items.isEmpty) {
-    return false;
-  }
-  final namedItems = result.items.where((item) {
-    final letters = RegExp(r'[A-Za-z]').allMatches(item.label).length;
-    return letters >= 3 && item.amountMinor > 0;
-  }).length;
-  return namedItems >= math.min(2, result.items.length);
-}
-
-bool liveReceiptTotalsAreConsistent(ReceiptScanResult result) {
-  if (result.items.isEmpty || result.totalMinor <= 0) {
-    return false;
-  }
-  final itemTotal = result.items.fold<int>(
-    0,
-    (sum, item) => sum + item.amountMinor,
-  );
-  final computedTotal =
-      itemTotal +
-      result.serviceChargeMinor +
-      result.taxMinor +
-      result.discountMinor;
-  final tolerance = math.max(100, (result.totalMinor * 0.015).round());
-  return (computedTotal - result.totalMinor).abs() <= tolerance;
 }
 
 class _LiveScanCandidate {
@@ -129,7 +102,7 @@ double _liveScanQualityScore(ReceiptScanResult result) {
       ? 0.0
       : result.items.map(_liveScanItemLabelQuality).reduce((a, b) => a + b) /
             result.items.length;
-  final totalScore = liveReceiptTotalsAreConsistent(result) ? 0.24 : -0.35;
+  final totalScore = receiptScanTotalsAreConsistent(result) ? 0.24 : -0.35;
   return confidence + itemCountScore + (labelQuality * 0.22) + totalScore;
 }
 

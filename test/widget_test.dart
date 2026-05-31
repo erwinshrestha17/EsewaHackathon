@@ -2102,6 +2102,133 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('expense review actions update group detail status', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 9000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final store = AppStore.seeded();
+    final expenseId = store.addExpense(
+      groupId: 'g-dashain',
+      title: 'Review Flow Dinner',
+      totalMinor: npr(300),
+      payerId: 'u-sita',
+      category: 'festival',
+      splitMode: SplitMode.item,
+      participantIds: const ['u-sita', 'u-arjun'],
+      receiptItems: [
+        ParsedReceiptItem(label: 'Momo', amountMinor: npr(200)),
+        ParsedReceiptItem(label: 'Tea', amountMinor: npr(100)),
+      ],
+      itemAssignments: const {
+        0: ['u-sita', 'u-arjun'],
+        1: ['u-arjun'],
+      },
+    );
+    store.currentUserId = 'u-arjun';
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: MaterialApp(
+          home: Scaffold(
+            body: GroupDetail(group: store.groupById('g-dashain')),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Review Flow Dinner').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Member review'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Accept split'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Accept split'));
+    await tester.pumpAndSettle();
+    expect(
+      store
+          .reviewSummaryForExpense(store.expenseByIdOrNull(expenseId)!)
+          .isFinal,
+      isTrue,
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Request correction'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'What needs to change?'),
+      'Tea should be assigned to Sita only',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Send request'));
+    await tester.pumpAndSettle();
+
+    expect(
+      store
+          .reviewSummaryForExpense(store.expenseByIdOrNull(expenseId)!)
+          .correctionRequested,
+      1,
+    );
+    expect(find.text('Correction request sent.'), findsOneWidget);
+  });
+
+  testWidgets('group detail shows recurring smart ledger and invite surfaces', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 9000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final store = AppStore.seeded();
+    final scheduleId = store.createRecurringExpense(
+      groupId: 'g-apartment',
+      title: 'Due internet',
+      amountMinor: npr(1800),
+      payerId: 'u-sita',
+      category: 'household',
+      splitMode: SplitMode.equal,
+      participantIds: const ['u-sita', 'u-arjun', 'u-laxmi'],
+      frequency: RecurringExpenseFrequency.monthly,
+      nextDueAt: DateTime.now().subtract(const Duration(days: 1)),
+    );
+
+    await tester.pumpWidget(
+      StoreScope(
+        notifier: store,
+        child: MaterialApp(
+          home: Scaffold(
+            body: GroupDetail(group: store.groupById('g-apartment')),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Smart settlement plan'), findsOneWidget);
+    expect(find.text('Group insights'), findsOneWidget);
+    expect(find.text('Recurring expenses'), findsOneWidget);
+    expect(find.text('Due internet'), findsWidgets);
+    expect(find.text('Group ledger'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Post due').first);
+    await tester.pumpAndSettle();
+    expect(
+      store.recurringExpenses
+          .singleWhere((schedule) => schedule.id == scheduleId)
+          .lastPostedAt,
+      isNotNull,
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Invite'));
+    await tester.pumpAndSettle();
+    expect(find.text('Group invite'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Copy code'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Add expense item list row has only Name and Amount fields', (
     tester,
   ) async {
