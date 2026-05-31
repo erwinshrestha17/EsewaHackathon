@@ -12470,127 +12470,201 @@ String giftPoolProgressText(GiftPool pool, int raised) {
       ' • target reached';
 }
 
-Future<void> showCreateGiftPoolDialog(BuildContext context) async {
-  final store = StoreScope.of(context);
-  final groups = store.visibleExpenseGroups;
-  String? groupId = groups.isEmpty ? null : groups.first.id;
-  String? recipientId = store.activeConnectionUsers().isEmpty
-      ? null
-      : store.activeConnectionUsers().first.id;
-  final title = TextEditingController();
-  final target = TextEditingController();
-  final equalAmount = TextEditingController();
-  final minAmount = TextEditingController();
-  final maxAmount = TextEditingController();
-  final message = TextEditingController();
-  var contributionRule = GiftPoolContributionRule.equal;
-  var allowOverTarget = false;
+Future<void> showCreateGiftPoolDialog(
+  BuildContext context, {
+  BackendApi? api,
+}) async {
+  final store = StoreScope.read(context);
+  final messenger = ScaffoldMessenger.of(context);
+  final backendApi = api ?? BackendApi();
   await showDialog<void>(
     context: context,
-    builder: (dialogContext) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          final eligibleContributorCount =
-              groupId == null || recipientId == null
-              ? 0
-              : store
-                    .giftPoolEligibleContributorIds(groupId!, recipientId!)
-                    .length;
-          final fieldTextStyle = Theme.of(
-            context,
-          ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700);
-          final equalAmountMinor = parseMoneyToMinor(equalAmount.text);
-          final targetAmountMinor =
-              contributionRule == GiftPoolContributionRule.equal
-              ? equalAmountMinor * eligibleContributorCount
-              : parseMoneyToMinor(target.text);
-          final minAmountMinor = parseMoneyToMinor(minAmount.text);
-          final maxAmountMinor = parseMoneyToMinor(maxAmount.text);
-          final invalidThreshold =
-              contributionRule == GiftPoolContributionRule.threshold &&
-              minAmountMinor > 0 &&
-              maxAmountMinor > 0 &&
-              minAmountMinor > maxAmountMinor;
-          final canCreate =
-              groupId != null &&
-              recipientId != null &&
-              targetAmountMinor > 0 &&
-              (contributionRule == GiftPoolContributionRule.equal
-                  ? equalAmountMinor > 0 && eligibleContributorCount > 0
-                  : minAmountMinor > 0 &&
-                        maxAmountMinor > 0 &&
-                        !invalidThreshold);
-          return AlertDialog(
-            title: const Text('Create Gift Pool'),
-            content: SizedBox(
-              width: 520,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    builder: (_) => _CreateGiftPoolDialog(
+      store: store,
+      backendApi: backendApi,
+      actionContext: context,
+      messenger: messenger,
+    ),
+  );
+}
+
+class _CreateGiftPoolDialog extends StatefulWidget {
+  const _CreateGiftPoolDialog({
+    required this.store,
+    required this.backendApi,
+    required this.actionContext,
+    required this.messenger,
+  });
+
+  final AppStore store;
+  final BackendApi backendApi;
+  final BuildContext actionContext;
+  final ScaffoldMessengerState messenger;
+
+  @override
+  State<_CreateGiftPoolDialog> createState() => _CreateGiftPoolDialogState();
+}
+
+class _CreateGiftPoolDialogState extends State<_CreateGiftPoolDialog> {
+  late final List<Group> _groups = widget.store.visibleExpenseGroups;
+  late final List<AppUser> _recipients = widget.store.activeConnectionUsers();
+  late String? _groupId = _groups.isEmpty ? null : _groups.first.id;
+  late String? _recipientId = _recipients.isEmpty ? null : _recipients.first.id;
+  final _title = TextEditingController();
+  final _target = TextEditingController();
+  final _equalAmount = TextEditingController();
+  final _minAmount = TextEditingController();
+  final _maxAmount = TextEditingController();
+  final _message = TextEditingController();
+  var _contributionRule = GiftPoolContributionRule.equal;
+  var _allowOverTarget = false;
+  var _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _target.dispose();
+    _equalAmount.dispose();
+    _minAmount.dispose();
+    _maxAmount.dispose();
+    _message.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final eligibleContributorCount = _groupId == null || _recipientId == null
+        ? 0
+        : widget.store
+              .giftPoolEligibleContributorIds(_groupId!, _recipientId!)
+              .length;
+    final fieldTextStyle = Theme.of(
+      context,
+    ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700);
+    final equalAmountMinor = parseMoneyToMinor(_equalAmount.text);
+    final targetAmountMinor =
+        _contributionRule == GiftPoolContributionRule.equal
+        ? equalAmountMinor * eligibleContributorCount
+        : parseMoneyToMinor(_target.text);
+    final minAmountMinor = parseMoneyToMinor(_minAmount.text);
+    final maxAmountMinor = parseMoneyToMinor(_maxAmount.text);
+    final invalidThreshold =
+        _contributionRule == GiftPoolContributionRule.threshold &&
+        minAmountMinor > 0 &&
+        maxAmountMinor > 0 &&
+        minAmountMinor > maxAmountMinor;
+    final canCreate =
+        _groupId != null &&
+        _recipientId != null &&
+        targetAmountMinor > 0 &&
+        (_contributionRule == GiftPoolContributionRule.equal
+            ? equalAmountMinor > 0 && eligibleContributorCount > 0
+            : minAmountMinor > 0 && maxAmountMinor > 0 && !invalidThreshold);
+
+    return AlertDialog(
+      title: const Text('Create Gift Pool'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: _groupId,
+                decoration: const InputDecoration(labelText: 'Group'),
+                style: fieldTextStyle,
+                items: [
+                  for (final group in _groups)
+                    DropdownMenuItem(value: group.id, child: Text(group.name)),
+                ],
+                onChanged: _isSubmitting
+                    ? null
+                    : (value) => setState(() => _groupId = value),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _recipientId,
+                decoration: const InputDecoration(labelText: 'Recipient'),
+                style: fieldTextStyle,
+                items: [
+                  for (final user in _recipients)
+                    DropdownMenuItem(
+                      value: user.id,
+                      child: Text(user.displayName),
+                    ),
+                ],
+                onChanged: _isSubmitting
+                    ? null
+                    : (value) => setState(() => _recipientId = value),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _title,
+                style: fieldTextStyle,
+                decoration: const InputDecoration(labelText: 'Title'),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Contribution rule',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<GiftPoolContributionRule>(
+                segments: const [
+                  ButtonSegment(
+                    value: GiftPoolContributionRule.equal,
+                    icon: Icon(Icons.balance_outlined),
+                    label: Text('Equal amount'),
+                  ),
+                  ButtonSegment(
+                    value: GiftPoolContributionRule.threshold,
+                    icon: Icon(Icons.tune_outlined),
+                    label: Text('Min / max'),
+                  ),
+                ],
+                selected: {_contributionRule},
+                onSelectionChanged: _isSubmitting
+                    ? null
+                    : (value) =>
+                          setState(() => _contributionRule = value.first),
+              ),
+              const SizedBox(height: 12),
+              if (_contributionRule == GiftPoolContributionRule.equal) ...[
+                TextField(
+                  controller: _equalAmount,
+                  style: fieldTextStyle,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Equal amount per contributor',
+                    prefixText: 'NPR ',
+                    helperText: eligibleContributorCount == 0
+                        ? 'Choose a group and recipient with eligible contributors.'
+                        : 'Pool target: ${money(targetAmountMinor)} from $eligibleContributorCount contributor${eligibleContributorCount == 1 ? '' : 's'}.',
+                  ),
+                ),
+              ] else ...[
+                TextField(
+                  controller: _target,
+                  style: fieldTextStyle,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Target amount',
+                    prefixText: 'NPR ',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
                   children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: groupId,
-                      decoration: const InputDecoration(labelText: 'Group'),
-                      style: fieldTextStyle,
-                      items: [
-                        for (final group in groups)
-                          DropdownMenuItem(
-                            value: group.id,
-                            child: Text(group.name),
-                          ),
-                      ],
-                      onChanged: (value) => setState(() => groupId = value),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: recipientId,
-                      decoration: const InputDecoration(labelText: 'Recipient'),
-                      style: fieldTextStyle,
-                      items: [
-                        for (final user in store.activeConnectionUsers())
-                          DropdownMenuItem(
-                            value: user.id,
-                            child: Text(user.displayName),
-                          ),
-                      ],
-                      onChanged: (value) => setState(() => recipientId = value),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: title,
-                      style: fieldTextStyle,
-                      decoration: const InputDecoration(labelText: 'Title'),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Contribution rule',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SegmentedButton<GiftPoolContributionRule>(
-                      segments: const [
-                        ButtonSegment(
-                          value: GiftPoolContributionRule.equal,
-                          icon: Icon(Icons.balance_outlined),
-                          label: Text('Equal amount'),
-                        ),
-                        ButtonSegment(
-                          value: GiftPoolContributionRule.threshold,
-                          icon: Icon(Icons.tune_outlined),
-                          label: Text('Min / max'),
-                        ),
-                      ],
-                      selected: {contributionRule},
-                      onSelectionChanged: (value) =>
-                          setState(() => contributionRule = value.first),
-                    ),
-                    const SizedBox(height: 12),
-                    if (contributionRule == GiftPoolContributionRule.equal) ...[
-                      TextField(
-                        controller: equalAmount,
+                    Expanded(
+                      child: TextField(
+                        controller: _minAmount,
                         style: fieldTextStyle,
                         keyboardType: TextInputType.number,
                         inputFormatters: [
@@ -12598,16 +12672,18 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                         ],
                         onChanged: (_) => setState(() {}),
                         decoration: InputDecoration(
-                          labelText: 'Equal amount per contributor',
+                          labelText: 'Minimum contribution',
                           prefixText: 'NPR ',
-                          helperText: eligibleContributorCount == 0
-                              ? 'Choose a group and recipient with eligible contributors.'
-                              : 'Pool target: ${money(targetAmountMinor)} from $eligibleContributorCount contributor${eligibleContributorCount == 1 ? '' : 's'}.',
+                          errorText: invalidThreshold
+                              ? 'Must be below max'
+                              : null,
                         ),
                       ),
-                    ] else ...[
-                      TextField(
-                        controller: target,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _maxAmount,
                         style: fieldTextStyle,
                         keyboardType: TextInputType.number,
                         inputFormatters: [
@@ -12615,143 +12691,121 @@ Future<void> showCreateGiftPoolDialog(BuildContext context) async {
                         ],
                         onChanged: (_) => setState(() {}),
                         decoration: const InputDecoration(
-                          labelText: 'Target amount',
+                          labelText: 'Maximum contribution',
                           prefixText: 'NPR ',
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: minAmount,
-                              style: fieldTextStyle,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              onChanged: (_) => setState(() {}),
-                              decoration: InputDecoration(
-                                labelText: 'Minimum contribution',
-                                prefixText: 'NPR ',
-                                errorText: invalidThreshold
-                                    ? 'Must be below max'
-                                    : null,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: maxAmount,
-                              style: fieldTextStyle,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              onChanged: (_) => setState(() {}),
-                              decoration: const InputDecoration(
-                                labelText: 'Maximum contribution',
-                                prefixText: 'NPR ',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: allowOverTarget,
-                      title: const Text('Allow contributions above goal'),
-                      subtitle: const Text(
-                        'Keep the pool open even after it passes the target.',
-                      ),
-                      onChanged: (value) =>
-                          setState(() => allowOverTarget = value),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: message,
-                      style: fieldTextStyle,
-                      decoration: const InputDecoration(labelText: 'Message'),
                     ),
                   ],
                 ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: !canCreate
+              ],
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _allowOverTarget,
+                title: const Text('Allow contributions above goal'),
+                subtitle: const Text(
+                  'Keep the pool open even after it passes the target.',
+                ),
+                onChanged: _isSubmitting
                     ? null
-                    : () async {
-                        final backendApi = BackendApi();
-                        try {
-                          final token = await _requireBackendAccessToken(
-                            context,
-                            api: backendApi,
-                          );
-                          await backendApi.createGiftPool(
-                            accessToken: token,
-                            groupId: groupId!,
-                            giftPool: {
-                              'recipientId': recipientId!,
-                              'title': title.text,
-                              'template': 'Gift Pool',
-                              'targetAmountMinor': targetAmountMinor,
-                              'contributionRule': contributionRule.name,
-                              'allowOverTarget': allowOverTarget,
-                              'equalContributionAmountMinor':
-                                  contributionRule ==
-                                      GiftPoolContributionRule.equal
-                                  ? equalAmountMinor
-                                  : null,
-                              'minContributionAmountMinor':
-                                  contributionRule ==
-                                      GiftPoolContributionRule.threshold
-                                  ? minAmountMinor
-                                  : null,
-                              'maxContributionAmountMinor':
-                                  contributionRule ==
-                                      GiftPoolContributionRule.threshold
-                                  ? maxAmountMinor
-                                  : null,
-                              'message': message.text,
-                            },
-                          );
-                          await _reloadBackendProjection(
-                            context,
-                            api: backendApi,
-                            accessToken: token,
-                          );
-                          if (context.mounted) {
-                            Navigator.pop(dialogContext);
-                            showSnack(context, 'Gift pool created.');
-                          }
-                        } on BackendApiException catch (error) {
-                          if (context.mounted) {
-                            showSnack(context, error.message);
-                          }
-                        }
-                      },
-                child: const Text('Create'),
+                    : (value) => setState(() => _allowOverTarget = value),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _message,
+                style: fieldTextStyle,
+                decoration: const InputDecoration(labelText: 'Message'),
               ),
             ],
-          );
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: !canCreate || _isSubmitting
+              ? null
+              : () => _createGiftPool(
+                  targetAmountMinor: targetAmountMinor,
+                  equalAmountMinor: equalAmountMinor,
+                  minAmountMinor: minAmountMinor,
+                  maxAmountMinor: maxAmountMinor,
+                ),
+          child: Text(_isSubmitting ? 'Creating...' : 'Create'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _createGiftPool({
+    required int targetAmountMinor,
+    required int equalAmountMinor,
+    required int minAmountMinor,
+    required int maxAmountMinor,
+  }) async {
+    setState(() => _isSubmitting = true);
+    try {
+      final token = await _requireBackendAccessToken(
+        widget.actionContext,
+        api: widget.backendApi,
+      );
+      await widget.backendApi.createGiftPool(
+        accessToken: token,
+        groupId: _groupId!,
+        giftPool: {
+          'recipientId': _recipientId!,
+          'title': _title.text,
+          'template': 'Gift Pool',
+          'targetAmountMinor': targetAmountMinor,
+          'contributionRule': _contributionRule.name,
+          'allowOverTarget': _allowOverTarget,
+          'equalContributionAmountMinor':
+              _contributionRule == GiftPoolContributionRule.equal
+              ? equalAmountMinor
+              : null,
+          'minContributionAmountMinor':
+              _contributionRule == GiftPoolContributionRule.threshold
+              ? minAmountMinor
+              : null,
+          'maxContributionAmountMinor':
+              _contributionRule == GiftPoolContributionRule.threshold
+              ? maxAmountMinor
+              : null,
+          'message': _message.text,
         },
       );
-    },
-  );
-  title.dispose();
-  target.dispose();
-  equalAmount.dispose();
-  minAmount.dispose();
-  maxAmount.dispose();
-  message.dispose();
+      if (mounted) {
+        Navigator.pop(context);
+        widget.messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('Gift pool created.')));
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!widget.actionContext.mounted) {
+          return;
+        }
+        unawaited(
+          _reloadBackendProjection(
+            widget.actionContext,
+            api: widget.backendApi,
+            accessToken: token,
+          ),
+        );
+      });
+    } on BackendApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isSubmitting = false);
+      widget.messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
 }
 
 Future<void> showContributeToGiftPoolDialog(

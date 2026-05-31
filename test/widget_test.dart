@@ -168,6 +168,118 @@ class _FailingRealtimeSyncService extends BackendRealtimeSyncService {
   }
 }
 
+class _GiftPoolBackendApi extends _FakeBackendApi {
+  Map<String, Object?>? createdGiftPool;
+  String? createdGroupId;
+
+  @override
+  Future<Map<String, dynamic>> createGiftPool({
+    required String accessToken,
+    required String groupId,
+    required Map<String, Object?> giftPool,
+  }) async {
+    createdGroupId = groupId;
+    createdGiftPool = giftPool;
+    return {'giftPool': giftPool};
+  }
+
+  @override
+  Future<Map<String, dynamic>> appBootstrap({
+    required String accessToken,
+  }) async {
+    final created = DateTime(2026, 5, 31, 10).toIso8601String();
+    final giftPool = createdGiftPool;
+    return {
+      'currentUserId': 'u-sita',
+      'users': [
+        {
+          'id': 'u-sita',
+          'displayName': 'Sita Shrestha',
+          'phone': '9800000001',
+          'avatar': 'SS',
+          'district': 'Kathmandu',
+          'createdAt': created,
+          'privacyMode': 'everyone',
+        },
+        {
+          'id': 'u-laxmi',
+          'displayName': 'Laxmi Thapa',
+          'phone': '9800000005',
+          'avatar': 'LT',
+          'district': 'Bhaktapur',
+          'createdAt': created,
+          'privacyMode': 'everyone',
+        },
+      ],
+      'connections': [
+        {
+          'id': 'conn-test',
+          'requesterId': 'u-sita',
+          'recipientId': 'u-laxmi',
+          'userLowId': 'u-laxmi',
+          'userHighId': 'u-sita',
+          'status': 'approved',
+          'createdAt': created,
+          'updatedAt': created,
+          'expiresAt': DateTime(2026, 6, 30).toIso8601String(),
+        },
+      ],
+      'groups': [
+        {
+          'id': createdGroupId ?? 'g-dashain',
+          'name': 'Dashain Khasi Split',
+          'category': 'festival',
+          'template': 'Dashain Khasi Split',
+          'kind': 'expense',
+          'createdBy': 'u-sita',
+          'createdAt': created,
+        },
+      ],
+      'groupMembers': [
+        {
+          'id': 'gm-sita',
+          'groupId': createdGroupId ?? 'g-dashain',
+          'userId': 'u-sita',
+          'role': 'admin',
+          'status': 'active',
+          'joinedAt': created,
+        },
+        {
+          'id': 'gm-laxmi',
+          'groupId': createdGroupId ?? 'g-dashain',
+          'userId': 'u-laxmi',
+          'role': 'member',
+          'status': 'active',
+          'joinedAt': created,
+        },
+      ],
+      if (giftPool != null)
+        'giftPools': [
+          {
+            'id': 'gift-pool-test',
+            'groupId': createdGroupId ?? 'g-dashain',
+            'createdBy': 'u-sita',
+            'recipientId': giftPool['recipientId'],
+            'title': giftPool['title'],
+            'template': giftPool['template'],
+            'targetAmountMinor': giftPool['targetAmountMinor'],
+            'contributionRule': giftPool['contributionRule'],
+            'allowOverTarget': giftPool['allowOverTarget'],
+            'message': giftPool['message'],
+            'status': 'open',
+            'createdAt': created,
+            'equalContributionAmountMinor':
+                giftPool['equalContributionAmountMinor'],
+            'minContributionAmountMinor':
+                giftPool['minContributionAmountMinor'],
+            'maxContributionAmountMinor':
+                giftPool['maxContributionAmountMinor'],
+          },
+        ],
+    };
+  }
+}
+
 void _mockLoggedInStorage() {
   SharedPreferences.setMockInitialValues({'auth.hasSeenIntro': true});
   FlutterSecureStorage.setMockInitialValues({
@@ -1154,6 +1266,66 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'gift pool creation closes dialog without inherited context crash',
+    (tester) async {
+      final backendApi = _GiftPoolBackendApi();
+      final authController = AuthController(backendApi: backendApi);
+      await authController.loginWithMpin(phone: '9800000001', mPin: '1234');
+      final store = AppStore.seeded();
+
+      await tester.pumpWidget(
+        AuthScope(
+          notifier: authController,
+          child: StoreScope(
+            notifier: store,
+            child: MaterialApp(
+              home: Scaffold(
+                body: Builder(
+                  builder: (context) {
+                    return FilledButton(
+                      onPressed: () =>
+                          showCreateGiftPoolDialog(context, api: backendApi),
+                      child: const Text('Open gift pool'),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Open gift pool'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Title'),
+        'Birthday pool',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Equal amount per contributor'),
+        '500',
+      );
+      await tester.pumpAndSettle();
+
+      final createButton = find.widgetWithText(FilledButton, 'Create');
+      expect(tester.widget<FilledButton>(createButton).onPressed, isNotNull);
+
+      await tester.tap(createButton);
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(backendApi.createdGiftPool?['title'], 'Birthday pool');
+      expect(
+        backendApi.createdGiftPool?['equalContributionAmountMinor'],
+        50000,
+      );
+      expect(find.text('Create Gift Pool'), findsNothing);
+      expect(find.text('Gift pool created.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'Savings Tracker quick action opens Community Savings inside Groups tab',
