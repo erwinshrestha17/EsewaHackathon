@@ -67,37 +67,6 @@ class BackendRealtimeEvent {
   final Map<String, dynamic> data;
 }
 
-class BackendRealtimeConfig {
-  const BackendRealtimeConfig({
-    required this.supabaseUrl,
-    required this.supabasePublishableKey,
-    required this.accessToken,
-    required this.expiresAt,
-    required this.topics,
-  });
-
-  factory BackendRealtimeConfig.fromJson(Map<String, dynamic> json) {
-    return BackendRealtimeConfig(
-      supabaseUrl: json['supabaseUrl']?.toString() ?? '',
-      supabasePublishableKey: json['supabasePublishableKey']?.toString() ?? '',
-      accessToken: json['accessToken']?.toString() ?? '',
-      expiresAt:
-          DateTime.tryParse(json['expiresAt']?.toString() ?? '') ??
-          DateTime.now(),
-      topics: [
-        for (final topic in (json['topics'] as List<dynamic>? ?? const []))
-          topic.toString(),
-      ],
-    );
-  }
-
-  final String supabaseUrl;
-  final String supabasePublishableKey;
-  final String accessToken;
-  final DateTime expiresAt;
-  final List<String> topics;
-}
-
 class BackendApi {
   BackendApi({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
@@ -113,6 +82,30 @@ class BackendApi {
   static const _requestTimeout = Duration(seconds: 12);
 
   bool get isConfigured => _baseUrl.trim().isNotEmpty;
+
+  Uri get realtimeWebSocketUri => _webSocketUri('/api/app/ws');
+
+  BackendRealtimeEvent decodeRealtimeMessage(Object message) {
+    final String text;
+    if (message is String) {
+      text = message;
+    } else if (message is List<int>) {
+      text = utf8.decode(message);
+    } else {
+      throw const BackendApiException('Backend realtime message was invalid.');
+    }
+    final decoded = jsonDecode(text);
+    if (decoded is! Map<String, dynamic>) {
+      throw const BackendApiException('Backend realtime message was invalid.');
+    }
+    final data = decoded['data'];
+    return BackendRealtimeEvent(
+      type: decoded['type']?.toString() ?? 'message',
+      data: data is Map<String, dynamic>
+          ? data
+          : <String, dynamic>{'value': data},
+    );
+  }
 
   Future<BackendOtpChallenge> requestSignupOtp({required String phone}) async {
     final data = await _post('/api/auth/signup/otp', {'phone': phone});
@@ -377,13 +370,6 @@ class BackendApi {
     return get('/api/app/bootstrap', accessToken: accessToken);
   }
 
-  Future<BackendRealtimeConfig> realtimeToken({
-    required String accessToken,
-  }) async {
-    final data = await get('/api/app/realtime-token', accessToken: accessToken);
-    return BackendRealtimeConfig.fromJson(data);
-  }
-
   Future<Map<String, dynamic>> createExpense({
     required String accessToken,
     required String groupId,
@@ -595,65 +581,6 @@ class BackendApi {
     );
   }
 
-  Stream<BackendRealtimeEvent> appEvents({required String accessToken}) async* {
-    final request = http.Request('GET', _uri('/api/app/events'));
-    request.headers.addAll({
-      'Accept': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Authorization': 'Bearer $accessToken',
-    });
-
-    final response = await _sendStream(request);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final body = await response.stream.bytesToString();
-      final Map<String, dynamic> decoded;
-      try {
-        decoded = _decodeBodyOrEmpty(body);
-      } on FormatException {
-        throw BackendApiException(
-          'Backend stream failed (${response.statusCode}).',
-        );
-      }
-      throw BackendApiException(
-        decoded['error']?.toString() ??
-            'Backend stream failed (${response.statusCode}).',
-      );
-    }
-
-    var eventType = 'message';
-    final dataLines = <String>[];
-    await for (final line
-        in response.stream
-            .transform(utf8.decoder)
-            .transform(const LineSplitter())) {
-      if (line.isEmpty) {
-        if (dataLines.isNotEmpty) {
-          final rawData = dataLines.join('\n');
-          final decoded = jsonDecode(rawData);
-          yield BackendRealtimeEvent(
-            type: eventType,
-            data: decoded is Map<String, dynamic>
-                ? decoded
-                : <String, dynamic>{'value': decoded},
-          );
-          eventType = 'message';
-          dataLines.clear();
-        }
-        continue;
-      }
-      if (line.startsWith(':')) {
-        continue;
-      }
-      if (line.startsWith('event:')) {
-        eventType = line.substring(6).trim();
-        continue;
-      }
-      if (line.startsWith('data:')) {
-        dataLines.add(line.substring(5).trimLeft());
-      }
-    }
-  }
-
   Future<Map<String, dynamic>> communitySavingsDashboard({
     required String accessToken,
     required String savingsGroupId,
@@ -726,6 +653,18 @@ class BackendApi {
   Uri _uri(String path) =>
       Uri.parse('${_baseUrl.replaceAll(RegExp(r'/$'), '')}$path');
 
+  Uri _webSocketUri(String path) {
+    final base = Uri.parse(_baseUrl.replaceAll(RegExp(r'/$'), ''));
+    final basePath = base.path.replaceAll(RegExp(r'/$'), '');
+    return Uri(
+      scheme: base.scheme == 'https' ? 'wss' : 'ws',
+      userInfo: base.userInfo,
+      host: base.host,
+      port: base.hasPort ? base.port : null,
+      path: '$basePath$path',
+    );
+  }
+
   Map<String, String> _headers(String? accessToken) {
     return {
       'Content-Type': 'application/json',
@@ -736,22 +675,6 @@ class BackendApi {
   Future<http.Response> _send(Future<http.Response> Function() request) async {
     try {
       return await request().timeout(_requestTimeout);
-    } on TimeoutException {
-      throw const BackendApiException(
-        'Backend is taking too long to respond. Check that the API server is running.',
-      );
-    } on BackendApiException {
-      rethrow;
-    } on Object {
-      throw const BackendApiException(
-        'Unable to reach backend. Check BACKEND_API_BASE_URL and the API server.',
-      );
-    }
-  }
-
-  Future<http.StreamedResponse> _sendStream(http.BaseRequest request) async {
-    try {
-      return await _client.send(request).timeout(_requestTimeout);
     } on TimeoutException {
       throw const BackendApiException(
         'Backend is taking too long to respond. Check that the API server is running.',

@@ -15,7 +15,6 @@ Node.js/Express API for Sajha Kharcha. It uses Supabase PostgreSQL as the system
    - `SUPABASE_URL`
    - `SUPABASE_SECRET_KEY` as a server-only `sb_secret_...` key
    - `SUPABASE_PUBLISHABLE_KEY` for token verification
-   - `SUPABASE_JWT_SECRET` for private Supabase Realtime Broadcast auth
 
 3. Fill auth/session infrastructure values:
 
@@ -82,7 +81,11 @@ Refresh tokens are stored only as hashes in `app_sessions` and rotated by `POST 
 
 ## Realtime Invalidation
 
-Flutter reads canonical data from `GET /api/app/bootstrap` and subscribes to private Supabase Realtime Broadcast topics from `GET /api/app/realtime-token`. The backend mints short-lived Supabase JWTs with `role=authenticated`, and Realtime RLS allows only `user:<profileId>` plus active/invited `group:<groupId>` topics.
+Flutter reads canonical data from `GET /api/app/bootstrap` and connects to the backend-owned WebSocket endpoint at `/api/app/ws`. The first WebSocket message must authenticate with the app access token:
+
+```json
+{ "type": "auth", "accessToken": "eyJ..." }
+```
 
 Write routes publish invalidation events after successful mutations so other signed-in clients refresh their backend projection without a manual page reload.
 
@@ -138,8 +141,7 @@ is `false`, copy `backend/.env.example` to `backend/.env` and fill
 - `POST /api/connections/:connectionId/unblock`
 - `POST /api/connections/:connectionId/report`
 - `GET /api/app/bootstrap`
-- `GET /api/app/realtime-token`
-- `GET /api/app/events` (legacy server-sent app updates)
+- `GET /api/app/ws` (WebSocket upgrade)
 - `GET /api/expenses/group/:groupId`
 - `POST /api/expenses/group/:groupId`
 - `PATCH /api/expenses/group/:groupId/:expenseId`

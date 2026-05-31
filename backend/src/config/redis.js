@@ -5,10 +5,13 @@ import { env } from './env.js';
 let client;
 let connectPromise;
 let testClient;
-const redisOperationTimeoutMs = 1500;
+let unavailableUntil = 0;
+const redisOperationTimeoutMs = Number(process.env.REDIS_OPERATION_TIMEOUT_MS ?? 150);
+const redisRetryDelayMs = Number(process.env.REDIS_RETRY_DELAY_MS ?? 10000);
 
 export function setRedisClientForTests(nextClient) {
   testClient = nextClient;
+  unavailableUntil = 0;
 }
 
 export async function redisClient() {
@@ -17,6 +20,9 @@ export async function redisClient() {
   }
   if (!env.redisUrl) {
     return null;
+  }
+  if (Date.now() < unavailableUntil) {
+    throw new Error('Redis is temporarily unavailable.');
   }
   if (!client) {
     client = createClient({
@@ -35,6 +41,7 @@ export async function redisClient() {
   if (!client.isOpen) {
     connectPromise ??= withRedisTimeout(client.connect())
       .catch(async (error) => {
+        unavailableUntil = Date.now() + redisRetryDelayMs;
         await closeRedisClient();
         throw error;
       })

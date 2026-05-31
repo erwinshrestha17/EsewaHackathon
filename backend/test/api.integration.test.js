@@ -1,19 +1,21 @@
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
+import { createServer } from 'node:http';
 import test from 'node:test';
-import jwt from 'jsonwebtoken';
+import WebSocket from 'ws';
 
 import { app, isAllowedCorsOrigin } from '../src/app.js';
 import { env } from '../src/config/env.js';
 import { db } from '../src/modules/common/db.js';
 import {
+  clearRealtimeClientsForTesting,
   publishAppEvent,
-  publishRealtimeTopics,
-  realtimeAuth,
-  setRealtimeBroadcastSenderForTesting,
-  setRealtimeTopicResolverForTesting,
-  subscribeAppEvents,
+  publishGroupEvent,
+  setRealtimeGroupMemberResolverForTesting,
 } from '../src/modules/realtime/realtime.service.js';
+import {
+  attachRealtimeWebSocketServer,
+  setRealtimeWebSocketAuthenticatorForTesting,
+} from '../src/modules/realtime/realtime.websocket.js';
 import { ApiError } from '../src/utils/ApiError.js';
 
 const runRemoteTests = process.env.RUN_REMOTE_API_TESTS === 'true';
@@ -35,9 +37,90 @@ async function withServer(fn) {
   }
 }
 
+async function withRealtimeServer(fn) {
+  const server = createServer(app);
+  const wss = attachRealtimeWebSocketServer(server);
+  await new Promise((resolve, reject) => {
+    server.once('listening', resolve);
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1');
+  });
+  const { port } = server.address();
+  try {
+    await fn(`ws://127.0.0.1:${port}/api/app/ws`);
+  } finally {
+    for (const client of wss.clients) {
+      client.terminate();
+    }
+    await new Promise((resolve) => wss.close(resolve));
+    await new Promise((resolve) => server.close(resolve));
+    clearRealtimeClientsForTesting();
+  }
+}
+
 async function json(response) {
   const text = await response.text();
   return text ? JSON.parse(text) : {};
+}
+
+function waitForJson(ws, timeoutMs = 1000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('Timed out waiting for websocket message.'));
+    }, timeoutMs);
+    function cleanup() {
+      clearTimeout(timer);
+      ws.off('message', onMessage);
+      ws.off('error', onError);
+    }
+    function onMessage(raw) {
+      cleanup();
+      try {
+        resolve(JSON.parse(raw.toString()));
+      } catch (error) {
+        reject(error);
+      }
+    }
+    function onError(error) {
+      cleanup();
+      reject(error);
+    }
+    ws.once('message', onMessage);
+    ws.once('error', onError);
+  });
+}
+
+function waitForNoMessage(ws, timeoutMs = 100) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      ws.off('message', onMessage);
+      resolve(true);
+    }, timeoutMs);
+    function onMessage() {
+      clearTimeout(timer);
+      resolve(false);
+    }
+    ws.once('message', onMessage);
+  });
+}
+
+async function openAuthenticatedSocket(url, token = 'access-token') {
+  const ws = new WebSocket(url);
+  await new Promise((resolve, reject) => {
+    ws.once('open', resolve);
+    ws.once('error', reject);
+  });
+  ws.send(JSON.stringify({ type: 'auth', accessToken: token }));
+  const connected = await waitForJson(ws);
+  assert.equal(connected.type, 'connected');
+  return ws;
+}
+
+function waitForClose(ws) {
+  return new Promise((resolve) => {
+    ws.once('close', (code, reason) => resolve({ code, reason: reason.toString() }));
+  });
 }
 
 test(
@@ -90,97 +173,95 @@ test('database config failure is reported as a setup error', () => {
   }
 });
 
-test('realtime app events deliver only to subscribed users', () => {
-  const req = new EventEmitter();
-  const chunks = [];
-  const res = {
-    set(headers) {
-      this.headers = headers;
-    },
-    flushHeaders() {},
-    write(chunk) {
-      chunks.push(chunk);
-    },
-  };
-
-  subscribeAppEvents('u-recipient', req, res);
-  publishAppEvent(['u-other'], {
-    type: 'connection_changed',
-    payload: { connectionId: 'conn-1' },
+test('realtime websocket authenticates and delivers only to subscribed users', async () => {
+  const restoreAuth = setRealtimeWebSocketAuthenticatorForTesting(async (token) => {
+    if (token === 'recipient-token') return { id: 'u-recipient' };
+    if (token === 'other-token') return { id: 'u-other' };
+    throw new ApiError(401, 'Invalid token.');
   });
-  assert.equal(chunks.some((chunk) => chunk.includes('conn-1')), false);
-
-  publishAppEvent(['u-recipient'], {
-    type: 'connection_changed',
-    payload: { connectionId: 'conn-1' },
-  });
-  assert.equal(chunks.some((chunk) => chunk.includes('event: connection_changed')), true);
-  assert.equal(chunks.some((chunk) => chunk.includes('"connectionId":"conn-1"')), true);
-
-  req.emit('close');
-  const afterClose = chunks.length;
-  publishAppEvent(['u-recipient'], {
-    type: 'connection_changed',
-    payload: { connectionId: 'conn-2' },
-  });
-  assert.equal(chunks.length, afterClose);
-});
-
-test('realtime auth mints a Supabase-compatible short-lived JWT with scoped topics', async () => {
-  const previous = {
-    hasSupabaseRealtimeConfig: env.hasSupabaseRealtimeConfig,
-    supabaseUrl: env.supabaseUrl,
-    supabasePublishableKey: env.supabasePublishableKey,
-    supabaseJwtSecret: env.supabaseJwtSecret,
-    realtimeTokenTtlMinutes: env.realtimeTokenTtlMinutes,
-  };
-  const restoreTopics = setRealtimeTopicResolverForTesting(async (userId) => [
-    `user:${userId}`,
-    'group:g-visible',
-  ]);
-  env.hasSupabaseRealtimeConfig = true;
-  env.supabaseUrl = 'https://example.supabase.co';
-  env.supabasePublishableKey = 'publishable-key';
-  env.supabaseJwtSecret = 'test-supabase-jwt-secret';
-  env.realtimeTokenTtlMinutes = 3;
   try {
-    const config = await realtimeAuth('profile-1');
-    const decoded = jwt.verify(config.accessToken, env.supabaseJwtSecret, {
-      audience: 'authenticated',
+    await withRealtimeServer(async (url) => {
+      const recipient = await openAuthenticatedSocket(url, 'recipient-token');
+      const other = await openAuthenticatedSocket(url, 'other-token');
+
+      publishAppEvent(['u-recipient'], {
+        type: 'connection_changed',
+        payload: { connectionId: 'conn-1', status: 'approved' },
+      });
+
+      const message = await waitForJson(recipient);
+      assert.deepEqual(message, {
+        type: 'connection_changed',
+        data: { connectionId: 'conn-1', status: 'approved' },
+      });
+      assert.equal(await waitForNoMessage(other), true);
+
+      recipient.close();
+      other.close();
     });
-    assert.equal(decoded.sub, 'profile-1');
-    assert.equal(decoded.role, 'authenticated');
-    assert.deepEqual(config.topics, ['user:profile-1', 'group:g-visible']);
-    assert.equal(config.expiresInSeconds, 180);
-    assert.equal(config.supabaseUrl, env.supabaseUrl);
-    assert.equal(config.supabasePublishableKey, env.supabasePublishableKey);
   } finally {
-    restoreTopics();
-    Object.assign(env, previous);
+    restoreAuth();
   }
 });
 
-test('realtime invalidation broadcasts one message per authorized topic', async () => {
-  const sent = [];
-  const restore = setRealtimeBroadcastSenderForTesting(async (messages) => {
-    sent.push(...messages);
+test('realtime websocket closes invalid auth messages', async () => {
+  const restoreAuth = setRealtimeWebSocketAuthenticatorForTesting(async () => {
+    throw new ApiError(401, 'Invalid token.');
   });
   try {
-    publishRealtimeTopics(['user:u1', 'user:u1', 'group:g1'], {
-      type: 'expense_changed',
-      payload: { expenseId: 'expense-1' },
+    await withRealtimeServer(async (url) => {
+      const ws = new WebSocket(url);
+      await new Promise((resolve, reject) => {
+        ws.once('open', resolve);
+        ws.once('error', reject);
+      });
+      const closed = waitForClose(ws);
+      ws.send(JSON.stringify({ type: 'auth', accessToken: 'bad-token' }));
+      assert.equal((await closed).code, 4003);
     });
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(sent.length, 2);
-    assert.deepEqual(
-      sent.map((message) => message.topic).sort(),
-      ['group:g1', 'user:u1'],
-    );
-    assert.equal(sent[0].event, 'expense_changed');
-    assert.equal(sent[0].payload.expenseId, 'expense-1');
-    assert.equal(sent[0].payload.type, 'expense_changed');
   } finally {
-    restore();
+    restoreAuth();
+  }
+});
+
+test('realtime group fanout is scheduled without blocking callers', async () => {
+  const restoreAuth = setRealtimeWebSocketAuthenticatorForTesting(async () => ({ id: 'u-recipient' }));
+  let resolverStarted = false;
+  let releaseResolver;
+  const resolverGate = new Promise((resolve) => {
+    releaseResolver = resolve;
+  });
+  const restoreMembers = setRealtimeGroupMemberResolverForTesting(async (groupId) => {
+    resolverStarted = true;
+    assert.equal(groupId, 'group-1');
+    await resolverGate;
+    return ['u-recipient'];
+  });
+
+  try {
+    await withRealtimeServer(async (url) => {
+      const recipient = await openAuthenticatedSocket(url);
+      const message = waitForJson(recipient);
+
+      publishGroupEvent('group-1', {
+        type: 'expense_changed',
+        payload: { expenseId: 'expense-1' },
+      });
+      assert.equal(resolverStarted, false);
+
+      await Promise.resolve();
+      assert.equal(resolverStarted, true);
+      releaseResolver();
+
+      assert.deepEqual(await message, {
+        type: 'expense_changed',
+        data: { groupId: 'group-1', expenseId: 'expense-1' },
+      });
+      recipient.close();
+    });
+  } finally {
+    restoreMembers();
+    restoreAuth();
   }
 });
 

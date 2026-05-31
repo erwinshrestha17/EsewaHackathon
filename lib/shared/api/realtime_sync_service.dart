@@ -1,15 +1,22 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'backend_api.dart';
 
-class BackendRealtimeSyncService {
-  BackendRealtimeSyncService({BackendApi? backendApi})
-    : _backendApi = backendApi ?? BackendApi();
+typedef WebSocketConnector = WebSocketChannel Function(Uri uri);
 
-  static const _events = <String>[
+class BackendRealtimeSyncService {
+  BackendRealtimeSyncService({
+    BackendApi? backendApi,
+    WebSocketConnector? webSocketConnector,
+  }) : _backendApi = backendApi ?? BackendApi(),
+       _webSocketConnector = webSocketConnector ?? WebSocketChannel.connect;
+
+  static const _events = <String>{
     'profile_changed',
     'settings_changed',
     'notification_changed',
@@ -21,16 +28,20 @@ class BackendRealtimeSyncService {
     'gift_changed',
     'gift_pool_changed',
     'community_savings_changed',
-  ];
+  };
+  static const _initialReconnectDelay = Duration(milliseconds: 500);
+  static const _maxReconnectDelay = Duration(seconds: 8);
 
   final BackendApi _backendApi;
+  final WebSocketConnector _webSocketConnector;
   final _controller = StreamController<BackendRealtimeEvent>.broadcast();
-  final List<RealtimeChannel> _channels = <RealtimeChannel>[];
-  SupabaseClient? _client;
-  Timer? _refreshTimer;
+  StreamSubscription<dynamic>? _socketSubscription;
+  WebSocketChannel? _channel;
+  Timer? _reconnectTimer;
   Future<String?> Function()? _accessTokenProvider;
-  String? _lastSupabaseUrl;
-  String? _lastPublishableKey;
+  var _stopped = true;
+  var _connecting = false;
+  var _reconnectAttempts = 0;
 
   Stream<BackendRealtimeEvent> get events => _controller.stream;
 
@@ -38,25 +49,19 @@ class BackendRealtimeSyncService {
     required Future<String?> Function() accessTokenProvider,
   }) async {
     _accessTokenProvider = accessTokenProvider;
-    final backendAccessToken = await accessTokenProvider();
-    if (backendAccessToken == null || backendAccessToken.isEmpty) {
-      await stop();
+    _stopped = false;
+    if (_channel != null || _connecting) {
       return;
     }
-    final config = await _backendApi.realtimeToken(
-      accessToken: backendAccessToken,
-    );
-    await _applyConfig(config);
+    await _connect();
   }
 
   Future<void> stop() async {
-    _refreshTimer?.cancel();
-    _refreshTimer = null;
-    final client = _client;
-    for (final channel in List<RealtimeChannel>.from(_channels)) {
-      await client?.removeChannel(channel);
-    }
-    _channels.clear();
+    _stopped = true;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _reconnectAttempts = 0;
+    await _closeSocket();
   }
 
   Future<void> dispose() async {
@@ -64,73 +69,84 @@ class BackendRealtimeSyncService {
     await _controller.close();
   }
 
-  Future<void> _applyConfig(BackendRealtimeConfig config) async {
-    if (config.supabaseUrl.isEmpty ||
-        config.supabasePublishableKey.isEmpty ||
-        config.accessToken.isEmpty) {
+  Future<void> _connect() async {
+    if (_stopped || _connecting) {
       return;
     }
-    if (_client == null ||
-        _lastSupabaseUrl != config.supabaseUrl ||
-        _lastPublishableKey != config.supabasePublishableKey) {
-      await stop();
-      _client = SupabaseClient(
-        config.supabaseUrl,
-        config.supabasePublishableKey,
-      );
-      _lastSupabaseUrl = config.supabaseUrl;
-      _lastPublishableKey = config.supabasePublishableKey;
-    } else {
-      for (final channel in List<RealtimeChannel>.from(_channels)) {
-        await _client?.removeChannel(channel);
-      }
-      _channels.clear();
-    }
-
-    await _client!.realtime.setAuth(config.accessToken);
-    for (final topic in config.topics) {
-      final channel = _client!.channel(
-        topic,
-        opts: const RealtimeChannelConfig(private: true),
-      );
-      for (final event in _events) {
-        channel.onBroadcast(
-          event: event,
-          callback: (payload) => _emit(event, payload),
-        );
-      }
-      channel.subscribe((status, error) {
-        if (error != null) {
-          debugPrint('Realtime subscription failed for $topic: $error');
-        }
-      });
-      _channels.add(channel);
-    }
-    _scheduleRefresh(config.expiresAt);
-  }
-
-  void _scheduleRefresh(DateTime expiresAt) {
-    _refreshTimer?.cancel();
-    final refreshAt = expiresAt.subtract(const Duration(minutes: 1));
-    final delay = refreshAt.difference(DateTime.now());
-    _refreshTimer = Timer(delay.isNegative ? Duration.zero : delay, () async {
-      final provider = _accessTokenProvider;
-      if (provider == null) {
+    _connecting = true;
+    var shouldReconnect = false;
+    try {
+      final token = await _accessTokenProvider?.call();
+      if (token == null || token.isEmpty) {
+        await stop();
         return;
       }
-      try {
-        await start(accessTokenProvider: provider);
-      } on Object catch (error) {
-        debugPrint('Realtime token refresh failed: $error');
+      await _closeSocket();
+      final channel = _webSocketConnector(_backendApi.realtimeWebSocketUri);
+      _channel = channel;
+      _socketSubscription = channel.stream.listen(
+        _handleMessage,
+        onError: (Object error) {
+          debugPrint('Backend realtime websocket failed: $error');
+          _scheduleReconnect();
+        },
+        onDone: _scheduleReconnect,
+      );
+      channel.sink.add(jsonEncode({'type': 'auth', 'accessToken': token}));
+    } on Object catch (error) {
+      debugPrint('Backend realtime websocket startup failed: $error');
+      shouldReconnect = true;
+    } finally {
+      _connecting = false;
+      if (shouldReconnect) {
+        _scheduleReconnect();
       }
+    }
+  }
+
+  Future<void> _closeSocket() async {
+    final subscription = _socketSubscription;
+    final channel = _channel;
+    _socketSubscription = null;
+    _channel = null;
+    await subscription?.cancel();
+    await channel?.sink.close();
+  }
+
+  void _scheduleReconnect() {
+    if (_stopped || _connecting) {
+      return;
+    }
+    unawaited(_closeSocket());
+    if (_reconnectTimer?.isActive == true) {
+      return;
+    }
+    final multiplier = 1 << math.min(_reconnectAttempts, 4);
+    final delay = Duration(
+      milliseconds: math.min(
+        _initialReconnectDelay.inMilliseconds * multiplier,
+        _maxReconnectDelay.inMilliseconds,
+      ),
+    );
+    _reconnectAttempts += 1;
+    _reconnectTimer = Timer(delay, () {
+      _reconnectTimer = null;
+      unawaited(_connect());
     });
   }
 
-  void _emit(String event, Map<String, dynamic> payload) {
-    final rawData = payload['payload'];
-    final data = rawData is Map<String, dynamic>
-        ? rawData
-        : Map<String, dynamic>.from(payload);
-    _controller.add(BackendRealtimeEvent(type: event, data: data));
+  void _handleMessage(Object? message) {
+    BackendRealtimeEvent event;
+    try {
+      event = _backendApi.decodeRealtimeMessage(message ?? '');
+    } on Object catch (error) {
+      debugPrint('Backend realtime message ignored: $error');
+      return;
+    }
+    if (!_events.contains(event.type) || _controller.isClosed) {
+      return;
+    }
+    _reconnectAttempts = 0;
+    _controller.add(event);
   }
 }

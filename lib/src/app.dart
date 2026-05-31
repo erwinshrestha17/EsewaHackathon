@@ -84,13 +84,26 @@ Future<void> _reloadBackendProjection(
   BuildContext context, {
   BackendApi? api,
   String? accessToken,
-}) async {
+  bool wait = false,
+}) {
   final backendApi = api ?? BackendApi();
   final store = StoreScope.read(context);
-  final token =
-      accessToken ?? await _requireBackendAccessToken(context, api: backendApi);
-  final snapshot = await backendApi.appBootstrap(accessToken: token);
-  store.loadBackendSnapshot(snapshot);
+  final refresh = () async {
+    final token =
+        accessToken ??
+        await _requireBackendAccessToken(context, api: backendApi);
+    final snapshot = await backendApi.appBootstrap(accessToken: token);
+    store.loadBackendSnapshot(snapshot);
+  }();
+  if (wait) {
+    return refresh;
+  }
+  unawaited(
+    refresh.catchError((Object error) {
+      debugPrint('Backend projection refresh failed: $error');
+    }),
+  );
+  return Future.value();
 }
 
 class SajhaKharchaApp extends StatefulWidget {
@@ -751,6 +764,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   String? _loadedBackendSnapshotToken;
   StreamSubscription<BackendRealtimeEvent>? _backendRealtimeSubscription;
   var _startingBackendRealtime = false;
+  Timer? _backendSnapshotDebounceTimer;
   Timer? _settingsSaveTimer;
   static const _incomingConnectionBannerTimeout = Duration(seconds: 8);
   Timer? _incomingConnectionBannerTimer;
@@ -789,6 +803,7 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
   @override
   void dispose() {
     _incomingConnectionBannerTimer?.cancel();
+    _backendSnapshotDebounceTimer?.cancel();
     _settingsSaveTimer?.cancel();
     unawaited(_backendRealtimeSubscription?.cancel());
     unawaited(_backendRealtimeService.dispose());
@@ -1105,8 +1120,12 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     }
     _loadingBackendSnapshot = true;
     try {
-      final snapshot = await _backendApi.appBootstrap(accessToken: token);
-      final settings = await _backendApi.settings(accessToken: token);
+      final responses = await Future.wait([
+        _backendApi.appBootstrap(accessToken: token),
+        _backendApi.settings(accessToken: token),
+      ]);
+      final snapshot = responses[0];
+      final settings = responses[1];
       if (!mounted) {
         return;
       }
@@ -1170,11 +1189,19 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
     await _backendRealtimeService.stop();
   }
 
-  void _handleBackendRealtimeEvent(BackendRealtimeEvent event) {
+  void _handleBackendRealtimeEvent(BackendRealtimeEvent _) {
     if (!mounted) {
       return;
     }
-    unawaited(_loadBackendSnapshot(force: true));
+    _backendSnapshotDebounceTimer?.cancel();
+    _backendSnapshotDebounceTimer = Timer(
+      const Duration(milliseconds: 250),
+      () {
+        if (mounted) {
+          unawaited(_loadBackendSnapshot(force: true));
+        }
+      },
+    );
   }
 
   void _scheduleBackendSettingsSave() {
@@ -1220,7 +1247,8 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         accessToken: token,
         targetUserId: targetUserId,
       );
-      await _loadBackendSnapshot(force: true);
+      store.sendConnectionRequest(targetUserId);
+      unawaited(_loadBackendSnapshot(force: true));
       return 'Request sent to ${target?.displayName ?? 'that member'}.';
     } on BackendApiException {
       if (!store.allowLocalMutations) {
@@ -1245,7 +1273,8 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         accessToken: token,
         connectionId: connectionId,
       );
-      await _loadBackendSnapshot(force: true);
+      store.approveConnection(connectionId);
+      unawaited(_loadBackendSnapshot(force: true));
     } on BackendApiException {
       if (!store.allowLocalMutations) {
         rethrow;
@@ -1270,7 +1299,8 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         accessToken: token,
         connectionId: connectionId,
       );
-      await _loadBackendSnapshot(force: true);
+      store.declineConnection(connectionId);
+      unawaited(_loadBackendSnapshot(force: true));
     } on BackendApiException {
       if (!store.allowLocalMutations) {
         rethrow;
@@ -1295,7 +1325,8 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         accessToken: token,
         connectionId: connectionId,
       );
-      await _loadBackendSnapshot(force: true);
+      store.removeConnection(connectionId);
+      unawaited(_loadBackendSnapshot(force: true));
     } on BackendApiException {
       if (!store.allowLocalMutations) {
         rethrow;
@@ -1321,7 +1352,8 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         connectionId: connectionId,
         blockedUserId: blockedUserId,
       );
-      await _loadBackendSnapshot(force: true);
+      store.blockConnection(connectionId, blockedUserId);
+      unawaited(_loadBackendSnapshot(force: true));
     } on BackendApiException {
       if (!store.allowLocalMutations) {
         rethrow;
@@ -1347,7 +1379,8 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         connectionId: connectionId,
         blockedUserId: blockedUserId,
       );
-      await _loadBackendSnapshot(force: true);
+      store.unblockConnection(connectionId, blockedUserId);
+      unawaited(_loadBackendSnapshot(force: true));
     } on BackendApiException {
       if (!store.allowLocalMutations) {
         rethrow;
@@ -1377,7 +1410,8 @@ class _SajhaKharchaShellState extends State<SajhaKharchaShell> {
         reasonCode: reason,
         note: note,
       );
-      await _loadBackendSnapshot(force: true);
+      store.reportConnection(connectionId, reportedUserId, reason, note: note);
+      unawaited(_loadBackendSnapshot(force: true));
       return 'Report submitted for ${reported.displayName}.';
     } on BackendApiException {
       if (!store.allowLocalMutations) {

@@ -163,7 +163,7 @@ class _FailingRealtimeSyncService extends BackendRealtimeSyncService {
   }) async {
     starts += 1;
     throw const BackendApiException(
-      'Supabase realtime is not configured. Set SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, and SUPABASE_JWT_SECRET.',
+      'Backend realtime websocket is unavailable. Check that the API server is running.',
     );
   }
 }

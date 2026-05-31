@@ -549,12 +549,22 @@ export async function logoutAllSessions(userId) {
 
 export async function profileForAccessToken(accessToken) {
   const payload = verifyAccessToken(accessToken);
-  await activeSessionById(payload.sid, payload.sub);
-  const profile = await profileById(payload.sub);
-  await db()
+  const [profile] = await Promise.all([
+    profileById(payload.sub),
+    activeSessionById(payload.sid, payload.sub),
+  ]);
+  void db()
     .from('app_sessions')
     .update({ last_seen_at: new Date().toISOString() })
     .eq('id', payload.sid)
-    .is('revoked_at', null);
+    .is('revoked_at', null)
+    .then(({ error }) => {
+      if (error) {
+        console.error('Session last_seen update failed:', error.message);
+      }
+    })
+    .catch((error) => {
+      console.error('Session last_seen update failed:', error.message ?? error);
+    });
   return profile;
 }
